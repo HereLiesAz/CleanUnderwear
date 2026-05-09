@@ -220,30 +220,22 @@ fun TargetDetailScreen(
                             fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        Row(
+                        // Only "Incorrect Match" needs a button — confirming
+                        // a match is the implicit default (the snippet stays
+                        // attached to the target until the user rejects it).
+                        // The previous "Confirm Match" button had an empty
+                        // onClick.
+                        AzButton(
+                            text = "Incorrect Match",
+                            onClick = {
+                                onUpdateTarget(target.copy(
+                                    status = TargetStatus.MONITORING,
+                                    lastVerificationSnippet = null
+                                ))
+                            },
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            AzButton(
-                                text = "Incorrect Match",
-                                onClick = {
-                                    onUpdateTarget(target.copy(
-                                        status = TargetStatus.MONITORING,
-                                        lastVerificationSnippet = null
-                                    ))
-                                },
-                                modifier = Modifier.weight(1f),
-                                shape = AzButtonShape.RECTANGLE
-                            )
-                            AzButton(
-                                text = "Confirm Match",
-                                onClick = {
-                                    // Confirmed
-                                },
-                                modifier = Modifier.weight(1f),
-                                shape = AzButtonShape.RECTANGLE
-                            )
-                        }
+                            shape = AzButtonShape.RECTANGLE
+                        )
                     }
                 }
             }

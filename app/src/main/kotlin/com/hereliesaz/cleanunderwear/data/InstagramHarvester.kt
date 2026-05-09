@@ -88,6 +88,7 @@ class InstagramHarvester @Inject constructor(
 
     private fun parseFollowersHtml(doc: Document): List<Target> {
         val followers = mutableListOf<Target>()
+        var missedDisplayNames = 0
 
         // Followers in the dialog render as <a role="link" href="/<handle>/"> with display name
         // appearing in a sibling span. We collect handle + best-effort display name.
@@ -102,12 +103,27 @@ class InstagramHarvester @Inject constructor(
                 ?.firstOrNull { it.text().isNotBlank() && it.text() != handle }
                 ?.text()
                 ?.trim()
-                ?: handle
+                ?: run {
+                    // The two-level parent walk is the brittle bit. When IG
+                    // restructures their followers list (it happens), every
+                    // follower silently falls back to handle-as-name and we
+                    // can't tell from the registry that the parser broke.
+                    // Logging the miss makes the failure visible.
+                    missedDisplayNames++
+                    handle
+                }
 
             followers += Target(
                 displayName = displayName,
                 sourceAccount = "Meta (Instagram: @$handle)",
                 status = TargetStatus.UNKNOWN
+            )
+        }
+
+        if (missedDisplayNames > 0) {
+            DiagnosticLogger.log(
+                "Instagram: display-name parser missed $missedDisplayNames of ${links.size} followers — page structure may have changed",
+                DiagnosticLogger.LogEntry.LogLevel.WARN
             )
         }
 

@@ -75,8 +75,10 @@ class WhatsAppHarvester @Inject constructor(
                 ?: continue
             if (title.isBlank()) continue
 
-            // WhatsApp groups appear in the chat list too; skip rows that look like groups
-            // (they typically have multiple participants in their preview snippet).
+            // A title that's all phone-shaped characters means WhatsApp didn't
+            // resolve the contact to a name (chat saved by phone number only).
+            // Capture the digits as the phoneNumber so downstream identity
+            // matching can still work; everything else gets the title as-is.
             if (title.startsWith("+") || title.matches(Regex("^[0-9 +()\\-]+$"))) {
                 contacts += Target(
                     displayName = title,

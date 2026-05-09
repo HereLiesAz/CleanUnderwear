@@ -160,9 +160,18 @@ class WebViewScraper @Inject constructor(@ApplicationContext private val context
                         request: WebResourceRequest?,
                         errorResponse: WebResourceResponse?
                     ) {
-                        if (request?.isForMainFrame == true && errorResponse?.statusCode != 200 && errorResponse?.statusCode != 403) {
-                           DiagnosticLogger.log("Intelligence Alert: Source returned HTTP ${errorResponse?.statusCode}", DiagnosticLogger.LogEntry.LogLevel.WARN)
-                           resumeOnce(null)
+                        // Sub-resource errors fire here too on some Android
+                        // versions; only main-frame failures should abort.
+                        // 403 used to be exempted from this branch, which let
+                        // Cloudflare/anti-bot walls fall through and get
+                        // parsed as if they were real content. Treat any
+                        // main-frame HTTP error (including 403) as fatal.
+                        if (request?.isForMainFrame == true) {
+                            DiagnosticLogger.log(
+                                "Intelligence Alert: Source returned HTTP ${errorResponse?.statusCode}",
+                                DiagnosticLogger.LogEntry.LogLevel.WARN
+                            )
+                            resumeOnce(null)
                         }
                     }
 

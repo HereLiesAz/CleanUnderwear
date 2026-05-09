@@ -67,7 +67,6 @@ class TargetRepositoryTest {
         override suspend fun getTargetWorkInfoPaged(limit: Int, offset: Int): List<TargetWorkInfo> =
             targets.drop(offset).take(limit).map(::toWorkInfo)
 
-        override suspend fun getAllTargetWorkInfo(): List<TargetWorkInfo> = targets.map(::toWorkInfo)
 
         override suspend fun getAllTargetSourceInfo(): List<TargetSourceInfo> =
             targets.map(::toSourceInfo)

@@ -52,12 +52,13 @@ interface TargetDao {
             (:pendingEnrichF = 1 AND monitorability_state != 'READY') OR 
             (:pendingEnrichF = 0 AND monitorability_state = 'READY')
         )
-        ORDER BY 
+        ORDER BY
             last_status_change_timestamp DESC,
-            CASE :sort 
-                WHEN 'NAME' THEN display_name 
-                WHEN 'STATUS' THEN status 
-                WHEN 'DATE' THEN last_scraped_timestamp 
+            CASE :sort
+                WHEN 'NAME' THEN display_name
+                WHEN 'STATUS' THEN status
+                WHEN 'DATE' THEN last_scraped_timestamp
+                ELSE display_name
             END ASC
     """
     )
@@ -89,12 +90,6 @@ interface TargetDao {
             "FROM targets ORDER BY display_name ASC LIMIT :limit OFFSET :offset"
     )
     suspend fun getTargetWorkInfoPaged(limit: Int, offset: Int): List<TargetWorkInfo>
-
-    @Query(
-        "SELECT id, display_name, phone_number, email, area_code, status, residence_info, " +
-            "source_account, monitorability_state, last_scraped_timestamp FROM targets"
-    )
-    suspend fun getAllTargetWorkInfo(): List<TargetWorkInfo>
 
     @Query("SELECT id, area_code, residence_info, lockup_url, obituary_url FROM targets")
     suspend fun getAllTargetSourceInfo(): List<TargetSourceInfo>

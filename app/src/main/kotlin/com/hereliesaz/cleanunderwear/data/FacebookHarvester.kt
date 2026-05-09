@@ -40,7 +40,7 @@ class FacebookHarvester @Inject constructor() {
             val href = element.attr("href")
             val looksLikeProfile =
                 href.contains("/profile.php?id=") ||
-                href.matches(Regex("^/[A-Za-z0-9.\\-]+(\\?.*)?$")) ||
+                href.matches(Regex("^/[A-Za-z0-9._-]+(?:/)?(?:\\?[A-Za-z0-9._%=&-]*)?$")) ||
                 href.contains("/friends/?profile_id=")
             if (!looksLikeProfile) continue
 

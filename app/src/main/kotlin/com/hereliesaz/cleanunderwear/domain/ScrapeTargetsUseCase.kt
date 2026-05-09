@@ -183,7 +183,10 @@ class ScrapeTargetsUseCase @Inject constructor(
             emitStep("syncing back to system contacts")
             contactSyncer.syncToSystem(updatedTarget)
         } catch (e: Exception) {
-            android.util.Log.e("ScrapeUseCase", "Pipeline error for ${target.displayName}", e)
+            DiagnosticLogger.log(
+                "Scrape failed for ${target.displayName}: ${e.javaClass.simpleName}: ${e.message}",
+                DiagnosticLogger.LogEntry.LogLevel.ERROR
+            )
         }
     }
 
