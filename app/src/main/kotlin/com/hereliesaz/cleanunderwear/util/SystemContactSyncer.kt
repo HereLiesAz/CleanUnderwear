@@ -9,12 +9,22 @@ import android.util.Log
 import com.hereliesaz.cleanunderwear.data.Target
 import com.hereliesaz.cleanunderwear.data.TargetStatus
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.ArrayList
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class SystemContactSyncer @Inject constructor(@ApplicationContext private val context: Context) {
+
+    // Thread-safe replacement for SimpleDateFormat. syncToSystem() runs on
+    // arbitrary worker threads, where shared SimpleDateFormat would race.
+    private val lastCheckFormat: DateTimeFormatter =
+        DateTimeFormatter.ofPattern("MM/dd/yyyy", Locale.US)
+            .withZone(ZoneId.systemDefault())
 
     fun syncToSystem(target: Target) {
         try {
@@ -36,9 +46,10 @@ class SystemContactSyncer @Inject constructor(@ApplicationContext private val co
             // back into the registry on the next harvest. The harvester now
             // whitelists URLs via SourceCatalog as a defense; not emitting in
             // the first place is the cleaner end of the same fix.
+            val lastCheck = lastCheckFormat.format(Instant.ofEpochMilli(target.lastScrapedTimestamp))
             val note = """
                 [Registry Status: $statusText]
-                Last Check: ${java.text.SimpleDateFormat("MM/dd/yyyy", java.util.Locale.US).format(java.util.Date(target.lastScrapedTimestamp))}
+                Last Check: $lastCheck
             """.trimIndent()
 
             upsertContactNote(context.contentResolver, contactId, note)

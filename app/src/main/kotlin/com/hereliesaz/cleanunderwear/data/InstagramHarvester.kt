@@ -111,7 +111,11 @@ class InstagramHarvester @Inject constructor(
             )
         }
 
-        val deduped = followers.distinctBy { it.sourceAccount }
+        // sourceAccount embeds the per-follower handle, so it's unique by
+        // construction — distinctBy on it would be a no-op. Dedup on the
+        // visible name instead, which catches followers that appear twice
+        // because pagination overlapped or the page re-rendered mid-scrape.
+        val deduped = followers.distinctBy { it.displayName }
         DiagnosticLogger.log("Instagram Harvest: Identified ${deduped.size} followers.")
         return deduped
     }

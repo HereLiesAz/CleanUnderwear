@@ -117,15 +117,15 @@ class TargetRepositoryTest {
             }
         }
 
-        override fun insertTarget(target: Target) { targets.add(target) }
-        override fun insertTargets(newTargets: List<Target>) { targets.addAll(newTargets) }
-        override fun updateTarget(target: Target) {
+        override suspend fun insertTarget(target: Target) { targets.add(target) }
+        override suspend fun insertTargets(newTargets: List<Target>) { targets.addAll(newTargets) }
+        override suspend fun updateTarget(target: Target) {
             targets.replaceAll { if (it.id == target.id) target else it }
         }
-        override fun deleteTarget(target: Target) {
+        override suspend fun deleteTarget(target: Target) {
             targets.removeAll { it.id == target.id }
         }
-        override fun wipeSlateClean() { targets.clear() }
+        override suspend fun wipeSlateClean() { targets.clear() }
     }
 
     private val repository = OfflineTargetRepository(fakeDao)

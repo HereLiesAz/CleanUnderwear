@@ -6,7 +6,9 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
@@ -354,11 +356,13 @@ class MainViewModel @Inject constructor(
             
             // 2. Consolidate and deduplicate the full registry
             _operationState.value = _operationState.value.copy(description = "Merging duplicate identities...", progress = 0.4f)
-            deduplicateTargetsUseCase { sub, desc -> }
-            
+            deduplicateTargetsUseCase { sub, _ ->
+                _operationState.value = _operationState.value.copy(progress = 0.4f + (sub * 0.3f))
+            }
+
             // 3. Triage for monitorability (Parallelized)
             _operationState.value = _operationState.value.copy(description = "Triaging registry for vigil readiness...", progress = 0.7f)
-            triageTargetsUseCase { sub, desc -> 
+            triageTargetsUseCase { sub, _ ->
                 _operationState.value = _operationState.value.copy(progress = 0.7f + (sub * 0.3f))
             }
             
@@ -577,13 +581,28 @@ class MainViewModel @Inject constructor(
         
         val initialDelay = calendar.timeInMillis - System.currentTimeMillis()
 
-        val periodicWorkRequest = PeriodicWorkRequestBuilder<ScrapingWorker>(24, TimeUnit.HOURS)
-            .setInitialDelay(initialDelay, TimeUnit.MILLISECONDS)
+        // Don't burn the user's mobile data or torch the battery while they're
+        // mid-commute. Periodic work in WorkManager already drifts off the
+        // wall-clock 9 AM target over time (it repeats N hours after the
+        // previous run completes, not at the same time of day) — these
+        // constraints just keep the run from being actively hostile when it
+        // does fire.
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .setRequiresBatteryNotLow(true)
             .build()
 
+        val periodicWorkRequest = PeriodicWorkRequestBuilder<ScrapingWorker>(24, TimeUnit.HOURS)
+            .setInitialDelay(initialDelay, TimeUnit.MILLISECONDS)
+            .setConstraints(constraints)
+            .build()
+
+        // UPDATE rather than KEEP so existing installs pick up new constraints
+        // when the build changes them, instead of being stuck on whatever
+        // policy was in effect the day they first installed.
         workManager.enqueueUniquePeriodicWork(
             "daily_panopticon",
-            ExistingPeriodicWorkPolicy.KEEP,
+            ExistingPeriodicWorkPolicy.UPDATE,
             periodicWorkRequest
         )
     }

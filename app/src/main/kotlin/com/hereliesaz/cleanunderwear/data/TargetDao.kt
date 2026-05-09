@@ -149,19 +149,19 @@ interface TargetDao {
     // -- Mutations ----------------------------------------------------------------------------
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    fun insertTarget(target: Target)
+    suspend fun insertTarget(target: Target)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    fun insertTargets(targets: List<Target>)
+    suspend fun insertTargets(targets: List<Target>)
 
     @Update
-    fun updateTarget(target: Target)
+    suspend fun updateTarget(target: Target)
 
     @androidx.room.Delete
-    fun deleteTarget(target: Target)
+    suspend fun deleteTarget(target: Target)
 
     @Query("DELETE FROM targets")
-    fun wipeSlateClean()
+    suspend fun wipeSlateClean()
 
     // -- Legacy full-row reads -----------------------------------------------------------------
     // Avoid using this on production-sized data — it can exceed the CursorWindow. Kept for

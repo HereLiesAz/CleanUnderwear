@@ -63,17 +63,23 @@ android {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64")
         }
 
-        // Load secrets from local.properties
-        val localProperties = Properties()
-        val localPropertiesFile = project.rootProject.file("local.properties")
-        if (localPropertiesFile.exists()) {
-            localProperties.load(localPropertiesFile.inputStream())
-        }
-        val ghToken = localProperties.getProperty("GH_TOKEN", "")
-        buildConfigField("String", "GH_TOKEN", "\"$ghToken\"")
+        // GH_TOKEN is only injected into debug builds (see buildTypes.debug below).
+        // Release builds get an empty token so the GitHub crash reporter no-ops
+        // instead of shipping the token inside the APK, where anyone with the
+        // binary could extract it.
+        buildConfigField("String", "GH_TOKEN", "\"\"")
     }
 
     buildTypes {
+        debug {
+            val localProperties = Properties()
+            val localPropertiesFile = project.rootProject.file("local.properties")
+            if (localPropertiesFile.exists()) {
+                localProperties.load(localPropertiesFile.inputStream())
+            }
+            val ghToken = localProperties.getProperty("GH_TOKEN", "")
+            buildConfigField("String", "GH_TOKEN", "\"$ghToken\"")
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
