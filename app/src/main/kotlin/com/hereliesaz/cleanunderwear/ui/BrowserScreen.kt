@@ -84,6 +84,14 @@ fun BrowserScreen(
 
     val mission = missions[currentIndex]
 
+    fun advance() {
+        if (currentIndex + 1 >= missions.size) {
+            onAllComplete()
+        } else {
+            currentIndex += 1
+        }
+    }
+
     // Drive each mission transition: load the next URL, reset per-page state.
     // The first mission is also loaded here (the factory below no longer races
     // ahead of this effect).
@@ -108,6 +116,23 @@ fun BrowserScreen(
         }
     }
 
+    // Watchdog: if a mission gets stuck (page never finishes loading, or the
+    // extraction script silently fails to post back), don't hang the queue
+    // forever. After 30s, report the mission as Blocked and advance.
+    // Pausing for a captcha resets the clock — the user is in control then.
+    LaunchedEffect(currentIndex, paused) {
+        if (paused) return@LaunchedEffect
+        delay(30_000L)
+        if (!paused) {
+            DiagnosticLogger.log(
+                "BrowserScreen: mission ${currentIndex + 1} timed out (pageReady=$pageReady, automationRan=$automationRan); skipping",
+                DiagnosticLogger.LogEntry.LogLevel.WARN
+            )
+            onMissionResult(mission, MissionOutcome.Blocked)
+            advance()
+        }
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             CookieManager.getInstance().flush()
@@ -120,14 +145,6 @@ fun BrowserScreen(
                 }
             }
             webView = null
-        }
-    }
-
-    fun advance() {
-        if (currentIndex + 1 >= missions.size) {
-            onAllComplete()
-        } else {
-            currentIndex += 1
         }
     }
 

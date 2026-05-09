@@ -53,21 +53,11 @@ fun TargetListScreen(
     val pendingEnrichmentFilter by viewModel.pendingEnrichmentFilter.collectAsState()
     val showManualEntryDialog by viewModel.showManualEntryDialog.collectAsState()
 
+    // Action sheet tracks ID only. Earlier code walked the entire paged list
+    // on every recomposition to look up a TargetLite — fine on a small list,
+    // but O(n) per recomposition once the registry grows. The full Target is
+    // hydrated lazily inside TargetActionMenu via observeTarget(id).
     var selectedTargetIdForActions by rememberSaveable { mutableStateOf<Int?>(null) }
-    val selectedTargetForActions = remember(selectedTargetIdForActions, targets.itemCount) {
-        if (selectedTargetIdForActions == null) null
-        else {
-            var found: TargetLite? = null
-            for (i in 0 until targets.itemCount) {
-                val t = targets.peek(i)
-                if (t?.id == selectedTargetIdForActions) {
-                    found = t
-                    break
-                }
-            }
-            found
-        }
-    }
     val sheetState = rememberModalBottomSheetState()
     @Composable
     fun DiagnosticLogView(logs: List<com.hereliesaz.cleanunderwear.util.DiagnosticLogger.LogEntry>) {
@@ -276,17 +266,15 @@ fun TargetListScreen(
         )
     }
 
-    if (selectedTargetForActions != null) {
+    selectedTargetIdForActions?.let { selectedId ->
         ModalBottomSheet(
             onDismissRequest = { selectedTargetIdForActions = null },
             sheetState = sheetState,
             containerColor = MaterialTheme.colorScheme.surface
         ) {
             TargetActionMenu(
-                target = selectedTargetForActions,
-                onAction = { action ->
-                    selectedTargetIdForActions = null
-                },
+                targetId = selectedId,
+                onAction = { selectedTargetIdForActions = null },
                 viewModel = viewModel
             )
         }
@@ -295,30 +283,37 @@ fun TargetListScreen(
 
 @Composable
 fun TargetActionMenu(
-    target: TargetLite,
+    targetId: Int,
     onAction: (String) -> Unit,
     viewModel: MainViewModel
 ) {
-    val fullTarget by viewModel.observeTarget(target.id).collectAsState(initial = null)
+    val fullTarget by viewModel.observeTarget(targetId).collectAsState(initial = null)
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 32.dp)
     ) {
-        if (target.status == TargetStatus.IGNORED) {
-            ListItem(
+        // While the row hydrates, we don't know whether the target is IGNORED
+        // (which controls Archive vs Resume Monitoring). Showing a skeleton
+        // ListItem is preferable to flashing the wrong action — Compose
+        // recomposes the moment the flow emits the real Target.
+        val status = fullTarget?.status
+        when (status) {
+            null -> ListItem(
+                headlineContent = { Text("Loading…") }
+            )
+            TargetStatus.IGNORED -> ListItem(
                 headlineContent = { Text("Resume Monitoring") },
                 modifier = Modifier.clickable {
-                    viewModel.restoreTarget(target.id)
+                    viewModel.restoreTarget(targetId)
                     onAction("restore")
                 }
             )
-        } else {
-            ListItem(
+            else -> ListItem(
                 headlineContent = { Text("Archive & Stop Monitoring") },
                 modifier = Modifier.clickable {
-                    viewModel.ignoreTarget(target.id)
+                    viewModel.ignoreTarget(targetId)
                     onAction("ignore")
                 }
             )
@@ -329,7 +324,7 @@ fun TargetActionMenu(
         )
         ListItem(
             headlineContent = { Text("View Source Accounts") },
-            supportingContent = { Text(fullTarget?.sourceAccount ?: "Loading...") },
+            supportingContent = { Text(fullTarget?.sourceAccount ?: "Loading…") },
             modifier = Modifier.clickable { onAction("sources") }
         )
         ListItem(

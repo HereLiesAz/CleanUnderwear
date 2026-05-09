@@ -10,7 +10,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 /**
  * The physical manifestation of your localized surveillance state.
  */
-@Database(entities = [Target::class], version = 8, exportSchema = false)
+@Database(entities = [Target::class], version = 9, exportSchema = false)
 abstract class CleanUnderwearDatabase : RoomDatabase() {
     abstract fun targetDao(): TargetDao
 
@@ -142,6 +142,28 @@ abstract class CleanUnderwearDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Backfill missed by MIGRATION_6_7: rows that existed before
+         * monitorability_state was introduced were defaulted to 'READY' even
+         * when they had no phone, no email, or a placeholder name — meaning
+         * the daily vigil would try to scrape them with no usable identity
+         * and the auto-pipeline would never queue them for enrichment.
+         * Mark those rows NEEDS_ENRICHMENT so the user-initiated CBC flow
+         * can pick them up.
+         */
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "UPDATE targets SET monitorability_state = 'NEEDS_ENRICHMENT' " +
+                        "WHERE monitorability_state = 'READY' AND (" +
+                        "(phone_number IS NULL AND email IS NULL) OR " +
+                        "display_name = 'Unnamed Entity' OR " +
+                        "display_name LIKE 'Unnamed Entity (%'" +
+                        ")"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): CleanUnderwearDatabase {
             return Instance ?: synchronized(this) {
                 Room.databaseBuilder(
@@ -151,7 +173,7 @@ abstract class CleanUnderwearDatabase : RoomDatabase() {
                 )
                 .addMigrations(
                     MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
-                    MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8
+                    MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9
                 )
                 .build()
                 .also { Instance = it }
