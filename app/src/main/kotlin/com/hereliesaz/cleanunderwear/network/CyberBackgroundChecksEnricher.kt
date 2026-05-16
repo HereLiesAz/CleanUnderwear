@@ -90,10 +90,13 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
         val doc = Jsoup.parse(html)
 
         // The first result card. CSS classes drift across CBC redesigns,
-        // so try a handful of plausible roots.
+        // so try a handful of plausible roots. If none match, the page
+        // isn't a result page (CBC's /notfound chrome would otherwise feed
+        // garbage to mergeAll via the generic h2/h3 fallback we used to
+        // apply when the card lookup missed).
         val firstCard: Element = doc.selectFirst(
             ".person-card, .result-card, .search-result, .card-person, [data-result-card]"
-        ) ?: doc
+        ) ?: return null
 
         val name = firstCard
             .selectFirst(".name, h1.full-name, .full-name, .person-name, h2, h3")

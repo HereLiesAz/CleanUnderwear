@@ -29,6 +29,9 @@ class ContactHarvester @Inject constructor(
 
     suspend fun harvestContacts(allowedAccountTypes: Set<String> = emptySet()): List<Target> = withContext(Dispatchers.IO) {
         val contactDataMap = mutableMapOf<Long, ContactData>()
+        // Per-run cache so the same off-catalog URL on every contact note
+        // doesn't produce N identical "Ignoring non-catalog ..." log lines.
+        val loggedNonCatalogUrls = mutableSetOf<String>()
         val projection = arrayOf(
             ContactsContract.Data.CONTACT_ID,
             ContactsContract.Data.MIMETYPE,
@@ -116,7 +119,7 @@ class ContactHarvester @Inject constructor(
                     }
                     ContactsContract.CommonDataKinds.Note.CONTENT_ITEM_TYPE -> {
                         val note = it.getString(data1Index) ?: ""
-                        parseNoteMetadata(note, contactData)
+                        parseNoteMetadata(note, contactData, loggedNonCatalogUrls)
                     }
                     ContactsContract.CommonDataKinds.Email.CONTENT_ITEM_TYPE -> {
                         val email = it.getString(data1Index)
@@ -173,7 +176,11 @@ class ContactHarvester @Inject constructor(
         targets
     }
 
-    private fun parseNoteMetadata(note: String, data: ContactData) {
+    private fun parseNoteMetadata(
+        note: String,
+        data: ContactData,
+        loggedNonCatalogUrls: MutableSet<String>,
+    ) {
         val statusMatch = "\\[Registry Status: (.*?)\\]".toRegex().find(note)
         statusMatch?.let {
             data.status = when (it.groupValues[1]) {
@@ -202,7 +209,7 @@ class ContactHarvester @Inject constructor(
             val url = it.groupValues[1].trim()
             if (sourceCatalog.isFromCatalog(url)) {
                 data.lockupUrl = url
-            } else if (url.isNotBlank()) {
+            } else if (url.isNotBlank() && loggedNonCatalogUrls.add("records|$url")) {
                 DiagnosticLogger.log("Ignoring non-catalog Records URL on contact note: $url")
             }
         }
@@ -212,7 +219,7 @@ class ContactHarvester @Inject constructor(
             val url = it.groupValues[1].trim()
             if (sourceCatalog.isFromCatalog(url)) {
                 data.obituaryUrl = url
-            } else if (url.isNotBlank()) {
+            } else if (url.isNotBlank() && loggedNonCatalogUrls.add("obit|$url")) {
                 DiagnosticLogger.log("Ignoring non-catalog Obit URL on contact note: $url")
             }
         }

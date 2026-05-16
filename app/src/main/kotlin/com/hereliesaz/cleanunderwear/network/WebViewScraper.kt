@@ -43,6 +43,13 @@ class WebViewScraper @Inject constructor(@ApplicationContext private val context
         withTimeoutOrNull(120000L) { // 2 minute timeout for scrolling/loading
             suspendCancellableCoroutine { continuation ->
                 val webView = WebView(context)
+                // Pages that bounce through redirects (login walls, consent
+                // gates) fire onPageFinished once per hop. Reinjection is
+                // suppressed via the isResumed guard below — once the
+                // extraction script has posted HTML back and resolved the
+                // continuation, later page-finishes are no-ops. (If the
+                // first injection somehow never posted, a subsequent
+                // page-finish still gets a chance to extract.)
                 var isResumed = false
 
                 fun resumeOnce(html: String?) {
@@ -73,6 +80,7 @@ class WebViewScraper @Inject constructor(@ApplicationContext private val context
 
                 webView.webViewClient = object : WebViewClient() {
                     override fun onPageFinished(view: WebView?, url: String?) {
+                        if (isResumed) return
                         DiagnosticLogger.log("Deep Harvest page ready. Injecting intelligence script...")
                         view?.evaluateJavascript(script, null)
                     }
