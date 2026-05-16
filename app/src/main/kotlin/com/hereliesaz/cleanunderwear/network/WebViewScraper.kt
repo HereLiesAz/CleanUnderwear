@@ -44,6 +44,12 @@ class WebViewScraper @Inject constructor(@ApplicationContext private val context
             suspendCancellableCoroutine { continuation ->
                 val webView = WebView(context)
                 var isResumed = false
+                // Pages that bounce through redirects (login walls, consent
+                // gates) fire onPageFinished once per hop. Inject the
+                // extraction script on the FIRST one only — subsequent hops
+                // would re-run the script against a stale or wrong DOM and
+                // race the WebView destroy we already kicked off.
+                var scriptInjected = false
 
                 fun resumeOnce(html: String?) {
                     if (!isResumed) {
@@ -73,6 +79,8 @@ class WebViewScraper @Inject constructor(@ApplicationContext private val context
 
                 webView.webViewClient = object : WebViewClient() {
                     override fun onPageFinished(view: WebView?, url: String?) {
+                        if (scriptInjected) return
+                        scriptInjected = true
                         DiagnosticLogger.log("Deep Harvest page ready. Injecting intelligence script...")
                         view?.evaluateJavascript(script, null)
                     }

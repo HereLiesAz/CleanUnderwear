@@ -32,11 +32,12 @@ class HarvestContactsUseCase @Inject constructor(
 
     private fun processIntelligence(targets: List<Target>): List<Target> {
         val uniqueTargets = mutableMapOf<String, Target>()
+        var rejectedNameCount = 0
 
         targets.forEach { target ->
             // Use phone number or email as a primary key for de-duplication
             val key = target.phoneNumber ?: target.email ?: target.displayName
-            
+
             val existing = uniqueTargets[key]
             if (existing != null) {
                 // Merge info if duplicate found (prefer non-null fields)
@@ -49,13 +50,19 @@ class HarvestContactsUseCase @Inject constructor(
                 // Validate if it's a real name using LiteRT
                 val isRealName = researchAgent.validatePersonName(target.displayName)
                 val finalTarget = if (!isRealName && target.displayName != "Unnamed Entity") {
+                    rejectedNameCount++
                     target.copy(displayName = "Unnamed Entity (${target.displayName})")
                 } else target
-                
+
                 uniqueTargets[key] = finalTarget
             }
         }
 
+        if (rejectedNameCount > 0) {
+            DiagnosticLogger.log(
+                "AI name filter: $rejectedNameCount candidate(s) reclassified as Unnamed Entity."
+            )
+        }
         return uniqueTargets.values.toList()
     }
 

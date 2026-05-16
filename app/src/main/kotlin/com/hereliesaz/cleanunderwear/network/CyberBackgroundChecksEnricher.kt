@@ -89,11 +89,20 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
         if (html.isBlank()) return null
         val doc = Jsoup.parse(html)
 
+        // CBC redirects unmatched searches to a /notfound page that still
+        // renders the site chrome. The chrome contains generic headings
+        // ("Search Again", "Background Checks") that our broad h2/h3 selector
+        // happily picks up as a "name", which then poisons mergeAll. Bail
+        // before that happens.
+        if (looksLikeNotFound(doc)) return null
+
         // The first result card. CSS classes drift across CBC redesigns,
-        // so try a handful of plausible roots.
+        // so try a handful of plausible roots. If none match, the page
+        // isn't a result page (CBC's chrome on a no-match page would
+        // otherwise feed garbage to mergeAll via the generic h2/h3 fallback).
         val firstCard: Element = doc.selectFirst(
             ".person-card, .result-card, .search-result, .card-person, [data-result-card]"
-        ) ?: doc
+        ) ?: return null
 
         val name = firstCard
             .selectFirst(".name, h1.full-name, .full-name, .person-name, h2, h3")
@@ -111,6 +120,13 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
 
         if (name == null && address == null && phone == null) return null
         return Findings(name = name, address = address, phone = phone)
+    }
+
+    private fun looksLikeNotFound(doc: org.jsoup.nodes.Document): Boolean {
+        val title = doc.title().lowercase()
+        if ("not found" in title || "no results" in title || "page not found" in title) return true
+        val bodyText = doc.body()?.text()?.lowercase().orEmpty()
+        return NOT_FOUND_MARKERS.any { it in bodyText }
     }
 
     /**
@@ -206,6 +222,15 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
             "access denied",
             "cf-browser-verification",
             "/cdn-cgi/challenge",
+        )
+
+        private val NOT_FOUND_MARKERS = listOf(
+            "we couldn't find",
+            "we could not find",
+            "no results found",
+            "no matches found",
+            "no records found",
+            "404 - page not found",
         )
     }
 }
