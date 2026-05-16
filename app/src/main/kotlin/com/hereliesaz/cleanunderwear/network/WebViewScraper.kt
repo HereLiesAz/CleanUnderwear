@@ -79,8 +79,7 @@ class WebViewScraper @Inject constructor(@ApplicationContext private val context
 
                 webView.webViewClient = object : WebViewClient() {
                     override fun onPageFinished(view: WebView?, url: String?) {
-                        if (scriptInjected) return
-                        scriptInjected = true
+                        if (isResumed) return
                         DiagnosticLogger.log("Deep Harvest page ready. Injecting intelligence script...")
                         view?.evaluateJavascript(script, null)
                     }
