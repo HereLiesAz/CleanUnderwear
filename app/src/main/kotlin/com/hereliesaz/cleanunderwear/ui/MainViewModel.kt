@@ -373,22 +373,22 @@ class MainViewModel @Inject constructor(
     fun harvestFacebook() {
         viewModelScope.launch {
             pipelineCoordinator.runExclusive("facebook-harvest") {
-                _operationState.value = OperationState(
-                    isRunning = true,
-                    description = "Awaiting visible Facebook session...",
-                    progress = -1f
-                )
-                val html = launchMissionAndAwait(BrowserMission.HarvestFacebookFriends)
-                if (html.isNullOrBlank()) {
+                try {
+                    _operationState.value = OperationState(
+                        isRunning = true,
+                        description = "Awaiting visible Facebook session...",
+                        progress = -1f
+                    )
+                    val html = launchMissionAndAwait(BrowserMission.HarvestFacebookFriends)
+                    if (html.isNullOrBlank()) return@runExclusive
+                    _operationState.value = _operationState.value.copy(
+                        description = "Parsing Facebook friend list..."
+                    )
+                    val friends = fbHarvester.parseFriendsHtml(html)
+                    harvestContactsUseCase.processManualTargets(friends)
+                } finally {
                     _operationState.value = OperationState(isRunning = false)
-                    return@runExclusive
                 }
-                _operationState.value = _operationState.value.copy(
-                    description = "Parsing Facebook friend list..."
-                )
-                val friends = fbHarvester.parseFriendsHtml(html)
-                harvestContactsUseCase.processManualTargets(friends)
-                _operationState.value = OperationState(isRunning = false)
             }
         }
     }
@@ -514,10 +514,13 @@ class MainViewModel @Inject constructor(
     fun harvestWhatsApp() {
         viewModelScope.launch {
             pipelineCoordinator.runExclusive("whatsapp-harvest") {
-                _operationState.value = OperationState(isRunning = true, description = "Linking to WhatsApp Web...", progress = -1f)
-                val contacts = whatsAppHarvester.harvestContacts()
-                harvestContactsUseCase.processManualTargets(contacts)
-                _operationState.value = OperationState(isRunning = false)
+                try {
+                    _operationState.value = OperationState(isRunning = true, description = "Linking to WhatsApp Web...", progress = -1f)
+                    val contacts = whatsAppHarvester.harvestContacts()
+                    harvestContactsUseCase.processManualTargets(contacts)
+                } finally {
+                    _operationState.value = OperationState(isRunning = false)
+                }
             }
         }
     }
@@ -525,10 +528,13 @@ class MainViewModel @Inject constructor(
     fun harvestInstagram() {
         viewModelScope.launch {
             pipelineCoordinator.runExclusive("instagram-harvest") {
-                _operationState.value = OperationState(isRunning = true, description = "Scything Instagram followers...", progress = -1f)
-                val followers = instagramHarvester.harvestFollowers()
-                harvestContactsUseCase.processManualTargets(followers)
-                _operationState.value = OperationState(isRunning = false)
+                try {
+                    _operationState.value = OperationState(isRunning = true, description = "Scything Instagram followers...", progress = -1f)
+                    val followers = instagramHarvester.harvestFollowers()
+                    harvestContactsUseCase.processManualTargets(followers)
+                } finally {
+                    _operationState.value = OperationState(isRunning = false)
+                }
             }
         }
     }
@@ -536,10 +542,13 @@ class MainViewModel @Inject constructor(
     fun harvestGoogleContacts() {
         viewModelScope.launch {
             pipelineCoordinator.runExclusive("google-harvest") {
-                _operationState.value = OperationState(isRunning = true, description = "Pulling Google Contacts roster...", progress = -1f)
-                val contacts = googleContactsHarvester.harvestContacts()
-                harvestContactsUseCase.processManualTargets(contacts)
-                _operationState.value = OperationState(isRunning = false)
+                try {
+                    _operationState.value = OperationState(isRunning = true, description = "Pulling Google Contacts roster...", progress = -1f)
+                    val contacts = googleContactsHarvester.harvestContacts()
+                    harvestContactsUseCase.processManualTargets(contacts)
+                } finally {
+                    _operationState.value = OperationState(isRunning = false)
+                }
             }
         }
     }
