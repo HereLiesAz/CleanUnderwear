@@ -1,4 +1,4 @@
-# The Registry: CleanUnderwear
+# CleanUnderwear
 
 **CleanUnderwear** is a localized, autonomous surveillance and monitoring platform designed to help you keep a protective vigil over your loved ones. It transforms your passive contact list into an active **Registry**, capable of automatically detecting life-status changes (incarceration or passing) across a variety of public records.
 
