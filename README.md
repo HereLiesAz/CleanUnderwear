@@ -41,6 +41,7 @@ The app uses your phone's native address book as its "external memory":
 - **Status Badges**: Visual indicators for `Monitoring`, `Checking`, `Incarcerated`, `Deceased`, and `Archived`.
 - **Evidence Card**: View the exact match snippet found during a scan.
 - **Registry Actions**: Long-press any individual to Archive, Resume Monitoring, or view original verification sites.
+- **Identity Correlation (doxray)**: Each profile exposes launch-in-browser chips for the face-recognition, reverse-image-search, and name-based OSINT providers ported from the sister project [doxray](https://github.com/HereLiesAz/doxray) — PimEyes, FaceCheck.id, Lenso.ai, FaceSeek, Yandex Images, TinEye, Google Lens, CyberBackgroundChecks `/people/`, SmartBackgroundChecks `/people/`, GitHub user search, and `site:` Google searches for LinkedIn, Twitter/X, Instagram, and Facebook. These never auto-scrape (face services need a photo the Registry doesn't carry, and the name-based services bot-block raw HTTP); each chip opens the provider in the user's own browser so their session cookies apply. Defined in `app/src/main/assets/sources.json` under `identity_sources`; loaded by `SourceCatalog.identitySources()`.
 
 ---
 

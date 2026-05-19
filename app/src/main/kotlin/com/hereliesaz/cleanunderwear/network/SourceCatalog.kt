@@ -23,7 +23,7 @@ enum class RenderMode { BASIC, WEBVIEW }
 
 enum class SourceScope { COUNTY, STATE, AREA_CODE, MULTI_STATE }
 
-enum class SourceCategory { LOCKUP, OBITUARY }
+enum class SourceCategory { LOCKUP, OBITUARY, IDENTITY }
 
 /**
  * One curated source from `sources.json`. Construct via [SourceCatalog].
@@ -107,7 +107,8 @@ class SourceCatalog @Inject constructor(
         val zip_to_county: Map<String, String>? = null,
         val counties: Map<String, CountyEntry>? = null,
         val states: Map<String, StateEntry>? = null,
-        val multi_state: List<RawSource>? = null
+        val multi_state: List<RawSource>? = null,
+        val identity_sources: List<RawSource>? = null
     )
 
     private val areaCodeToState: Map<String, String>
@@ -122,6 +123,7 @@ class SourceCatalog @Inject constructor(
     private val countyObituary: Map<String, List<Source>>
     private val stateLockup: Map<String, List<Source>>
     private val stateObituary: Map<String, List<Source>>
+    private val identitySourceList: List<Source>
 
     private val catalogPrefixes: List<String>
 
@@ -170,6 +172,11 @@ class SourceCatalog @Inject constructor(
         multiStateLockup = parsed.multi_state.orEmpty().mapNotNull { it.toSource() }
         multiStateObituary = emptyList()
 
+        // identity_sources are country-agnostic identity-correlation services
+        // (face recognition, reverse image search, name-based OSINT) ported
+        // from doxray. They never auto-scrape — every entry is MANUAL_LANDING.
+        identitySourceList = parsed.identity_sources.orEmpty().mapNotNull { it.toSource() }
+
         catalogPrefixes = collectPrefixes()
     }
 
@@ -216,6 +223,14 @@ class SourceCatalog @Inject constructor(
     fun obituarySourcesFor(areaCode: String?, residenceInfo: String? = null): List<Source> =
         sourcesForLocale(resolveLocale(areaCode, residenceInfo), SourceCategory.OBITUARY)
 
+    /**
+     * Returns the country-agnostic identity-correlation sources (face
+     * recognition, reverse image search, name-based OSINT). These are
+     * presented to the user as launch-in-browser chips — the catalog never
+     * auto-scrapes them.
+     */
+    fun identitySources(): List<Source> = identitySourceList
+
     private fun sourcesForLocale(locale: LocaleResolution, category: SourceCategory): List<Source> {
         val ordered = mutableListOf<Source>()
 
@@ -224,6 +239,7 @@ class SourceCatalog @Inject constructor(
             val perCategory = when (category) {
                 SourceCategory.LOCKUP -> countyLockup
                 SourceCategory.OBITUARY -> countyObituary
+                SourceCategory.IDENTITY -> emptyMap()
             }
             ordered.addAll(perCategory[county].orEmpty())
         }
@@ -233,6 +249,7 @@ class SourceCatalog @Inject constructor(
             val perCategory = when (category) {
                 SourceCategory.LOCKUP -> stateLockup
                 SourceCategory.OBITUARY -> stateObituary
+                SourceCategory.IDENTITY -> emptyMap()
             }
             val applicable = perCategory[state].orEmpty().filter { source ->
                 when (source.scope) {
@@ -250,6 +267,7 @@ class SourceCatalog @Inject constructor(
             val multi = when (category) {
                 SourceCategory.LOCKUP -> multiStateLockup
                 SourceCategory.OBITUARY -> multiStateObituary
+                SourceCategory.IDENTITY -> emptyList() // identity is country-agnostic; use identitySources()
             }
             ordered.addAll(multi.filter { it.coversCountry == country })
         }
@@ -280,6 +298,7 @@ class SourceCatalog @Inject constructor(
         all.addAll(stateObituary.values.flatten())
         all.addAll(multiStateLockup)
         all.addAll(multiStateObituary)
+        all.addAll(identitySourceList)
         return all
             .flatMap { listOf(it.urlTemplate, it.evidenceUrlTemplate) }
             .map { staticPrefix(it) }
