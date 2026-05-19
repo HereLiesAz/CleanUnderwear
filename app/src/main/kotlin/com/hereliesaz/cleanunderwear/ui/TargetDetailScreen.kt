@@ -20,6 +20,7 @@ import com.hereliesaz.cleanunderwear.data.TargetStatus
 import com.hereliesaz.cleanunderwear.domain.BrowserMission
 import com.hereliesaz.cleanunderwear.network.SourceCatalog
 import com.hereliesaz.cleanunderwear.network.SourceKind
+import com.hereliesaz.cleanunderwear.network.SourceUrlBuilder
 import com.hereliesaz.cleanunderwear.util.CyberBackgroundChecks
 import com.hereliesaz.cleanunderwear.util.DiagnosticLogger
 import java.net.URLEncoder
@@ -300,6 +301,38 @@ fun TargetDetailScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
+            // Identity correlation — face recognition, reverse image search,
+            // and name-based OSINT services ported from the doxray project.
+            // All entries are MANUAL_LANDING: face/image services need a
+            // photo upload the Registry doesn't carry, and the name-based
+            // services bot-block raw HTTP. The chips open each provider in
+            // the user's own browser so their session cookies apply.
+            val identitySources = sourceCatalog.identitySources()
+            if (identitySources.isNotEmpty()) {
+                Text(
+                    text = "Identity Correlation (doxray)",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                val (first, last) = splitDisplayName(target.displayName)
+                @OptIn(ExperimentalLayoutApi::class)
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    identitySources.forEach { source ->
+                        AssistChip(
+                            onClick = {
+                                val url = SourceUrlBuilder.buildFetchUrl(source, first, last)
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                            },
+                            label = { Text(source.label) }
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
             AzButton(
                 text = "General News Search",
                 onClick = {
@@ -316,6 +349,21 @@ fun TargetDetailScreen(
                 shape = AzButtonShape.RECTANGLE
             )
         }
+    }
+}
+
+/**
+ * Splits a free-form display name into a (first, last) pair for slot-filling
+ * URL templates. Returns (name, "") for mononyms; (first, last) for two-token
+ * names; (first-token, last-token) for longer names — middle tokens are
+ * dropped because every identity source expects exactly two name parts.
+ */
+private fun splitDisplayName(displayName: String): Pair<String, String> {
+    val tokens = displayName.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+    return when {
+        tokens.isEmpty() -> "" to ""
+        tokens.size == 1 -> tokens[0] to ""
+        else -> tokens.first() to tokens.last()
     }
 }
 
