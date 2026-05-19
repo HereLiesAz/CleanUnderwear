@@ -332,12 +332,25 @@ fun TargetDetailScreen(
                     identitySources.forEach { source ->
                         AssistChip(
                             onClick = {
-                                try {
-                                    val url = SourceUrlBuilder.buildFetchUrl(source, first, last)
-                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                                } catch (e: android.content.ActivityNotFoundException) {
-                                    // No browser installed — fail silent, matching
-                                    // the "General News Search" button below.
+                                val url = SourceUrlBuilder.buildFetchUrl(source, first, last)
+                                if (source.id in BROWSER_HOSTED_IDENTITY_SOURCES) {
+                                    // CBC + SmartBGC bot-block raw HTTP and the
+                                    // system-browser UA; route through the in-app
+                                    // WebView so the request rides on the user's
+                                    // own session cookies and WebView UA. See
+                                    // WebViewIdentityInterceptor for the OkHttp
+                                    // half of the same bridge.
+                                    onLaunchMission(
+                                        BrowserMission.OpenInBrowser(url, source.label)
+                                    ) { /* browse-only; no extraction */ }
+                                } else {
+                                    try {
+                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                    } catch (e: android.content.ActivityNotFoundException) {
+                                        // No browser installed — fail silent,
+                                        // matching the "General News Search"
+                                        // button below.
+                                    }
                                 }
                             },
                             label = { Text(source.label) }
@@ -365,6 +378,18 @@ fun TargetDetailScreen(
         }
     }
 }
+
+/**
+ * Identity-source IDs whose chips MUST open in the in-app WebView (not the
+ * system browser) so requests carry the user's WebView UA + session cookies.
+ * CBC and SmartBGC bot-block raw HTTP requests with non-WebView UAs; the
+ * in-app BrowserScreen + WebViewIdentityInterceptor together guarantee
+ * every CBC/SmartBGC request uses "the user's header" end-to-end.
+ */
+private val BROWSER_HOSTED_IDENTITY_SOURCES = setOf(
+    "cyberbgc_people_lookup",
+    "smartbgc_people_lookup",
+)
 
 /**
  * Splits a free-form display name into a (first, last) pair for slot-filling

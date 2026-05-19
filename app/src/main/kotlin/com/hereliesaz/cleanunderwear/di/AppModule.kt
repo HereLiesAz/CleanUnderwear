@@ -5,6 +5,7 @@ import com.hereliesaz.cleanunderwear.data.CleanUnderwearDatabase
 import com.hereliesaz.cleanunderwear.data.OfflineTargetRepository
 import com.hereliesaz.cleanunderwear.data.TargetDao
 import com.hereliesaz.cleanunderwear.data.TargetRepository
+import com.hereliesaz.cleanunderwear.network.WebViewIdentityInterceptor
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -39,11 +40,14 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(): OkHttpClient {
+    fun provideOkHttpClient(identityBridge: WebViewIdentityInterceptor): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BASIC
         }
         return OkHttpClient.Builder()
+            // Identity-bridge runs first so the User-Agent / Cookie rewrite
+            // is visible to the logging interceptor below it.
+            .addInterceptor(identityBridge)
             .addInterceptor(logging)
             .build()
     }

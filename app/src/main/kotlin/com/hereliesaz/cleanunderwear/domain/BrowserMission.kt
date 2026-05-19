@@ -40,6 +40,28 @@ sealed class BrowserMission {
     open val extractionScript: String =
         "(function(){window.HTMLOUT.dump(document.documentElement.outerHTML);})();"
 
+    /**
+     * When false, BrowserScreen loads the URL and steps aside — no auto-run
+     * of [extractionScript], no 30s watchdog. The user browses freely until
+     * they tap "back" to dismiss the mission. Use for chips that just need to
+     * land the user on the right page in CleanUnderwear's WebView (so the
+     * site sees the device's real UA + cookies) rather than the system browser.
+     */
+    open val autoExtract: Boolean = true
+
+    /**
+     * Browse-only mission: open [initialUrl] in the in-app WebView, no
+     * automation, no extraction. Used for the doxray identity-correlation
+     * chips that must run through the user's WebView session (CBC and
+     * SmartBGC bot-block raw HTTP / non-WebView UAs).
+     */
+    data class OpenInBrowser(
+        override val initialUrl: String,
+        override val label: String
+    ) : BrowserMission() {
+        override val autoExtract: Boolean = false
+    }
+
     data class CbcByPhone(val phone: String) : BrowserMission() {
         override val initialUrl: String = CyberBackgroundChecks.getPhoneSearchUrl(phone)
         override val label: String = "Identity lookup · phone"
