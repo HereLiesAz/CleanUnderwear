@@ -81,6 +81,12 @@ class OnDeviceResearchAgent @Inject constructor(
     /**
      * Heuristic + ML check that [text] reads like a person name. Used by the
      * harvesters when classifying contact fields, not by the scrape loop.
+     *
+     * Logging note: a single registry sweep runs this hundreds of times, and
+     * the in-app log buffer is only 500 entries — per-rejection logging here
+     * used to flush every other diagnostic off the operator's screen. Callers
+     * that want a per-run trail should accumulate counts and emit a summary
+     * themselves.
      */
     fun validatePersonName(text: String): Boolean {
         if (text.isBlank() || text == "Unnamed Entity") return false
@@ -98,13 +104,7 @@ class OnDeviceResearchAgent @Inject constructor(
         )
         val isService = serviceKeywords.any { text.contains(it, ignoreCase = true) }
 
-        val isValid = (score > 0.3f || looksLikeName) && !isService
-        if (!isValid) {
-            DiagnosticLogger.log(
-                "AI Flag: '$text' interrogated and rejected. (Score: $score, Heuristic: $looksLikeName)"
-            )
-        }
-        return isValid
+        return (score > 0.3f || looksLikeName) && !isService
     }
 
     private fun loadModelFile(fileName: String): MappedByteBuffer {

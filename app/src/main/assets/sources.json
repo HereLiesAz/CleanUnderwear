@@ -399,7 +399,7 @@
           "id": "nyc_doc_inmate_lookup",
           "label": "NYC Department of Correction Inmate Lookup",
           "kind": "MANUAL_LANDING",
-          "url_template": "https://a073-ils-web.nyc.gov/inmatelookup/pages/common/find.jsf",
+          "url_template": "https://a073-ils-web.nyc.gov/inmatelookup/pages/home/home.jsf",
           "render": "WEBVIEW",
           "scope": "COUNTY"
         }
@@ -413,7 +413,7 @@
           "id": "nyc_doc_inmate_lookup_kings",
           "label": "NYC Department of Correction Inmate Lookup",
           "kind": "MANUAL_LANDING",
-          "url_template": "https://a073-ils-web.nyc.gov/inmatelookup/pages/common/find.jsf",
+          "url_template": "https://a073-ils-web.nyc.gov/inmatelookup/pages/home/home.jsf",
           "render": "WEBVIEW",
           "scope": "COUNTY"
         }
@@ -427,7 +427,7 @@
           "id": "lasd_inmate_info_center",
           "label": "LASD Inmate Information Center",
           "kind": "MANUAL_LANDING",
-          "url_template": "https://app4.lasd.org/iic/",
+          "url_template": "https://app5.lasd.org/iic/",
           "render": "WEBVIEW",
           "scope": "COUNTY"
         }
@@ -441,7 +441,7 @@
           "id": "cook_county_sheriff_inmate_locator",
           "label": "Cook County Sheriff Inmate Locator",
           "kind": "MANUAL_LANDING",
-          "url_template": "https://www.cookcountysheriff.org/inmate-locator/",
+          "url_template": "https://iic.ccsheriff.org/IndividualInCustodyLocator/Search",
           "render": "WEBVIEW",
           "scope": "COUNTY"
         }
@@ -469,7 +469,7 @@
           "id": "mcso_inmate_locator",
           "label": "Maricopa County Sheriff Inmate Locator",
           "kind": "MANUAL_LANDING",
-          "url_template": "https://www.mcso.org/i-want-to/locate-an-inmate",
+          "url_template": "https://www.mcso.org/InmateInfo",
           "render": "WEBVIEW",
           "scope": "COUNTY"
         }
@@ -497,7 +497,7 @@
           "id": "bexar_magistrate_search",
           "label": "Bexar County Magistrate Search",
           "kind": "MANUAL_LANDING",
-          "url_template": "https://www.bexar.org/3168/Magistrate-Search",
+          "url_template": "https://centralmagistrate.bexar.org/",
           "render": "WEBVIEW",
           "scope": "COUNTY"
         }
@@ -523,9 +523,9 @@
       "lockup_sources": [
         {
           "id": "dallas_sheriff_inmate",
-          "label": "Dallas County Sheriff Inmate Search",
+          "label": "Dallas County Jail Lookup System",
           "kind": "MANUAL_LANDING",
-          "url_template": "https://www.dallassheriff.net/inmate-information/",
+          "url_template": "https://www.dallascounty.org/jaillookup/search.jsp",
           "render": "WEBVIEW",
           "scope": "COUNTY"
         }
@@ -537,9 +537,9 @@
       "lockup_sources": [
         {
           "id": "travis_sheriff_jail_records",
-          "label": "Travis County Sheriff Jail Records",
+          "label": "Travis County Sheriff — Find an Inmate",
           "kind": "MANUAL_LANDING",
-          "url_template": "https://www.tcsheriff.org/jail-records",
+          "url_template": "https://www.tcsheriff.org/inmate-jail-info/inmate-info/find-an-inmate",
           "render": "WEBVIEW",
           "scope": "COUNTY"
         }
@@ -551,9 +551,9 @@
       "lockup_sources": [
         {
           "id": "sfsheriff_in_custody",
-          "label": "San Francisco Sheriff In-Custody Search",
+          "label": "San Francisco Sheriff — Find a Person in Jail",
           "kind": "MANUAL_LANDING",
-          "url_template": "https://www.sfsheriff.com/services/in-custody-information",
+          "url_template": "https://sfsheriff.com/find-person-jail",
           "render": "WEBVIEW",
           "scope": "COUNTY"
         }
@@ -584,9 +584,9 @@
       "lockup_sources": [
         {
           "id": "dc_doc_inmate_locator",
-          "label": "DC Department of Corrections Inmate Locator",
+          "label": "DC Department of Corrections — Locate an Inmate",
           "kind": "MANUAL_LANDING",
-          "url_template": "https://doc.dc.gov/page/inmate-locator",
+          "url_template": "https://doc.dc.gov/page/locate-inmate",
           "render": "WEBVIEW",
           "scope": "COUNTY"
         }
@@ -600,7 +600,7 @@
           "id": "suffolk_sheriff_inmate",
           "label": "Suffolk County Sheriff Inmate Lookup",
           "kind": "MANUAL_LANDING",
-          "url_template": "https://www.scsdma.org/",
+          "url_template": "https://suffolkcountysheriff.com/",
           "render": "WEBVIEW",
           "scope": "COUNTY"
         }
@@ -614,7 +614,7 @@
           "id": "denver_sheriff_inmate",
           "label": "Denver Sheriff Inmate Search",
           "kind": "MANUAL_LANDING",
-          "url_template": "https://www.denvergov.org/Government/Agencies-Departments-Offices/Agencies-Departments-Offices-Directory/Denver-Sheriff-Department",
+          "url_template": "https://denvergov.org/inmatesearch/",
           "render": "WEBVIEW",
           "scope": "COUNTY"
         }
@@ -640,9 +640,9 @@
       "lockup_sources": [
         {
           "id": "wayne_sheriff_inmate",
-          "label": "Wayne County Sheriff Inmate Lookup",
+          "label": "Wayne County (MI) Sheriff Connect Inmate Search",
           "kind": "MANUAL_LANDING",
-          "url_template": "https://www.waynecounty.com/elected/sheriff/inmate-search.aspx",
+          "url_template": "https://www.sheriffconnect.com/dashboard/inmate-search/",
           "render": "WEBVIEW",
           "scope": "COUNTY"
         }
@@ -656,7 +656,7 @@
           "id": "miami_dade_inmate_lookup",
           "label": "Miami-Dade Corrections Inmate Search",
           "kind": "MANUAL_LANDING",
-          "url_template": "https://www.miamidade.gov/global/corrections/inmate-search.page",
+          "url_template": "https://www.miamidade.gov/Apps/mdcr/inmateSearch/",
           "render": "WEBVIEW",
           "scope": "COUNTY"
         }
@@ -689,9 +689,9 @@
       "lockup_sources": [
         {
           "id": "cdcr_locator",
-          "label": "CDCR Inmate Locator",
+          "label": "CDCR / CIRIS — California Incarcerated Records Search",
           "kind": "MANUAL_LANDING",
-          "url_template": "https://inmatelocator.cdcr.ca.gov/",
+          "url_template": "https://ciris.mt.cdcr.ca.gov/",
           "render": "WEBVIEW",
           "scope": "STATE"
         }
@@ -729,9 +729,9 @@
       "lockup_sources": [
         {
           "id": "la_doc_locator",
-          "label": "Louisiana DOC Imprisoned Persons Locator",
+          "label": "Louisiana DOC Imprisoned Persons Resources",
           "kind": "MANUAL_LANDING",
-          "url_template": "https://doc.la.gov/imprisoned-persons-locator/",
+          "url_template": "https://doc.louisiana.gov/imprisoned-person-programs-resources/",
           "render": "WEBVIEW",
           "scope": "STATE"
         }
@@ -795,7 +795,7 @@
           "id": "tdcj_offender_search",
           "label": "Texas TDCJ Offender Search",
           "kind": "MANUAL_LANDING",
-          "url_template": "https://offender.tdcj.texas.gov/OffenderSearch/start.action",
+          "url_template": "https://ivss.tdcj.texas.gov/offender-search-popups/",
           "render": "WEBVIEW",
           "scope": "STATE"
         }
@@ -853,6 +853,123 @@
       "render": "WEBVIEW",
       "scope": "MULTI_STATE",
       "covers_country": "CA"
+    }
+  ],
+
+  "_identity_sources_comment": "Identity-correlation services (face recognition, reverse image search, name-based OSINT) ported from the sister project doxray (github.com/HereLiesAz/doxray). All entries ship as MANUAL_LANDING because (a) the face/image services require a photo upload the Registry never carries, and (b) the name-based services (PimEyes, FaceCheck.id, CyberBackgroundChecks/people, SmartBackgroundChecks, GitHub) bot-block raw HTTP requests — they must be exercised through the user's own browser session. Templates with {first}/{last} slots are filled at chip-render time via SourceUrlBuilder.",
+
+  "identity_sources": [
+    {
+      "id": "pimeyes_face",
+      "label": "PimEyes face search",
+      "kind": "MANUAL_LANDING",
+      "url_template": "https://pimeyes.com/",
+      "render": "WEBVIEW",
+      "scope": "MULTI_STATE"
+    },
+    {
+      "id": "facecheck_id_face",
+      "label": "FaceCheck.id face search",
+      "kind": "MANUAL_LANDING",
+      "url_template": "https://facecheck.id/",
+      "render": "WEBVIEW",
+      "scope": "MULTI_STATE"
+    },
+    {
+      "id": "lenso_face",
+      "label": "Lenso.ai face search",
+      "kind": "MANUAL_LANDING",
+      "url_template": "https://lenso.ai/",
+      "render": "WEBVIEW",
+      "scope": "MULTI_STATE"
+    },
+    {
+      "id": "faceseek_face",
+      "label": "FaceSeek face search",
+      "kind": "MANUAL_LANDING",
+      "url_template": "https://faceseek.online/",
+      "render": "WEBVIEW",
+      "scope": "MULTI_STATE"
+    },
+    {
+      "id": "yandex_reverse_image",
+      "label": "Yandex reverse image search",
+      "kind": "MANUAL_LANDING",
+      "url_template": "https://yandex.com/images/",
+      "render": "WEBVIEW",
+      "scope": "MULTI_STATE"
+    },
+    {
+      "id": "tineye_reverse_image",
+      "label": "TinEye reverse image search",
+      "kind": "MANUAL_LANDING",
+      "url_template": "https://tineye.com/",
+      "render": "WEBVIEW",
+      "scope": "MULTI_STATE"
+    },
+    {
+      "id": "google_lens_reverse_image",
+      "label": "Google Lens reverse image search",
+      "kind": "MANUAL_LANDING",
+      "url_template": "https://lens.google.com/",
+      "render": "WEBVIEW",
+      "scope": "MULTI_STATE"
+    },
+    {
+      "id": "cyberbgc_people_lookup",
+      "label": "CyberBackgroundChecks people lookup",
+      "kind": "MANUAL_LANDING",
+      "url_template": "https://www.cyberbackgroundchecks.com/people/{first}-{last}",
+      "render": "WEBVIEW",
+      "scope": "MULTI_STATE"
+    },
+    {
+      "id": "smartbgc_people_lookup",
+      "label": "SmartBackgroundChecks people lookup",
+      "kind": "MANUAL_LANDING",
+      "url_template": "https://www.smartbackgroundchecks.com/people/{first}-{last}",
+      "render": "WEBVIEW",
+      "scope": "MULTI_STATE"
+    },
+    {
+      "id": "github_user_search",
+      "label": "GitHub user search",
+      "kind": "MANUAL_LANDING",
+      "url_template": "https://github.com/search?q=%22{first}+{last}%22&type=users",
+      "render": "WEBVIEW",
+      "scope": "MULTI_STATE"
+    },
+    {
+      "id": "google_site_linkedin",
+      "label": "Google + LinkedIn",
+      "kind": "MANUAL_LANDING",
+      "url_template": "https://www.google.com/search?q=site%3Alinkedin.com+%22{first}+{last}%22",
+      "render": "WEBVIEW",
+      "scope": "MULTI_STATE"
+    },
+    {
+      "id": "google_site_twitter",
+      "label": "Google + Twitter/X",
+      "kind": "MANUAL_LANDING",
+      "url_template": "https://www.google.com/search?q=site%3Atwitter.com+%22{first}+{last}%22",
+      "render": "WEBVIEW",
+      "scope": "MULTI_STATE"
+    },
+    {
+      "id": "google_site_instagram",
+      "label": "Google + Instagram",
+      "kind": "MANUAL_LANDING",
+      "url_template": "https://www.google.com/search?q=site%3Ainstagram.com+%22{first}+{last}%22",
+      "render": "WEBVIEW",
+      "scope": "MULTI_STATE"
+    },
+    {
+      "id": "google_site_facebook",
+      "label": "Google + Facebook",
+      "kind": "MANUAL_LANDING",
+      "url_template": "https://www.google.com/search?q=site%3Afacebook.com+%22{first}+{last}%22",
+      "render": "WEBVIEW",
+      "scope": "MULTI_STATE"
     }
   ]
 }

@@ -20,6 +20,7 @@ import com.hereliesaz.cleanunderwear.data.TargetStatus
 import com.hereliesaz.cleanunderwear.domain.BrowserMission
 import com.hereliesaz.cleanunderwear.network.SourceCatalog
 import com.hereliesaz.cleanunderwear.network.SourceKind
+import com.hereliesaz.cleanunderwear.network.SourceUrlBuilder
 import com.hereliesaz.cleanunderwear.util.CyberBackgroundChecks
 import com.hereliesaz.cleanunderwear.util.DiagnosticLogger
 import java.net.URLEncoder
@@ -300,6 +301,65 @@ fun TargetDetailScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
+            // Identity correlation — face recognition, reverse image search,
+            // and name-based OSINT services ported from the doxray project.
+            // All entries are MANUAL_LANDING: face/image services need a
+            // photo upload the Registry doesn't carry, and the name-based
+            // services bot-block raw HTTP. The chips open each provider in
+            // the user's own browser so their session cookies apply.
+            val (first, last) = splitDisplayName(target.displayName)
+            // Filter identity sources to only those whose template can be
+            // safely slot-filled with the names we have. A template that
+            // references {last} on a mononym contact would otherwise produce
+            // junk like ".../people/madonna-" and either 404 the user or, on
+            // search providers, run a quoted-string search for "Madonna ".
+            val identitySources = sourceCatalog.identitySources().filter { source ->
+                val needsFirst = source.urlTemplate.contains("{first}")
+                val needsLast = source.urlTemplate.contains("{last}")
+                (!needsFirst || first.isNotBlank()) && (!needsLast || last.isNotBlank())
+            }
+            if (identitySources.isNotEmpty()) {
+                Text(
+                    text = "Identity Correlation (doxray)",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                @OptIn(ExperimentalLayoutApi::class)
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    identitySources.forEach { source ->
+                        AssistChip(
+                            onClick = {
+                                val url = SourceUrlBuilder.buildFetchUrl(source, first, last)
+                                if (source.id in BROWSER_HOSTED_IDENTITY_SOURCES) {
+                                    // CBC + SmartBGC bot-block raw HTTP and the
+                                    // system-browser UA; route through the in-app
+                                    // WebView so the request rides on the user's
+                                    // own session cookies and WebView UA. See
+                                    // WebViewIdentityInterceptor for the OkHttp
+                                    // half of the same bridge.
+                                    onLaunchMission(
+                                        BrowserMission.OpenInBrowser(url, source.label)
+                                    ) { /* browse-only; no extraction */ }
+                                } else {
+                                    try {
+                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                    } catch (e: android.content.ActivityNotFoundException) {
+                                        // No browser installed — fail silent,
+                                        // matching the "General News Search"
+                                        // button below.
+                                    }
+                                }
+                            },
+                            label = { Text(source.label) }
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
             AzButton(
                 text = "General News Search",
                 onClick = {
@@ -316,6 +376,33 @@ fun TargetDetailScreen(
                 shape = AzButtonShape.RECTANGLE
             )
         }
+    }
+}
+
+/**
+ * Identity-source IDs whose chips MUST open in the in-app WebView (not the
+ * system browser) so requests carry the user's WebView UA + session cookies.
+ * CBC and SmartBGC bot-block raw HTTP requests with non-WebView UAs; the
+ * in-app BrowserScreen + WebViewIdentityInterceptor together guarantee
+ * every CBC/SmartBGC request uses "the user's header" end-to-end.
+ */
+private val BROWSER_HOSTED_IDENTITY_SOURCES = setOf(
+    "cyberbgc_people_lookup",
+    "smartbgc_people_lookup",
+)
+
+/**
+ * Splits a free-form display name into a (first, last) pair for slot-filling
+ * URL templates. Returns (name, "") for mononyms; (first, last) for two-token
+ * names; (first-token, last-token) for longer names. Middle tokens are
+ * preserved in the first part of the pair to improve OSINT accuracy.
+ */
+private fun splitDisplayName(displayName: String): Pair<String, String> {
+    val tokens = displayName.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+    return when {
+        tokens.isEmpty() -> "" to ""
+        tokens.size == 1 -> tokens[0] to ""
+        else -> tokens.dropLast(1).joinToString(" ") to tokens.last()
     }
 }
 

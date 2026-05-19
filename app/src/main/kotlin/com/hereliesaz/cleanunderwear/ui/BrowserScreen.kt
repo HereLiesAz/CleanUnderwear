@@ -105,8 +105,11 @@ fun BrowserScreen(
     }
 
     // Once the page reports ready, give the SPA a moment to render results,
-    // then auto-evaluate the extraction script.
+    // then auto-evaluate the extraction script. Browse-only missions
+    // (autoExtract == false) skip this entirely — the user dismisses them
+    // manually via the back arrow.
     LaunchedEffect(currentIndex, pageReady, paused) {
+        if (!mission.autoExtract) return@LaunchedEffect
         if (pageReady && !automationRan && !paused) {
             delay(1200L)
             if (!automationRan && !paused) {
@@ -120,7 +123,9 @@ fun BrowserScreen(
     // extraction script silently fails to post back), don't hang the queue
     // forever. After 30s, report the mission as Blocked and advance.
     // Pausing for a captcha resets the clock — the user is in control then.
+    // Browse-only missions are exempt: there's no extraction to time out.
     LaunchedEffect(currentIndex, paused) {
+        if (!mission.autoExtract) return@LaunchedEffect
         if (paused) return@LaunchedEffect
         delay(30_000L)
         if (!paused) {
@@ -262,7 +267,7 @@ fun BrowserScreen(
                         )
                     }
                 }
-            } else {
+            } else if (mission.autoExtract) {
                 AzButton(
                     text = if (!pageReady) "Loading…" else "Auto-extracting…",
                     onClick = {
@@ -279,6 +284,8 @@ fun BrowserScreen(
                     shape = AzButtonShape.RECTANGLE
                 )
             }
+            // Browse-only missions show no bottom button — the user dismisses
+            // via the up-arrow in the top bar when they're done reading.
         }
     }
 }

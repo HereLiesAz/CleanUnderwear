@@ -21,7 +21,25 @@ class FacebookHarvester @Inject constructor() {
 
     fun parseFriendsHtml(html: String): List<Target> {
         if (html.isBlank()) return emptyList()
-        return parseFriendsDocument(Jsoup.parse(html))
+        val doc = Jsoup.parse(html)
+        if (looksLikeLoginWall(doc)) {
+            // Distinguish "session missing" from "parser drifted" — both
+            // produce zero friends, but only the first is the operator's
+            // problem to fix (re-login in the visible WebView).
+            DiagnosticLogger.log(
+                "Facebook Harvest: visible session is logged out (login wall) — skipping.",
+                DiagnosticLogger.LogEntry.LogLevel.WARN
+            )
+            return emptyList()
+        }
+        return parseFriendsDocument(doc)
+    }
+
+    private fun looksLikeLoginWall(doc: Document): Boolean {
+        // mbasic's login page exposes a literal #login_form or input[name=pass]
+        // even when the URL after redirects is just "/" — checking the DOM is
+        // more reliable than parsing the URL the WebView ended up on.
+        return doc.selectFirst("#login_form, form[action*=login], input[name=pass]") != null
     }
 
     private fun parseFriendsDocument(doc: Document): List<Target> {
