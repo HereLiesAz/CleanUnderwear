@@ -108,6 +108,14 @@ android {
     testOptions {
         unitTests.isReturnDefaultValues = true
     }
+    sourceSets {
+        getByName("test") {
+            // Surface main/assets on the unit-test classpath so JVM tests can
+            // load sources.json via getResourceAsStream("/sources.json")
+            // without reaching outside the module via a hardcoded File path.
+            resources.srcDirs("src/main/assets")
+        }
+    }
 }
 
 androidComponents {

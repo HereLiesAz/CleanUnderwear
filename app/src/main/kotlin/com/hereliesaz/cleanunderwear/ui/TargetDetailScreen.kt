@@ -307,14 +307,23 @@ fun TargetDetailScreen(
             // photo upload the Registry doesn't carry, and the name-based
             // services bot-block raw HTTP. The chips open each provider in
             // the user's own browser so their session cookies apply.
-            val identitySources = sourceCatalog.identitySources()
+            val (first, last) = splitDisplayName(target.displayName)
+            // Filter identity sources to only those whose template can be
+            // safely slot-filled with the names we have. A template that
+            // references {last} on a mononym contact would otherwise produce
+            // junk like ".../people/madonna-" and either 404 the user or, on
+            // search providers, run a quoted-string search for "Madonna ".
+            val identitySources = sourceCatalog.identitySources().filter { source ->
+                val needsFirst = source.urlTemplate.contains("{first}")
+                val needsLast = source.urlTemplate.contains("{last}")
+                (!needsFirst || first.isNotBlank()) && (!needsLast || last.isNotBlank())
+            }
             if (identitySources.isNotEmpty()) {
                 Text(
                     text = "Identity Correlation (doxray)",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
-                val (first, last) = splitDisplayName(target.displayName)
                 @OptIn(ExperimentalLayoutApi::class)
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
@@ -323,8 +332,13 @@ fun TargetDetailScreen(
                     identitySources.forEach { source ->
                         AssistChip(
                             onClick = {
-                                val url = SourceUrlBuilder.buildFetchUrl(source, first, last)
-                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                try {
+                                    val url = SourceUrlBuilder.buildFetchUrl(source, first, last)
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                } catch (e: android.content.ActivityNotFoundException) {
+                                    // No browser installed — fail silent, matching
+                                    // the "General News Search" button below.
+                                }
                             },
                             label = { Text(source.label) }
                         )

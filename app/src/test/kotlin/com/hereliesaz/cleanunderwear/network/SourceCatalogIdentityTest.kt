@@ -8,7 +8,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 /**
  * Validates the catalog correctly loads the identity_sources block ported
@@ -21,13 +20,17 @@ import java.io.File
 class SourceCatalogIdentityTest {
 
     private fun loadCatalog(): SourceCatalog {
-        val assetFile = File("src/main/assets/sources.json")
-        assertTrue("sources.json not found at ${assetFile.absolutePath}", assetFile.exists())
+        // src/main/assets is registered as a test resource dir in
+        // app/build.gradle.kts so the asset is reachable via the classloader,
+        // independent of the JVM working directory at test time.
+        val stream = SourceCatalogIdentityTest::class.java.getResourceAsStream("/sources.json")
+        assertNotNull("sources.json not on the test classpath", stream)
+        val bytes = stream!!.use { it.readBytes() }
 
         val context = mockk<Context>()
         val assets = mockk<AssetManager>()
         every { context.assets } returns assets
-        every { assets.open("sources.json") } answers { assetFile.inputStream() }
+        every { assets.open("sources.json") } answers { bytes.inputStream() }
         return SourceCatalog(context)
     }
 
