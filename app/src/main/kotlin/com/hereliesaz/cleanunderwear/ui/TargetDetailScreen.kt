@@ -355,15 +355,15 @@ fun TargetDetailScreen(
 /**
  * Splits a free-form display name into a (first, last) pair for slot-filling
  * URL templates. Returns (name, "") for mononyms; (first, last) for two-token
- * names; (first-token, last-token) for longer names — middle tokens are
- * dropped because every identity source expects exactly two name parts.
+ * names; (first-token, last-token) for longer names. Middle tokens are
+ * preserved in the first part of the pair to improve OSINT accuracy.
  */
 private fun splitDisplayName(displayName: String): Pair<String, String> {
     val tokens = displayName.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
     return when {
         tokens.isEmpty() -> "" to ""
         tokens.size == 1 -> tokens[0] to ""
-        else -> tokens.first() to tokens.last()
+        else -> tokens.dropLast(1).joinToString(" ") to tokens.last()
     }
 }
 
