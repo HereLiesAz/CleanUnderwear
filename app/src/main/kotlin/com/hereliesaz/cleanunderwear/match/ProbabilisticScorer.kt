@@ -25,7 +25,8 @@ import kotlin.math.pow
  * people whose names contradict — it lands in REVIEW for a human instead.
  *
  * @param nicknames maps a first name to its known variants (Jim→James …);
- *   defaults to none. Production wires [com.hereliesaz.cleanunderwear.network.OnDeviceResearchAgent.getNicknames].
+ *   defaults to none. Production wires
+ *   [com.hereliesaz.cleanunderwear.network.OnDeviceResearchAgent.getNicknames].
  * @param frequency how many records in the corpus carry this (field,value);
  *   defaults to 1 (treat every value as unique → no penalty).
  */
@@ -42,15 +43,20 @@ class ProbabilisticScorer(
         var weight = 0.0
         var bestCase = 0.0
 
-        fun apply(field: String, level: Level, agreeWeight: Double, disagreeWeight: Double) {
+        // agreeWeight is also the field's ceiling contribution (best case if it agreed).
+        fun apply(
+            field: String,
+            level: Level,
+            agreeWeight: Double,
+            partialWeight: Double,
+            disagreeWeight: Double
+        ) {
             if (level == Level.ABSENT) return
-            // The best this field could ever contribute if it agreed perfectly.
             bestCase += agreeWeight.coerceAtLeast(0.0)
             val w = when (level) {
                 Level.AGREE -> agreeWeight
-                Level.PARTIAL -> (agreeWeight * 0.5)
-                Level.DISAGREE -> disagreeWeight
-                Level.CONFLICT -> disagreeWeight
+                Level.PARTIAL -> partialWeight
+                Level.DISAGREE, Level.CONFLICT -> disagreeWeight
                 Level.ABSENT -> 0.0
             }
             weight += w
@@ -66,6 +72,7 @@ class ProbabilisticScorer(
                 "phone",
                 if (agrees) Level.AGREE else Level.DISAGREE,
                 if (agrees) downweight("phone", phoneA, config.phoneAgree) else config.phoneAgree,
+                0.0,
                 config.phoneDisagree
             )
         }
@@ -79,6 +86,7 @@ class ProbabilisticScorer(
                 "email",
                 if (agrees) Level.AGREE else Level.DISAGREE,
                 if (agrees) downweight("email", emailA, config.emailAgree) else config.emailAgree,
+                0.0,
                 config.emailDisagree
             )
         }
@@ -86,34 +94,18 @@ class ProbabilisticScorer(
         // --- name (nickname-aware, frequency-aware on the surname) ---
         val nameLevel = compareName(a, b)
         val surname = StringSimilarity.normalizeNameToken(a.lastName)
-        val nameAgreeWeight = when (nameLevel) {
-            Level.AGREE -> surname?.let { downweight("surname", it, config.nameFull) } ?: config.nameFull
-            else -> config.nameFull
-        }
-        apply("name", nameLevel, nameAgreeWeight, config.nameConflict)
-        // PARTIAL name uses namePartial directly rather than half of full.
-        if (nameLevel == Level.PARTIAL) {
-            // undo the generic PARTIAL (half-full) and substitute namePartial
-            val idx = contributions.indexOfLast { it.field == "name" }
-            if (idx >= 0) {
-                weight -= contributions[idx].weightBits
-                weight += config.namePartial
-                bestCase += config.namePartial - nameAgreeWeight.coerceAtLeast(0.0)
-                contributions[idx] = contributions[idx].copy(weightBits = config.namePartial)
-            }
-        }
+        val nameAgreeWeight = surname?.let { downweight("surname", it, config.nameFull) }
+            ?: config.nameFull
+        apply("name", nameLevel, nameAgreeWeight, config.namePartial, config.nameConflict)
 
         // --- address ---
-        val addressLevel = compareAddress(a, b)
-        apply("address", addressLevel, config.addressFull, config.addressConflict)
-        if (addressLevel == Level.PARTIAL) {
-            val idx = contributions.indexOfLast { it.field == "address" }
-            if (idx >= 0) {
-                weight -= contributions[idx].weightBits
-                weight += config.addressPartial
-                contributions[idx] = contributions[idx].copy(weightBits = config.addressPartial)
-            }
-        }
+        apply(
+            "address",
+            compareAddress(a, b),
+            config.addressFull,
+            config.addressPartial,
+            config.addressConflict
+        )
 
         // --- area code (weak corroboration) ---
         if (!a.areaCode.isNullOrBlank() && !b.areaCode.isNullOrBlank()) {
@@ -121,8 +113,7 @@ class ProbabilisticScorer(
             apply(
                 "areaCode",
                 if (agrees) Level.AGREE else Level.DISAGREE,
-                config.areaCodeAgree,
-                config.areaCodeDisagree
+                config.areaCodeAgree, 0.0, config.areaCodeDisagree
             )
         }
 
@@ -132,8 +123,7 @@ class ProbabilisticScorer(
             apply(
                 "dob",
                 if (agrees) Level.AGREE else Level.DISAGREE,
-                config.dobAgree,
-                config.dobDisagree
+                config.dobAgree, 0.0, config.dobDisagree
             )
         }
 
@@ -185,7 +175,7 @@ class ProbabilisticScorer(
                 lastSim >= 0.90 && (firstA == null || firstB == null) -> Level.PARTIAL
                 lastSim >= 0.90 && initialMatch -> Level.PARTIAL
                 lastSim < 0.85 && firstA != null && firstB != null -> Level.CONFLICT
-                else -> Level.ABSENT // ambiguous (e.g. surname typo, missing first) — no evidence
+                else -> Level.ABSENT // ambiguous (surname typo, missing first) — no evidence
             }
         }
 
