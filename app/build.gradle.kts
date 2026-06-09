@@ -43,6 +43,17 @@ kotlin {
     jvmToolchain(21)
 }
 
+// Hilt/Dagger's annotation processor reads Kotlin class metadata via kotlin-metadata-jvm.
+// The version Dagger bundles trails the compiler, so once the project moved to Kotlin 2.4.0 the
+// aggregating `hiltJavaCompile*` task failed with "Provided Metadata instance has version 2.4.0,
+// while maximum supported version is 2.3.0". Force the parser to match the Kotlin we compile with
+// so it can read the metadata we emit. Kept in lockstep with the catalog's `kotlin` version.
+configurations.configureEach {
+    resolutionStrategy {
+        force("org.jetbrains.kotlin:kotlin-metadata-jvm:${libs.versions.kotlin.get()}")
+    }
+}
+
 android {
     namespace = "com.hereliesaz.cleanunderwear"
     compileSdk = 37
