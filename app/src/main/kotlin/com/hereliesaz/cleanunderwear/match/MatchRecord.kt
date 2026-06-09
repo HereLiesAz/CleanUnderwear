@@ -24,6 +24,14 @@ data class MatchRecord(
     val hasUsableName: Boolean
         get() = !firstName.isNullOrBlank() && !lastName.isNullOrBlank()
 
+    /**
+     * The normalized surname token, or null when no usable surname is present. This is the single
+     * source of truth for the [MatchField.SURNAME] frequency key: the scorer down-weights on it
+     * and any caller tallying corpus counts must key on the same value, so both read it from here.
+     */
+    val surnameKey: String?
+        get() = StringSimilarity.normalizeNameToken(lastName)
+
     companion object {
         private val PLACEHOLDER_PREFIX = "Unnamed Entity"
 

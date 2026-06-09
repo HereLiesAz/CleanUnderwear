@@ -71,7 +71,7 @@ class ProbabilisticScorer(
             apply(
                 "phone",
                 if (agrees) Level.AGREE else Level.DISAGREE,
-                if (agrees) downweight("phone", phoneA, config.phoneAgree) else config.phoneAgree,
+                if (agrees) downweight(MatchField.PHONE, phoneA, config.phoneAgree) else config.phoneAgree,
                 0.0,
                 config.phoneDisagree
             )
@@ -85,7 +85,7 @@ class ProbabilisticScorer(
             apply(
                 "email",
                 if (agrees) Level.AGREE else Level.DISAGREE,
-                if (agrees) downweight("email", emailA, config.emailAgree) else config.emailAgree,
+                if (agrees) downweight(MatchField.EMAIL, emailA, config.emailAgree) else config.emailAgree,
                 0.0,
                 config.emailDisagree
             )
@@ -93,9 +93,16 @@ class ProbabilisticScorer(
 
         // --- name (nickname-aware, frequency-aware on the surname) ---
         val nameLevel = compareName(a, b)
-        val surname = StringSimilarity.normalizeNameToken(a.lastName)
-        val nameAgreeWeight = surname?.let { downweight("surname", it, config.nameFull) }
-            ?: config.nameFull
+        // Full name agreement is only reachable when both records carry a surname; without one the
+        // most a name can ever contribute is a PARTIAL (first-name) overlap. Cap the ceiling
+        // accordingly so the sufficiency check sees the true best case — two records sharing only a
+        // first name land on INSUFFICIENT ("not enough data"), not REVIEW.
+        val surname = a.surnameKey
+        val nameAgreeWeight = if (a.surnameKey != null && b.surnameKey != null) {
+            surname?.let { downweight(MatchField.SURNAME, it, config.nameFull) } ?: config.nameFull
+        } else {
+            config.namePartial
+        }
         apply("name", nameLevel, nameAgreeWeight, config.namePartial, config.nameConflict)
 
         // --- address ---

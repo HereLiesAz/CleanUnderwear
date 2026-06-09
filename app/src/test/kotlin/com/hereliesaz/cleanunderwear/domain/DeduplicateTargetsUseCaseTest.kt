@@ -117,6 +117,24 @@ class DeduplicateTargetsUseCaseTest {
     }
 
     @Test
+    fun oversizedBlock_isSkippedForReview() = runTest {
+        // Three rows that would otherwise collapse, but with the ceiling lowered to 2 the
+        // candidate block (size 3) is treated as an ambiguous mass-collision and left untouched.
+        val repo = FakeRepository(
+            listOf(
+                Target(id = 1, displayName = "John Smith", phoneNumber = "555-123-4567"),
+                Target(id = 2, displayName = "John Smith", phoneNumber = "555-123-4567"),
+                Target(id = 3, displayName = "John Smith", phoneNumber = "555-123-4567")
+            )
+        )
+
+        val merged = DeduplicateTargetsUseCase(repo, maxPairwiseGroup = 2).invoke()
+
+        assertEquals(0, merged)
+        assertEquals(3, repo.store.size)
+    }
+
+    @Test
     fun threeWaySharedPhone_collapseTransitively() = runTest {
         val repo = FakeRepository(
             listOf(

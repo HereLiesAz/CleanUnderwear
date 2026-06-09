@@ -3,6 +3,7 @@ package com.hereliesaz.cleanunderwear.domain
 import com.hereliesaz.cleanunderwear.data.Target
 import com.hereliesaz.cleanunderwear.data.TargetLite
 import com.hereliesaz.cleanunderwear.data.TargetRepository
+import com.hereliesaz.cleanunderwear.match.MatchField
 import com.hereliesaz.cleanunderwear.match.MatchRecord
 import com.hereliesaz.cleanunderwear.match.ProbabilisticScorer
 import com.hereliesaz.cleanunderwear.match.StringSimilarity
@@ -33,9 +34,20 @@ import javax.inject.Inject
  * The "winning" record within a component is whichever full row carries the most intel; the
  * losers' unique fields are merged into the winner before the losers are deleted.
  */
-class DeduplicateTargetsUseCase @Inject constructor(
-    private val repository: TargetRepository
+class DeduplicateTargetsUseCase(
+    private val repository: TargetRepository,
+    /**
+     * Candidate blocks larger than this are skipped rather than scored pairwise. The heuristic:
+     * a block this big is almost always a low-quality collision (a recycled value or a very common
+     * name shared by many rows), where pairwise scoring is O(n^2) *and* the rows are exactly the
+     * ambiguous ones we must not blindly fuse. Exposed so it can be tuned (or driven from config)
+     * as block characteristics evolve, and lowered in tests.
+     */
+    private val maxPairwiseGroup: Int
 ) {
+    @Inject
+    constructor(repository: TargetRepository) : this(repository, DEFAULT_MAX_PAIRWISE_GROUP)
+
     suspend operator fun invoke(onProgress: (Float, String) -> Unit = { _, _ -> }): Int {
         val groups = mutableMapOf<String, MutableList<Int>>() // identityKey -> list of IDs
 
@@ -71,9 +83,9 @@ class DeduplicateTargetsUseCase @Inject constructor(
         val scorer = ProbabilisticScorer(
             frequency = { field, value ->
                 when (field) {
-                    "phone" -> phoneFreq[value] ?: 1
-                    "email" -> emailFreq[value] ?: 1
-                    "surname" -> surnameFreq[value] ?: 1
+                    MatchField.PHONE -> phoneFreq[value] ?: 1
+                    MatchField.EMAIL -> emailFreq[value] ?: 1
+                    MatchField.SURNAME -> surnameFreq[value] ?: 1
                     else -> 1
                 }
             }
@@ -89,7 +101,7 @@ class DeduplicateTargetsUseCase @Inject constructor(
             val fullGroup = repository.getTargetsByIds(idGroup)
             if (fullGroup.size < 2) continue
 
-            if (fullGroup.size > MAX_PAIRWISE_GROUP) {
+            if (fullGroup.size > maxPairwiseGroup) {
                 // A block this large is a low-quality collision (a recycled value or a very
                 // common name shared by many rows). Pairwise scoring would be O(n^2) and these
                 // are exactly the rows we must not blindly fuse — leave them for manual review.
@@ -185,9 +197,12 @@ class DeduplicateTargetsUseCase @Inject constructor(
         surnameKey(t.displayName)?.let { surnameFreq.merge(it, 1, Int::plus) }
     }
 
-    /** Surname frequency key, normalized identically to the scorer's surname down-weight lookup. */
+    /**
+     * Surname frequency key. Derived from the same [MatchRecord.surnameKey] the scorer reads, so
+     * the corpus tally and the down-weight lookup can never drift apart.
+     */
     private fun surnameKey(displayName: String): String? =
-        StringSimilarity.normalizeNameToken(MatchRecord.fromDisplayName(displayName).lastName)
+        MatchRecord.fromDisplayName(displayName).surnameKey
 
     private fun pickWinnerFull(group: List<Target>): Target {
         return group.maxByOrNull { fullFieldScore(it) } ?: group.first()
@@ -246,7 +261,7 @@ class DeduplicateTargetsUseCase @Inject constructor(
     }
 
     private companion object {
-        /** Above this candidate-block size we skip pairwise scoring and leave rows for review. */
-        const val MAX_PAIRWISE_GROUP = 500
+        /** Default ceiling above which a candidate block is skipped instead of scored pairwise. */
+        const val DEFAULT_MAX_PAIRWISE_GROUP = 500
     }
 }

@@ -96,6 +96,18 @@ data class MatchConfig(
 )
 
 /**
+ * Field keys shared across the frequency-down-weighting boundary. The scorer asks
+ * `frequency(field, value)` for these, and every caller that supplies corpus counts must key
+ * its tallies by the same strings — so they live here once rather than as bare literals that a
+ * typo or refactor on either side could silently diverge.
+ */
+object MatchField {
+    const val PHONE = "phone"
+    const val EMAIL = "email"
+    const val SURNAME = "surname"
+}
+
+/**
  * The one interface every consumer depends on. Swap [ProbabilisticScorer]
  * (cold-start, no labels) for a future LearnedScorer (GBDT/TFLite over the same
  * comparison features) without touching dedup or enrichment.
