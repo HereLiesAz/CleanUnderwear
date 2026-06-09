@@ -65,7 +65,7 @@ class ProbabilisticScorer(
             apply(
                 "phone",
                 if (agrees) Level.AGREE else Level.DISAGREE,
-                if (agrees) downweight("phone", phoneA, config.phoneAgree) else config.phoneAgree,
+                if (agrees) downweight(MatchField.PHONE, phoneA, config.phoneAgree) else config.phoneAgree,
                 config.phoneDisagree
             )
         }
@@ -78,16 +78,16 @@ class ProbabilisticScorer(
             apply(
                 "email",
                 if (agrees) Level.AGREE else Level.DISAGREE,
-                if (agrees) downweight("email", emailA, config.emailAgree) else config.emailAgree,
+                if (agrees) downweight(MatchField.EMAIL, emailA, config.emailAgree) else config.emailAgree,
                 config.emailDisagree
             )
         }
 
         // --- name (nickname-aware, frequency-aware on the surname) ---
         val nameLevel = compareName(a, b)
-        val surname = StringSimilarity.normalizeNameToken(a.lastName)
+        val surname = a.surnameKey
         val nameAgreeWeight = when (nameLevel) {
-            Level.AGREE -> surname?.let { downweight("surname", it, config.nameFull) } ?: config.nameFull
+            Level.AGREE -> surname?.let { downweight(MatchField.SURNAME, it, config.nameFull) } ?: config.nameFull
             else -> config.nameFull
         }
         apply("name", nameLevel, nameAgreeWeight, config.nameConflict)
