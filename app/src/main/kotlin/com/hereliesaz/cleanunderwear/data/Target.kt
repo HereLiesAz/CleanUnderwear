@@ -39,7 +39,15 @@ data class Target(
     @ColumnInfo(name = "email")
     val email: String? = null,
     @ColumnInfo(name = "monitorability_state")
-    val monitorabilityState: MonitorabilityState = MonitorabilityState.READY
+    val monitorabilityState: MonitorabilityState = MonitorabilityState.READY,
+    /**
+     * Human-readable provenance for the last enrichment merge: which search
+     * mode(s) sourced the data and whether the candidate identity was verified
+     * against this contact. Lets the operator see *why* a value was written and
+     * reverse a bad merge. Null until the contact is enriched.
+     */
+    @ColumnInfo(name = "enrichment_provenance")
+    val enrichmentProvenance: String? = null
 )
 
 enum class TargetStatus {
@@ -120,10 +128,18 @@ data class TargetSourceInfo(
  *  READY               — has a usable name + at least one of phone or location/area code
  *  NEEDS_ENRICHMENT    — missing critical fields; queued for cyberbackgroundchecks lookup
  *  ENRICHMENT_FAILED   — cybg lookup returned nothing usable; will retry on a slower cadence
+ *  NO_AUTOMATED_SOURCE — has enough identity to scrape, but the contact's locale
+ *                        resolves to zero *automatable* sources (everything in the
+ *                        catalog for that area is operator-launch-only / MANUAL_LANDING).
+ *                        The daily vigil cannot confirm a status change for this contact;
+ *                        it must be checked manually via the in-app source chips. Surfaced
+ *                        instead of silently logging "no automated source" so the operator
+ *                        knows the vigil is not covering this person.
  */
 enum class MonitorabilityState {
     READY,
     NEEDS_ENRICHMENT,
-    ENRICHMENT_FAILED
+    ENRICHMENT_FAILED,
+    NO_AUTOMATED_SOURCE
 }
 

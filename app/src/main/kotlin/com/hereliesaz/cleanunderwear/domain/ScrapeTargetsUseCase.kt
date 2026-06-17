@@ -113,6 +113,26 @@ class ScrapeTargetsUseCase @Inject constructor(
                 .obituarySourcesFor(target.areaCode, target.residenceInfo)
                 .filter { it.kind != SourceKind.MANUAL_LANDING }
 
+            // Honesty gate (defensive — Triage already routes contacts with no
+            // automatable source to NO_AUTOMATED_SOURCE before they reach the
+            // READY scrape pool). If one slips through, flag it visibly instead
+            // of silently persisting an unchanged MONITORING status that looks
+            // like "checked, nothing found". The operator can then run the
+            // in-app source chips manually. Triage re-evaluates each pipeline
+            // run, so the contact returns to READY if the catalog later gains an
+            // automatable source for its area.
+            if (lockupSources.isEmpty() && obituarySources.isEmpty()) {
+                emitStep("no automated source for area ${target.areaCode ?: "?"} — manual check required")
+                repository.updateTarget(
+                    target.copy(
+                        monitorabilityState = MonitorabilityState.NO_AUTOMATED_SOURCE,
+                        lastScrapedTimestamp = now,
+                        nextScheduledCheck = now + (target.checkFrequencyHours * 3600000L)
+                    )
+                )
+                return
+            }
+
             var newStatus = TargetStatus.MONITORING
             var discoveredLockupUrl: String? = null
             var discoveredObitUrl: String? = null

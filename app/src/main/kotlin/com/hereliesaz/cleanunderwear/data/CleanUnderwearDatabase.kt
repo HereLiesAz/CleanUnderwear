@@ -10,7 +10,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 /**
  * The physical manifestation of your localized surveillance state.
  */
-@Database(entities = [Target::class], version = 9, exportSchema = false)
+@Database(entities = [Target::class], version = 10, exportSchema = false)
 abstract class CleanUnderwearDatabase : RoomDatabase() {
     abstract fun targetDao(): TargetDao
 
@@ -164,6 +164,18 @@ abstract class CleanUnderwearDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Adds enrichment_provenance, the human-readable record of which CBC
+         * search mode(s) sourced a contact's data and whether the candidate
+         * identity was verified before merge. Nullable; existing rows backfill
+         * to NULL (no provenance recorded for pre-verification enrichments).
+         */
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE targets ADD COLUMN enrichment_provenance TEXT")
+            }
+        }
+
         fun getDatabase(context: Context): CleanUnderwearDatabase {
             return Instance ?: synchronized(this) {
                 Room.databaseBuilder(
@@ -173,7 +185,8 @@ abstract class CleanUnderwearDatabase : RoomDatabase() {
                 )
                 .addMigrations(
                     MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
-                    MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9
+                    MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
+                    MIGRATION_9_10
                 )
                 .build()
                 .also { Instance = it }
