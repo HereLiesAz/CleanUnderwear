@@ -453,18 +453,27 @@ class MainViewModel @Inject constructor(
                         return@runExclusive
                     }
 
-                    if (collected.isEmpty()) {
-                        repository.updateMonitorabilityState(
-                            target.id,
-                            com.hereliesaz.cleanunderwear.data.MonitorabilityState.ENRICHMENT_FAILED
+                    // Verify-before-merge: only promote the contact when the CBC
+                    // card is corroborated as the *same person*. An unverified or
+                    // conflicting card (e.g. a recycled phone number returning a
+                    // stranger) is NOT written into the registry or the user's
+                    // system contacts — we keep it UNVERIFIED and record why.
+                    val outcome = cbcEnricher.enrich(target, collected)
+                    if (outcome.verified) {
+                        repository.updateTarget(
+                            outcome.target.copy(
+                                status = TargetStatus.MONITORING,
+                                monitorabilityState =
+                                    com.hereliesaz.cleanunderwear.data.MonitorabilityState.READY
+                            )
                         )
                     } else {
-                        val merged = cbcEnricher.mergeAll(target, collected).copy(
-                            status = TargetStatus.MONITORING,
-                            monitorabilityState =
-                                com.hereliesaz.cleanunderwear.data.MonitorabilityState.READY
+                        repository.updateTarget(
+                            outcome.target.copy(
+                                monitorabilityState =
+                                    com.hereliesaz.cleanunderwear.data.MonitorabilityState.ENRICHMENT_FAILED
+                            )
                         )
-                        repository.updateTarget(merged)
                     }
                 }
 

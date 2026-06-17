@@ -146,14 +146,98 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
      * only fills gaps, it doesn't trample user-edited data.
      */
     fun mergeAll(target: Target, results: List<Pair<BrowserMission, Findings>>): Target {
-        fun priorityOf(m: BrowserMission): Int = when (m) {
-            is BrowserMission.CbcByPhone -> 4
-            is BrowserMission.CbcByEmail -> 3
-            is BrowserMission.CbcByAddress -> 2
-            is BrowserMission.CbcByName -> 1
-            else -> 0
+        val consensus = consensusFindings(results)
+
+        val nameWasPlaceholder = isPlaceholderName(target.displayName)
+
+        val merged = target.copy(
+            displayName = if (nameWasPlaceholder && consensus.name != null) consensus.name else target.displayName,
+            phoneNumber = target.phoneNumber ?: consensus.phone,
+            residenceInfo = target.residenceInfo ?: consensus.address,
+            areaCode = target.areaCode ?: consensus.phone?.filter { it.isDigit() }?.takeLast(10)?.take(3),
+        )
+        DiagnosticLogger.log("CYBG mergeAll: ${target.displayName} → ${merged.displayName} (${results.size} sources)")
+        return merged
+    }
+
+    /**
+     * Verify-before-merge. Like [mergeAll], but only adopts findings into the
+     * target when the candidate result is corroborated as the *same person*,
+     * and records why (or why not) in [Target.enrichmentProvenance].
+     *
+     * Verification basis:
+     *  - **Unique-identifier lookups win.** A card returned for an exact phone
+     *    or email is very likely the right person, so it verifies — UNLESS the
+     *    card also carries a name that conflicts with the contact's existing
+     *    real name (a recycled phone number returning a stranger), in which case
+     *    it is rejected.
+     *  - **Name consistency.** When the contact already has a real name, a
+     *    candidate whose name shares the same last name + first name (or first
+     *    initial) verifies.
+     *  - **Placeholder contacts** (no real name yet) are only ever resolved by a
+     *    unique-identifier lookup; a bare name/address search on a placeholder
+     *    is too weak to assign an identity, so it is not adopted.
+     *
+     * Unverified results are NOT written into the registry or system contacts —
+     * the caller should leave the contact UNVERIFIED and surface the provenance.
+     */
+    fun enrich(target: Target, results: List<Pair<BrowserMission, Findings>>): EnrichmentOutcome {
+        if (results.isEmpty()) {
+            val prov = "no results parsed"
+            return EnrichmentOutcome(target.copy(enrichmentProvenance = prov), verified = false, provenance = prov)
         }
 
+        val consensus = consensusFindings(results)
+        val modes = results.map { modeLabel(it.first) }.distinct().joinToString("+")
+        val (verified, basis) = verifySamePerson(target, results, consensus)
+
+        return if (verified) {
+            val nameWasPlaceholder = isPlaceholderName(target.displayName)
+            val prov = "$modes · verified ($basis)"
+            val merged = target.copy(
+                displayName = if (nameWasPlaceholder && consensus.name != null) consensus.name else target.displayName,
+                phoneNumber = target.phoneNumber ?: consensus.phone,
+                residenceInfo = target.residenceInfo ?: consensus.address,
+                areaCode = target.areaCode ?: consensus.phone?.filter { it.isDigit() }?.takeLast(10)?.take(3),
+                enrichmentProvenance = prov
+            )
+            DiagnosticLogger.log("CYBG enrich(verified): ${target.displayName} → ${merged.displayName} [$prov]")
+            EnrichmentOutcome(merged, verified = true, provenance = prov)
+        } else {
+            val prov = "$modes · NOT merged ($basis)"
+            DiagnosticLogger.log("CYBG enrich(rejected): ${target.displayName} [$prov]")
+            EnrichmentOutcome(target.copy(enrichmentProvenance = prov), verified = false, provenance = prov)
+        }
+    }
+
+    /** Result of [enrich]: the (possibly unchanged) target, whether the candidate
+     *  was verified as the same person, and a human-readable provenance string. */
+    data class EnrichmentOutcome(
+        val target: Target,
+        val verified: Boolean,
+        val provenance: String
+    )
+
+    private fun priorityOf(m: BrowserMission): Int = when (m) {
+        is BrowserMission.CbcByPhone -> 4
+        is BrowserMission.CbcByEmail -> 3
+        is BrowserMission.CbcByAddress -> 2
+        is BrowserMission.CbcByName -> 1
+        else -> 0
+    }
+
+    private fun modeLabel(m: BrowserMission): String = when (m) {
+        is BrowserMission.CbcByPhone -> "phone"
+        is BrowserMission.CbcByEmail -> "email"
+        is BrowserMission.CbcByAddress -> "address"
+        is BrowserMission.CbcByName -> "name"
+        else -> "other"
+    }
+
+    /** Consensus across results: the value seen most often wins; ties break on
+     *  source priority (phone > email > address > name). Shared by [mergeAll]
+     *  and [enrich]. */
+    private fun consensusFindings(results: List<Pair<BrowserMission, Findings>>): Findings {
         fun <T : Any> consensus(extract: (Findings) -> T?): T? {
             val grouped = results.mapNotNull { (m, f) ->
                 extract(f)?.let { it to priorityOf(m) }
@@ -163,23 +247,68 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
                     .thenBy { it.value.max() }
             )?.key
         }
-
-        val name = consensus { it.name }
-        val address = consensus { it.address }
-        val phone = consensus { it.phone }
-
-        val nameWasPlaceholder = target.displayName.isBlank() ||
-            target.displayName == "Unnamed Entity" ||
-            target.displayName.startsWith("Unnamed Entity (")
-
-        val merged = target.copy(
-            displayName = if (nameWasPlaceholder && name != null) name else target.displayName,
-            phoneNumber = target.phoneNumber ?: phone,
-            residenceInfo = target.residenceInfo ?: address,
-            areaCode = target.areaCode ?: phone?.filter { it.isDigit() }?.takeLast(10)?.take(3),
+        return Findings(
+            name = consensus { it.name },
+            address = consensus { it.address },
+            phone = consensus { it.phone }
         )
-        DiagnosticLogger.log("CYBG mergeAll: ${target.displayName} → ${merged.displayName} (${results.size} sources)")
-        return merged
+    }
+
+    private fun isPlaceholderName(name: String): Boolean =
+        name.isBlank() || name == "Unnamed Entity" || name.startsWith("Unnamed Entity (")
+
+    /**
+     * Decides whether [results] describe the same person as [target]. Returns
+     * (verified, basis-for-logging). Pure Kotlin — reuses [NameValidator] from
+     * the same package, no Android dependency, so it stays unit-testable.
+     */
+    private fun verifySamePerson(
+        target: Target,
+        results: List<Pair<BrowserMission, Findings>>,
+        consensus: Findings
+    ): Pair<Boolean, String> {
+        val keyedByUniqueId = results.any {
+            it.first is BrowserMission.CbcByPhone || it.first is BrowserMission.CbcByEmail
+        }
+        val candidateNames = (results.mapNotNull { it.second.name } + listOfNotNull(consensus.name)).distinct()
+        val targetHasRealName = NameValidator.isVerifiable(target.displayName)
+
+        if (targetHasRealName) {
+            val targetTokens = NameValidator.tokenize(target.displayName)
+            val consistent = candidateNames.filter { nameConsistent(targetTokens, it) }
+            val conflicting = candidateNames.filter { !nameConsistent(targetTokens, it) }
+            return when {
+                consistent.isNotEmpty() -> true to "name match: ${consistent.first()}"
+                candidateNames.isEmpty() && keyedByUniqueId ->
+                    true to "phone/email lookup, card carried no conflicting name"
+                conflicting.isNotEmpty() ->
+                    false to "name conflict: card '${conflicting.first()}' ≠ ${target.displayName}"
+                else -> false to "uncorroborated"
+            }
+        }
+
+        // Placeholder / unnamed contact: only a unique-identifier lookup can
+        // safely assign an identity. A bare name/address card is too weak.
+        return if (keyedByUniqueId) {
+            true to "phone/email lookup resolved placeholder identity"
+        } else {
+            false to "placeholder contact, no unique-identifier lookup to corroborate"
+        }
+    }
+
+    /** Two names are consistent if they share the same last name and the same
+     *  first name (or first initial), case-insensitively. */
+    private fun nameConsistent(targetTokens: List<String>, candidate: String): Boolean {
+        val cand = NameValidator.tokenize(candidate)
+        if (targetTokens.size < 2 || cand.size < 2) return false
+        val tFirst = targetTokens.first().lowercase()
+        val tLast = targetTokens.last().lowercase()
+        val cFirst = cand.first().lowercase()
+        val cLast = cand.last().lowercase()
+        val lastMatch = tLast == cLast
+        val firstMatch = tFirst == cFirst ||
+            (tFirst.firstOrNull() != null && tFirst.firstOrNull() == cFirst.firstOrNull())
+        return lastMatch && firstMatch
     }
 
     /**

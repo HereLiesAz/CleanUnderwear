@@ -90,6 +90,29 @@ class SourceCatalogIdentityTest {
     }
 
     @Test
+    fun cbcIdentityChip_usesSameNameSearchPathAsEnricher() {
+        // Regression: the CBC / SmartBGC chips previously used a /people/ path
+        // that did not match the /name/ search path the enrichment flow
+        // (util.CyberBackgroundChecks) produces, so the manual chip and the
+        // auto-enricher landed on different pages. They must now agree.
+        val catalog = loadCatalog()
+        val cbc = catalog.identitySources().first { it.id == "cyberbgc_people_lookup" }
+        val chipUrl = SourceUrlBuilder.buildFetchUrl(cbc, "John", "Smith")
+        assertEquals("https://www.cyberbackgroundchecks.com/name/John-Smith", chipUrl)
+        // Same host + path structure the enricher produces (case-insensitive).
+        assertEquals(
+            com.hereliesaz.cleanunderwear.util.CyberBackgroundChecks.getNameSearchUrl("John Smith"),
+            chipUrl.lowercase()
+        )
+
+        val smart = catalog.identitySources().first { it.id == "smartbgc_people_lookup" }
+        assertEquals(
+            "https://www.smartbackgroundchecks.com/name/John-Smith",
+            SourceUrlBuilder.buildFetchUrl(smart, "John", "Smith")
+        )
+    }
+
+    @Test
     fun identitySources_areCatalogRecognized() {
         // isFromCatalog must accept every identity URL so the prefix-whitelist
         // used by ContactHarvester / UI doesn't reject identity-source links.
