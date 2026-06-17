@@ -135,6 +135,40 @@ class DeduplicateTargetsUseCaseTest {
     }
 
     @Test
+    fun recycledPhone_nicknameVariants_mergeOnlyWhenNicknamesWired() = runTest {
+        // A heavily recycled phone (shared by many rows) is frequency-penalised toward the floor,
+        // so the phone alone no longer forces a merge. Two rows that are the *same* person under
+        // nickname expansion — "Robert Smith" / "Bob Smith" — then hinge entirely on whether the
+        // scorer was handed a nickname map (production wires OnDeviceResearchAgent.getNicknames).
+        // The unnamed filler rows only exist to inflate the phone's corpus frequency; they carry
+        // no comparable name, so they never fuse with each other or with the Smiths.
+        val phone = "555-123-4567"
+        fun rows() = listOf(
+            Target(id = 1, displayName = "Robert Smith", phoneNumber = phone),
+            Target(id = 2, displayName = "Bob Smith", phoneNumber = phone)
+        ) + (1..62).map { Target(id = 100 + it, displayName = "Unnamed Entity", phoneNumber = phone) }
+
+        val nicknames: (String) -> List<String> = { name ->
+            when (name.lowercase()) {
+                "bob" -> listOf("robert")
+                "robert" -> listOf("bob")
+                else -> emptyList()
+            }
+        }
+
+        // Without nickname expansion the variant first names are not comparable, so the recycled
+        // phone is too weak on its own and the Smiths are left apart.
+        val withoutNicknames = FakeRepository(rows())
+        assertEquals(0, DeduplicateTargetsUseCase(withoutNicknames).invoke())
+        assertEquals(64, withoutNicknames.store.size)
+
+        // With nicknames wired, "Robert"/"Bob" agree on a full name and tip the pair over the bar.
+        val withNicknames = FakeRepository(rows())
+        assertEquals(1, DeduplicateTargetsUseCase(withNicknames, nicknames = nicknames).invoke())
+        assertEquals(63, withNicknames.store.size)
+    }
+
+    @Test
     fun threeWaySharedPhone_collapseTransitively() = runTest {
         val repo = FakeRepository(
             listOf(
