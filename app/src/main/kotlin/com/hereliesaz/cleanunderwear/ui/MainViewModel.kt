@@ -458,10 +458,10 @@ class MainViewModel @Inject constructor(
                     // conflicting card (e.g. a recycled phone number returning a
                     // stranger) is NOT written into the registry or the user's
                     // system contacts — we keep it UNVERIFIED and record why.
-                    val outcome = cbcEnricher.enrich(target, collected)
-                    if (outcome.verified) {
+                    val enrichment = cbcEnricher.enrich(target, collected)
+                    if (enrichment.verified) {
                         repository.updateTarget(
-                            outcome.target.copy(
+                            enrichment.target.copy(
                                 status = TargetStatus.MONITORING,
                                 monitorabilityState =
                                     com.hereliesaz.cleanunderwear.data.MonitorabilityState.READY
@@ -469,7 +469,7 @@ class MainViewModel @Inject constructor(
                         )
                     } else {
                         repository.updateTarget(
-                            outcome.target.copy(
+                            enrichment.target.copy(
                                 monitorabilityState =
                                     com.hereliesaz.cleanunderwear.data.MonitorabilityState.ENRICHMENT_FAILED
                             )
