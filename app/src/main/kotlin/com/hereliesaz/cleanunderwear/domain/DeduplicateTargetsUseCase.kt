@@ -57,7 +57,7 @@ class DeduplicateTargetsUseCase(
     constructor(
         repository: TargetRepository,
         researchAgent: OnDeviceResearchAgent
-    ) : this(repository, DEFAULT_MAX_PAIRWISE_GROUP, researchAgent::getNicknames)
+    ) : this(repository, nicknames = researchAgent::getNicknames)
 
     suspend operator fun invoke(onProgress: (Float, String) -> Unit = { _, _ -> }): Int {
         val groups = mutableMapOf<String, MutableList<Int>>() // identityKey -> list of IDs
