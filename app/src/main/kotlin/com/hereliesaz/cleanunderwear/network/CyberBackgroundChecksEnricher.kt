@@ -296,8 +296,16 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
         }
     }
 
-    /** Two names are consistent if they share the same last name and the same
-     *  first name (or first initial), case-insensitively. */
+    /**
+     * Two names are consistent if they share the same last name and a
+     * compatible first name, case-insensitively. First names match when they
+     * are equal, when one is a prefix of the other ("Jon" / "Jonathan"), or
+     * when one side is a single-letter initial sharing that letter ("J" / "John").
+     *
+     * Deliberately NOT a bare first-initial match: "James Smith" and
+     * "John Smith" share the initial 'J' and the surname but are different
+     * people, and merging them would defeat the whole point of verify-before-merge.
+     */
     private fun nameConsistent(targetTokens: List<String>, candidate: String): Boolean {
         val cand = NameValidator.tokenize(candidate)
         if (targetTokens.size < 2 || cand.size < 2) return false
@@ -307,7 +315,9 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
         val cLast = cand.last().lowercase()
         val lastMatch = tLast == cLast
         val firstMatch = tFirst == cFirst ||
-            (tFirst.firstOrNull() != null && tFirst.firstOrNull() == cFirst.firstOrNull())
+            tFirst.startsWith(cFirst) ||
+            cFirst.startsWith(tFirst) ||
+            ((tFirst.length == 1 || cFirst.length == 1) && tFirst.firstOrNull() == cFirst.firstOrNull())
         return lastMatch && firstMatch
     }
 

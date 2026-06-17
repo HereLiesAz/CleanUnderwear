@@ -328,6 +328,24 @@ class CyberBackgroundChecksEnricherTest {
     }
 
     @Test
+    fun enrich_sharedFirstInitialButDifferentName_isRejected() {
+        // "James Smith" must NOT merge into "John Smith" just because they share
+        // the surname and first initial 'J'.
+        val t = target(displayName = "John Smith")
+        val outcome = enricher.enrich(
+            t,
+            listOf(
+                BrowserMission.CbcByName("John Smith") to
+                    CyberBackgroundChecksEnricher.Findings(
+                        name = "James Smith", address = "5 Oak St", phone = null
+                    )
+            )
+        )
+        assertFalse(outcome.verified)
+        assertNull(outcome.target.residenceInfo)
+    }
+
+    @Test
     fun enrich_emptyResults_isRejectedWithProvenance() {
         val outcome = enricher.enrich(target(displayName = "Jane Roe"), emptyList())
         assertFalse(outcome.verified)
