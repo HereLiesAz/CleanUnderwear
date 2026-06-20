@@ -108,6 +108,7 @@ class SourceCatalog @Inject constructor(
         val counties: Map<String, CountyEntry>? = null,
         val states: Map<String, StateEntry>? = null,
         val multi_state: List<RawSource>? = null,
+        val multi_state_obituary: List<RawSource>? = null,
         val identity_sources: List<RawSource>? = null
     )
 
@@ -167,10 +168,14 @@ class SourceCatalog @Inject constructor(
         }
 
         // multi_state list applies to lockup by default; obituary multi-state
-        // is currently empty (no widely useful national obit aggregator that
-        // takes per-name queries safely).
+        // is now wired from the `multi_state_obituary` JSON block. It ships
+        // empty until a per-name obituary source with a deep-linkable,
+        // server-rendered (non-captcha) result page is curated — adding one
+        // there is all it takes to turn the DECEASED auto-path on, with no
+        // code change. Operator-launch-only obit sources stay MANUAL_LANDING
+        // and are filtered out of the auto scrape (see ScrapeTargetsUseCase).
         multiStateLockup = parsed.multi_state.orEmpty().mapNotNull { it.toSource() }
-        multiStateObituary = emptyList()
+        multiStateObituary = parsed.multi_state_obituary.orEmpty().mapNotNull { it.toSource() }
 
         // identity_sources are country-agnostic identity-correlation services
         // (face recognition, reverse image search, name-based OSINT) ported
@@ -222,6 +227,21 @@ class SourceCatalog @Inject constructor(
 
     fun obituarySourcesFor(areaCode: String?, residenceInfo: String? = null): List<Source> =
         sourcesForLocale(resolveLocale(areaCode, residenceInfo), SourceCategory.OBITUARY)
+
+    /**
+     * True if the contact's locale resolves to at least one source the daily
+     * vigil can actually fetch + verify on its own — i.e. a lockup or obituary
+     * source whose kind is not [SourceKind.MANUAL_LANDING]. When this is false,
+     * the contact can only be checked by the operator via the in-app source
+     * chips; the auto scrape marks it
+     * [com.hereliesaz.cleanunderwear.data.MonitorabilityState.NO_AUTOMATED_SOURCE]
+     * rather than silently reporting "no change".
+     */
+    fun hasAutomatableSourceFor(areaCode: String?, residenceInfo: String? = null): Boolean {
+        val automatable = { s: Source -> s.kind != SourceKind.MANUAL_LANDING }
+        return lockupSourcesFor(areaCode, residenceInfo).any(automatable) ||
+            obituarySourcesFor(areaCode, residenceInfo).any(automatable)
+    }
 
     /**
      * Returns the country-agnostic identity-correlation sources (face

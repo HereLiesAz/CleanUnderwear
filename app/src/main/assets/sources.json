@@ -856,7 +856,7 @@
     }
   ],
 
-  "_identity_sources_comment": "Identity-correlation services (face recognition, reverse image search, name-based OSINT) ported from the sister project doxray (github.com/HereLiesAz/doxray). All entries ship as MANUAL_LANDING because (a) the face/image services require a photo upload the Registry never carries, and (b) the name-based services (PimEyes, FaceCheck.id, CyberBackgroundChecks/people, SmartBackgroundChecks, GitHub) bot-block raw HTTP requests — they must be exercised through the user's own browser session. Templates with {first}/{last} slots are filled at chip-render time via SourceUrlBuilder.",
+  "_identity_sources_comment": "Identity-correlation services (face recognition, reverse image search, name-based OSINT) ported from the sister project doxray (github.com/HereLiesAz/doxray). All entries ship as MANUAL_LANDING because (a) the face/image services require a photo upload the Registry never carries, and (b) the name-based services (PimEyes, FaceCheck.id, CyberBackgroundChecks, SmartBackgroundChecks, GitHub) bot-block raw HTTP requests — they must be exercised through the user's own browser session. The CyberBackgroundChecks / SmartBackgroundChecks chips use the same /name/{first}-{last} search path that the enrichment flow (util/CyberBackgroundChecks.kt) produces, so the chip and the auto-enricher land on the same page (previously the chip used a /people/ path that did not match). Templates with {first}/{last} slots are filled at chip-render time via SourceUrlBuilder.",
 
   "identity_sources": [
     {
@@ -919,7 +919,7 @@
       "id": "cyberbgc_people_lookup",
       "label": "CyberBackgroundChecks people lookup",
       "kind": "MANUAL_LANDING",
-      "url_template": "https://www.cyberbackgroundchecks.com/people/{first}-{last}",
+      "url_template": "https://www.cyberbackgroundchecks.com/name/{first}-{last}",
       "render": "WEBVIEW",
       "scope": "MULTI_STATE"
     },
@@ -927,7 +927,7 @@
       "id": "smartbgc_people_lookup",
       "label": "SmartBackgroundChecks people lookup",
       "kind": "MANUAL_LANDING",
-      "url_template": "https://www.smartbackgroundchecks.com/people/{first}-{last}",
+      "url_template": "https://www.smartbackgroundchecks.com/name/{first}-{last}",
       "render": "WEBVIEW",
       "scope": "MULTI_STATE"
     },

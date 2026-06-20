@@ -4,6 +4,7 @@ import com.hereliesaz.cleanunderwear.data.Target
 import com.hereliesaz.cleanunderwear.domain.BrowserMission
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -232,5 +233,122 @@ class CyberBackgroundChecksEnricherTest {
         assertEquals("Unnamed Entity", merged.displayName)
         assertNull(merged.phoneNumber)
         assertNull(merged.residenceInfo)
+    }
+
+    // ---- enrich (verify-before-merge) ----
+
+    @Test
+    fun enrich_phoneLookupResolvesPlaceholderIdentity_isVerifiedAndAdoptsName() {
+        val t = target(displayName = "Unnamed Entity")
+        val outcome = enricher.enrich(
+            t,
+            listOf(
+                BrowserMission.CbcByPhone("5551234567") to
+                    CyberBackgroundChecksEnricher.Findings(
+                        name = "Jane Roe", address = "1 Main St", phone = null
+                    )
+            )
+        )
+        assertTrue(outcome.verified)
+        assertEquals("Jane Roe", outcome.target.displayName)
+        assertEquals("1 Main St", outcome.target.residenceInfo)
+        assertNotNull(outcome.target.enrichmentProvenance)
+    }
+
+    @Test
+    fun enrich_nameSearchConsistentWithRealName_isVerifiedAndFillsGaps() {
+        val t = target(displayName = "John Smith")
+        val outcome = enricher.enrich(
+            t,
+            listOf(
+                BrowserMission.CbcByName("John Smith") to
+                    CyberBackgroundChecksEnricher.Findings(
+                        name = "John Smith", address = "5 Oak St", phone = null
+                    )
+            )
+        )
+        assertTrue(outcome.verified)
+        assertEquals("John Smith", outcome.target.displayName)
+        assertEquals("5 Oak St", outcome.target.residenceInfo)
+    }
+
+    @Test
+    fun enrich_phoneCardNameConflictsWithRealName_isRejectedAndNotMerged() {
+        // Recycled phone number: the card belongs to a different person, so
+        // nothing must be written into the contact.
+        val t = target(displayName = "John Smith")
+        val outcome = enricher.enrich(
+            t,
+            listOf(
+                BrowserMission.CbcByPhone("5551234567") to
+                    CyberBackgroundChecksEnricher.Findings(
+                        name = "Bob Jones", address = "9 Elm Ave", phone = "5551234567"
+                    )
+            )
+        )
+        assertFalse(outcome.verified)
+        assertEquals("John Smith", outcome.target.displayName)
+        assertNull(outcome.target.residenceInfo)
+        assertTrue(outcome.provenance.contains("conflict"))
+    }
+
+    @Test
+    fun enrich_placeholderWithOnlyAddressCard_isRejected() {
+        val t = target(displayName = "Unnamed Entity")
+        val outcome = enricher.enrich(
+            t,
+            listOf(
+                BrowserMission.CbcByAddress("1 Main St") to
+                    CyberBackgroundChecksEnricher.Findings(
+                        name = "Stranger Person", address = "1 Main St", phone = "5550001111"
+                    )
+            )
+        )
+        assertFalse(outcome.verified)
+        assertEquals("Unnamed Entity", outcome.target.displayName)
+        assertNull(outcome.target.phoneNumber)
+    }
+
+    @Test
+    fun enrich_firstInitialMatchCountsAsConsistent() {
+        // "Jon Smith" vs "Jonathan Smith" — same last name, matching first
+        // initial (a common nickname/long-form variation).
+        val t = target(displayName = "Jon Smith")
+        val outcome = enricher.enrich(
+            t,
+            listOf(
+                BrowserMission.CbcByName("Jon Smith") to
+                    CyberBackgroundChecksEnricher.Findings(
+                        name = "Jonathan Smith", address = "5 Oak St", phone = null
+                    )
+            )
+        )
+        assertTrue(outcome.verified)
+        assertEquals("5 Oak St", outcome.target.residenceInfo)
+    }
+
+    @Test
+    fun enrich_sharedFirstInitialButDifferentName_isRejected() {
+        // "James Smith" must NOT merge into "John Smith" just because they share
+        // the surname and first initial 'J'.
+        val t = target(displayName = "John Smith")
+        val outcome = enricher.enrich(
+            t,
+            listOf(
+                BrowserMission.CbcByName("John Smith") to
+                    CyberBackgroundChecksEnricher.Findings(
+                        name = "James Smith", address = "5 Oak St", phone = null
+                    )
+            )
+        )
+        assertFalse(outcome.verified)
+        assertNull(outcome.target.residenceInfo)
+    }
+
+    @Test
+    fun enrich_emptyResults_isRejectedWithProvenance() {
+        val outcome = enricher.enrich(target(displayName = "Jane Roe"), emptyList())
+        assertFalse(outcome.verified)
+        assertEquals("no results parsed", outcome.provenance)
     }
 }

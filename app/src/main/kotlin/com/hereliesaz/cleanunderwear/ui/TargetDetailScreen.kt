@@ -179,6 +179,32 @@ fun TargetDetailScreen(
                 }
             }
 
+            // NO_AUTOMATED_SOURCE explainer. The contact is identifiable, but the
+            // daily vigil has no source it can fetch + verify on its own for this
+            // locale (everything in the catalog for the area is operator-launch
+            // only). Tell the user plainly and point them at the manual source
+            // chips below — don't let the absence of an alert read as "all clear".
+            if (target.monitorabilityState ==
+                com.hereliesaz.cleanunderwear.data.MonitorabilityState.NO_AUTOMATED_SOURCE
+            ) {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = "The daily vigil has no automated records source for this " +
+                                "contact's area — public records here are operator-launch only. " +
+                                "Use the Manual Research source chips below to check them in your " +
+                                "browser; the automatic scan cannot confirm a change for this person.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+
             HorizontalDivider()
 
             Text(
@@ -239,6 +265,17 @@ fun TargetDetailScreen(
                         )
                     }
                 }
+            }
+
+            // Enrichment provenance — shows which CBC search(es) sourced this
+            // contact's data and whether the candidate was verified as the same
+            // person, so a bad merge is visible and reversible.
+            target.enrichmentProvenance?.let { provenance ->
+                Text(
+                    text = "Enrichment: $provenance",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
 
             HorizontalDivider()

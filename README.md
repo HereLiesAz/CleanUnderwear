@@ -9,6 +9,7 @@ Most people use "The Registry" to keep tabs on elderly relatives, estranged fami
 - **No Cloud Backend**: All surveillance data, contact details, and findings stay on *your* device.
 - **Autonomous Scything**: Background workers (the "Panopticon") perform routine scans of municipal rosters and obituary registries without manual intervention.
 - **Evidence-First Verification**: Every status change is backed by a "Verification Snippet"—the raw text found during the scan—allowing you to manually verify findings and correct false positives (e.g., surviving relatives mentioned in an obituary).
+- **Verify-before-merge enrichment**: When you resolve an UNVERIFIED contact via cyberbackgroundchecks, the result is only merged into the Registry if the candidate card is corroborated as the *same person* (a unique-identifier phone/email lookup, or a matching name). A conflicting card — e.g. a recycled phone number returning a stranger — is rejected, never written into your address book, and the reason is recorded as the contact's enrichment provenance.
 
 ---
 
@@ -27,10 +28,11 @@ Scythe through your digital ecosystems to build your Registry. Two surfaces:
 
 Apple iCloud has no first-party web surface that survives bot detection on Android, so Apple contacts remain in the passive bucket only.
 
-### 2. Autonomous Monitoring Engine
-- **The Daily Vigil**: Every morning at 9:00 AM, the app triggers a comprehensive scan of all active individuals in the Registry.
-- **Dynamic URL Discovery**: The `OnDeviceResearchAgent` automatically maps an individual's area code and location to relevant municipal arrest logs and funeral home registries.
-- **Stealth Scraping**: Uses a hybrid approach of `HtmlScraper` (fast) and `WebViewScraper` (stealth) to bypass modern bot-detection like Cloudflare and Turnstile.
+### 2. Monitoring Engine
+- **The Daily Vigil**: Every morning at 9:00 AM (battery-not-low + network constraints), the app runs the pipeline (dedupe → triage → scrape) over the Registry.
+- **Geographic source routing**: `SourceCatalog` maps a contact's ZIP/area code to county → state → multi-state records sources (`sources.json`), most-specific first.
+- **Honest automatability**: The vigil can *automatically* confirm a status change only for sources it can fetch and verify on its own (`HtmlScraper` for server-rendered pages, `WebViewScraper` for JS-rendered ones). Most public rosters and obituary aggregators bot-block non-browser requests or expose no name-queryable deep link, so they ship as **operator-launch-only** (`MANUAL_LANDING`) and are surfaced as in-app source chips you open in your own browser session. When a contact's locale has **no** automatable source, triage marks it `NO_AUTOMATED_SOURCE` and the profile says so plainly — the absence of an alert is never silently treated as "all clear." Adding a genuinely automatable source (a `QUERY_TEMPLATE`/`ROSTER_PAGE` entry, or a `multi_state_obituary` with a server-rendered result page) to `sources.json` turns its auto-path on with no code change.
+- **Stealth fetching**: `WebViewScraper` drives a hidden Android-UA WebView to render JS-heavy pages; `HtmlScraper` handles plain server-rendered HTML. Both run only against automatable (non-`MANUAL_LANDING`) sources.
 
 ### 3. Decentralized Persistence (Note Injection)
 The app uses your phone's native address book as its "external memory":
@@ -41,7 +43,7 @@ The app uses your phone's native address book as its "external memory":
 - **Status Badges**: Visual indicators for `Monitoring`, `Checking`, `Incarcerated`, `Deceased`, and `Archived`.
 - **Evidence Card**: View the exact match snippet found during a scan.
 - **Registry Actions**: Long-press any individual to Archive, Resume Monitoring, or view original verification sites.
-- **Identity Correlation (doxray)**: Each profile exposes launch-in-browser chips for the face-recognition, reverse-image-search, and name-based OSINT providers ported from the sister project [doxray](https://github.com/HereLiesAz/doxray) — PimEyes, FaceCheck.id, Lenso.ai, FaceSeek, Yandex Images, TinEye, Google Lens, CyberBackgroundChecks `/people/`, SmartBackgroundChecks `/people/`, GitHub user search, and `site:` Google searches for LinkedIn, Twitter/X, Instagram, and Facebook. These never auto-scrape (face services need a photo the Registry doesn't carry, and the name-based services bot-block raw HTTP); each chip opens the provider in the user's own browser so their session cookies apply. Defined in `app/src/main/assets/sources.json` under `identity_sources`; loaded by `SourceCatalog.identitySources()`.
+- **Identity Correlation (doxray)**: Each profile exposes launch-in-browser chips for the face-recognition, reverse-image-search, and name-based OSINT providers ported from the sister project [doxray](https://github.com/HereLiesAz/doxray) — PimEyes, FaceCheck.id, Lenso.ai, FaceSeek, Yandex Images, TinEye, Google Lens, CyberBackgroundChecks `/name/`, SmartBackgroundChecks `/name/`, GitHub user search, and `site:` Google searches for LinkedIn, Twitter/X, Instagram, and Facebook. These never auto-scrape (face services need a photo the Registry doesn't carry, and the name-based services bot-block raw HTTP); each chip opens the provider in the user's own browser so their session cookies apply. Defined in `app/src/main/assets/sources.json` under `identity_sources`; loaded by `SourceCatalog.identitySources()`.
 
 ---
 

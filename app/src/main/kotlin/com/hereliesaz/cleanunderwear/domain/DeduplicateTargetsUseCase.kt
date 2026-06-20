@@ -7,6 +7,7 @@ import com.hereliesaz.cleanunderwear.match.MatchField
 import com.hereliesaz.cleanunderwear.match.MatchRecord
 import com.hereliesaz.cleanunderwear.match.ProbabilisticScorer
 import com.hereliesaz.cleanunderwear.match.StringSimilarity
+import com.hereliesaz.cleanunderwear.network.OnDeviceResearchAgent
 import com.hereliesaz.cleanunderwear.util.DiagnosticLogger
 import javax.inject.Inject
 
@@ -43,10 +44,20 @@ class DeduplicateTargetsUseCase(
      * ambiguous ones we must not blindly fuse. Exposed so it can be tuned (or driven from config)
      * as block characteristics evolve, and lowered in tests.
      */
-    private val maxPairwiseGroup: Int
+    private val maxPairwiseGroup: Int = DEFAULT_MAX_PAIRWISE_GROUP,
+    /**
+     * First-name → known-variant expansion handed to the [ProbabilisticScorer] so a shared
+     * (rare) phone or address can still fuse "Robert Smith" and "Bob Smith". Defaults to no
+     * expansion for tests; production supplies [OnDeviceResearchAgent.getNicknames] via the
+     * injected constructor below.
+     */
+    private val nicknames: (String) -> List<String> = { emptyList() }
 ) {
     @Inject
-    constructor(repository: TargetRepository) : this(repository, DEFAULT_MAX_PAIRWISE_GROUP)
+    constructor(
+        repository: TargetRepository,
+        researchAgent: OnDeviceResearchAgent
+    ) : this(repository, nicknames = researchAgent::getNicknames)
 
     suspend operator fun invoke(onProgress: (Float, String) -> Unit = { _, _ -> }): Int {
         val groups = mutableMapOf<String, MutableList<Int>>() // identityKey -> list of IDs
@@ -81,6 +92,7 @@ class DeduplicateTargetsUseCase(
         }
 
         val scorer = ProbabilisticScorer(
+            nicknames = nicknames,
             frequency = { field, value ->
                 when (field) {
                     MatchField.PHONE -> phoneFreq[value] ?: 1
