@@ -1,33 +1,56 @@
 package com.hereliesaz.cleanunderwear.network
 
 /**
- * Maps a Federal Bureau of Prisons facility name (the BOP inmate-locator
- * `faclName` field, e.g. "USP ATLANTA", "FCI BUTNER") to the US state the
- * facility sits in.
+ * Resolves a Federal Bureau of Prisons facility to the US state it sits in, for
+ * the national BOP search's facility-state agreement gate (a same-name federal
+ * record is only surfaced when the facility's state matches the contact's).
  *
- * This exists to support the *facility-state agreement* gate on the national
- * BOP search: a same-name federal record is only surfaced for review when the
- * facility's state matches the contact's resolved state.
+ * Resolution is a fallback chain ([stateFor]) so it is robust to the *string
+ * format* the locator returns:
+ *   1. the stable facility **code** (`faclCode`, e.g. "ATL") — format-invariant;
+ *   2. a normalized **city/location keyword** in `faclName` (case-, punctuation-,
+ *      and word-order-independent, so "USP ATLANTA", "Atlanta USP", and
+ *      "U.S. Penitentiary, Atlanta, GA" all resolve);
+ *   3. an explicit, validated **trailing state token** ("…, GA").
  *
- * IMPORTANT CAVEATS — read before relying on this:
- *  - This is a **hand-maintained, best-effort** table. The BOP opens, closes,
- *    and renames institutions; new facilities will be absent until added here.
- *    When [stateFor] returns null the caller treats it as "cannot establish
- *    agreement" and does NOT surface the match (strict gate), so a gap here
- *    causes a *false negative* (a real incarceration is not flagged), not a
- *    false positive. Keep the table current to avoid silently missing matches.
- *  - Federal inmates are frequently held **out of their home state**, so even a
- *    correct lookup can legitimately disagree with the contact's state and
- *    suppress a true match. That tradeoff was chosen deliberately (strictest
- *    matching) — widen or remove the gate if it proves too aggressive.
- *
- * Matching is by city/location keyword: `faclName` is uppercased and scanned
- * for a known location token (longest token first so "TERRE HAUTE" wins over a
- * bare "HAUTE"). Keys are uppercase location names as they appear in faclName.
+ * IMPORTANT — what fallbacks can and cannot do:
+ *  - String-format variation is fully handled by the chain above.
+ *  - Geographic knowledge (that "Butner" is in NC) cannot be *derived* by any
+ *    parsing — it must live in the tables below. The BOP institution set is
+ *    finite, so [locationToState] aims to be complete; [codeToState] is a
+ *    high-confidence, verified-only seed (a *wrong* code/state is worse than a
+ *    missing one — a miss merely makes the strict gate suppress the match). New
+ *    or renamed facilities are the only residual gap; verify additions against
+ *    the official bop.gov facility list rather than guessing.
  */
 object BopFacilityCatalog {
 
-    /** Location keyword (uppercase) -> two-letter state code. */
+    /**
+     * Authoritative two-letter US state/territory codes, used to validate a
+     * trailing state token parsed out of a facility name (step 3). Mirrors the
+     * `states` keys in `app/src/main/assets/sources.json`; kept inline so this
+     * object stays pure (no Android context) and unit-testable.
+     */
+    private val usStateCodes: Set<String> = setOf(
+        "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "HI",
+        "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN",
+        "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH",
+        "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA",
+        "WV", "WI", "WY", "PR", "VI", "GU", "AS", "MP",
+    )
+
+    /**
+     * Stable BOP facility code → state. Format-invariant and the most reliable
+     * signal when present. Intentionally a small, high-confidence seed: codes
+     * here must be verified against bop.gov. Anything not listed simply falls
+     * through to name parsing, so a short table is safe (never wrong, only
+     * less complete).
+     */
+    private val codeToState: Map<String, String> = mapOf(
+        "ATL" to "GA", // USP Atlanta
+    )
+
+    /** City/location keyword (uppercase) → state. The primary resolver. */
     private val locationToState: Map<String, String> = mapOf(
         // Alabama
         "MONTGOMERY" to "AL", "TALLADEGA" to "AL", "ALICEVILLE" to "AL",
@@ -91,6 +114,8 @@ object BopFacilityCatalog {
         "LEWISBURG" to "PA", "CANAAN" to "PA", "WAYMART" to "PA",
         "MCKEAN" to "PA", "BRADFORD" to "PA", "SCHUYLKILL" to "PA",
         "MINERSVILLE" to "PA", "PHILADELPHIA" to "PA",
+        // Puerto Rico
+        "GUAYNABO" to "PR",
         // South Carolina
         "ESTILL" to "SC", "BENNETTSVILLE" to "SC", "EDGEFIELD" to "SC",
         "WILLIAMSBURG" to "SC",
@@ -117,13 +142,36 @@ object BopFacilityCatalog {
     // Longest keys first so multi-word locations win over substrings.
     private val keysByLength: List<String> = locationToState.keys.sortedByDescending { it.length }
 
+    /** Convenience overload for callers that only have the display name. */
+    fun stateFor(faclName: String?): String? = stateFor(faclCode = null, faclName = faclName)
+
     /**
-     * Best-effort state code (e.g. "GA") for a BOP facility name, or null if the
-     * facility isn't in the table. Null means the caller cannot establish
-     * facility-state agreement.
+     * Best-effort state code (e.g. "GA") for a BOP facility, or null when it
+     * can't be resolved (caller treats null as "cannot establish agreement").
      */
-    fun stateFor(faclName: String?): String? {
-        val s = faclName?.trim()?.uppercase()?.takeIf { it.isNotBlank() } ?: return null
-        return keysByLength.firstOrNull { s.contains(it) }?.let { locationToState[it] }
+    fun stateFor(faclCode: String?, faclName: String?): String? {
+        // 1. Stable facility code — format-invariant, most reliable.
+        faclCode?.trim()?.uppercase()?.takeIf { it.isNotBlank() }?.let { code ->
+            codeToState[code]?.let { return it }
+        }
+
+        // Normalize the display name: uppercase, every non-alphanumeric run to a
+        // single space, trimmed. Makes matching punctuation- and order-agnostic.
+        val norm = faclName
+            ?.uppercase()
+            ?.replace(Regex("[^A-Z0-9]+"), " ")
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: return null
+
+        // 2. City/location keyword, matched on whole-word boundaries.
+        val padded = " $norm "
+        keysByLength.firstOrNull { padded.contains(" $it ") }
+            ?.let { return locationToState[it] }
+
+        // 3. Explicit trailing state token, validated against the real code set.
+        norm.substringAfterLast(' ').takeIf { it in usStateCodes }?.let { return it }
+
+        return null
     }
 }

@@ -3,6 +3,7 @@ package com.hereliesaz.cleanunderwear.network
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.hereliesaz.cleanunderwear.util.DiagnosticLogger
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -144,11 +145,23 @@ class IdentityVerifier @Inject constructor() {
             // to a false positive here). NOTE: federal inmates are often held
             // out-of-state, so this can suppress genuine matches by design.
             val recFacl = stringField(record, "faclName")
-            val facilityState = BopFacilityCatalog.stateFor(recFacl)
+            val recFaclCode = stringField(record, "faclCode")
+            val facilityState = BopFacilityCatalog.stateFor(recFaclCode, recFacl)
             val contactState = corroboration.state?.trim()?.takeIf { it.isNotBlank() }
             if (facilityState == null || contactState == null ||
                 !facilityState.equals(contactState, ignoreCase = true)
             ) {
+                // Surface catalog gaps: a current, name+corroborator-matching
+                // record dropped *solely* because the facility's state couldn't
+                // be resolved is a match we would have shown if BopFacilityCatalog
+                // knew this facility. Log it so the gap is fixable, not silent.
+                if (facilityState == null && contactState != null) {
+                    DiagnosticLogger.log(
+                        "BOP: dropped corroborated '${name.first} ${name.last}' — unresolved " +
+                            "facility state (faclCode='$recFaclCode', faclName='$recFacl')",
+                        DiagnosticLogger.LogEntry.LogLevel.WARN
+                    )
+                }
                 continue
             }
 
