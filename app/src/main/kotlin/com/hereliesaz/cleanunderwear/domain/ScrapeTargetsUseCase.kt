@@ -144,7 +144,8 @@ class ScrapeTargetsUseCase @Inject constructor(
             val corroboration = IdentityVerifier.Corroboration(
                 middleName = target.middleName,
                 dob = target.dateOfBirth,
-                area = target.areaCode ?: target.residenceInfo
+                area = target.areaCode ?: target.residenceInfo,
+                state = sourceCatalog.resolveLocale(target.areaCode, target.residenceInfo).state
             )
             val dismissedKeys = target.dismissedMatchKeys
                 ?.split(',')

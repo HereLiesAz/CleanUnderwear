@@ -1,7 +1,5 @@
 package com.hereliesaz.cleanunderwear.network
 
-import io.mockk.every
-import io.mockk.mockk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -9,10 +7,7 @@ import org.junit.Test
 
 class IdentityVerifierTest {
 
-    private val researchAgent: OnDeviceResearchAgent = mockk<OnDeviceResearchAgent>(relaxed = true).also {
-        every { it.getNicknames(any<String>()) } returns emptyList()
-    }
-    private val verifier = IdentityVerifier(researchAgent)
+    private val verifier = IdentityVerifier()
 
     @Test
     fun verifyIdentity_exactMatch_returnsTrue() {
@@ -132,10 +127,19 @@ class IdentityVerifierTest {
         """"age":"$age","inmateNum":"$inmateNum","faclName":"$facl",""" +
         """"projRelDate":"$projRel","actRelDate":"$actRel"}"""
 
+    /**
+     * Corroboration that agrees with the default [inmate] under the strictest
+     * gates: middle initial A, age 45, and the state of the default facility
+     * (USP ATLANTA → GA). A national BOP hit now requires both a positive
+     * corroborator AND facility-state agreement to surface.
+     */
+    private fun corro(middle: String? = "Alan", dob: String? = "45", state: String? = "GA") =
+        IdentityVerifier.Corroboration(middleName = middle, dob = dob, state = state)
+
     @Test
     fun bop_currentInmateMatchingName_isMatchWithCustodySnippet() {
         val json = bopJson(inmate(first = "JOHN", last = "SMITH"))
-        val result = verifier.verifyBopInmateJson(json, "John Smith")
+        val result = verifier.verifyBopInmateJson(json, "John Smith", corro())
         assertTrue(result.isMatch)
         assertTrue(result.snippet!!.contains("BOP custody"))
         assertTrue(result.snippet!!.contains("USP ATLANTA"))
@@ -150,7 +154,7 @@ class IdentityVerifierTest {
             "control: text proximity cannot match the compact JSON",
             verifier.verifyIdentity(json, "John Smith").isMatch
         )
-        assertTrue(verifier.verifyBopInmateJson(json, "John Smith").isMatch)
+        assertTrue(verifier.verifyBopInmateJson(json, "John Smith", corro()).isMatch)
     }
 
     @Test
@@ -182,24 +186,23 @@ class IdentityVerifierTest {
         )
         assertFalse(verifier.verifyBopInmateJson(json, "John Smith").isMatch)
 
-        // Add a current John Smith and it matches.
+        // Add a current John Smith and it matches (facility FCI BUTNER → NC, so
+        // the contact's resolved state must be NC for the agreement gate).
         val json2 = bopJson(
             inmate(first = "JOHN", last = "SMITH", actRel = "06/01/2015"),
             inmate(first = "JOHN", last = "SMITH", facl = "FCI BUTNER"),
         )
-        val r = verifier.verifyBopInmateJson(json2, "John Smith")
+        val r = verifier.verifyBopInmateJson(json2, "John Smith", corro(state = "NC"))
         assertTrue(r.isMatch)
         assertTrue(r.snippet!!.contains("FCI BUTNER"))
     }
 
     @Test
-    fun bop_nicknameExpansion_matches() {
-        val agent = mockk<OnDeviceResearchAgent>(relaxed = true).also {
-            every { it.getNicknames(any<String>()) } returns listOf("William")
-        }
-        val v = IdentityVerifier(agent)
+    fun bop_nicknameNotExpanded_doesNotMatch() {
+        // Tightening: nickname expansion is intentionally removed, so a contact
+        // "Bill Smith" no longer matches an inmate "WILLIAM SMITH" on name.
         val json = bopJson(inmate(first = "WILLIAM", last = "SMITH"))
-        assertTrue(v.verifyBopInmateJson(json, "Bill Smith").isMatch)
+        assertFalse(verifier.verifyBopInmateJson(json, "Bill Smith").isMatch)
     }
 
     @Test
@@ -242,7 +245,7 @@ class IdentityVerifierTest {
         val json = bopJson(inmate(first = "JOHN", last = "SMITH", mid = "A"))
         val result = verifier.verifyBopInmateJson(
             json, "John Smith",
-            IdentityVerifier.Corroboration(middleName = "Alan")
+            IdentityVerifier.Corroboration(middleName = "Alan", state = "GA")
         )
         assertTrue(result.isMatch)
         assertTrue(result.basis!!.contains("middle name"))
@@ -263,7 +266,7 @@ class IdentityVerifierTest {
         val json = bopJson(inmate(first = "JOHN", last = "SMITH", age = "45"))
         val result = verifier.verifyBopInmateJson(
             json, "John Smith",
-            IdentityVerifier.Corroboration(dob = "45")
+            IdentityVerifier.Corroboration(dob = "45", state = "GA")
         )
         assertTrue(result.isMatch)
         assertTrue(result.basis!!.contains("age"))
@@ -276,7 +279,7 @@ class IdentityVerifierTest {
         val json = bopJson(inmate(first = "JOHN", last = "SMITH", age = "45"))
         val result = verifier.verifyBopInmateJson(
             json, "John Smith",
-            IdentityVerifier.Corroboration(dob = "Age 45")
+            IdentityVerifier.Corroboration(dob = "Age 45", state = "GA")
         )
         assertTrue(result.isMatch)
         assertTrue(result.basis!!.contains("age"))
@@ -289,30 +292,69 @@ class IdentityVerifierTest {
         val json = bopJson(inmate(first = "JOHN", last = "SMITH", age = (thisYear - 1980).toString()))
         val result = verifier.verifyBopInmateJson(
             json, "John Smith",
-            IdentityVerifier.Corroboration(dob = "1980")
+            IdentityVerifier.Corroboration(dob = "1980", state = "GA")
         )
         assertTrue(result.isMatch)
         assertTrue(result.basis!!.contains("age"))
     }
 
+    // ---- strictest gates: corroborator required + facility-state agreement ----
+
     @Test
-    fun bop_uncorroborated_isStillMatchButFlaggedNameOnly() {
+    fun bop_nameOnlyNoCorroborator_notSurfaced() {
+        // Even with the contact's state known, a name-only hit (no agreeing
+        // middle name or age) is never surfaced on the national BOP search.
         val json = bopJson(inmate(first = "JOHN", last = "SMITH"))
-        val result = verifier.verifyBopInmateJson(json, "John Smith")
+        val result = verifier.verifyBopInmateJson(
+            json, "John Smith",
+            IdentityVerifier.Corroboration(state = "GA")
+        )
+        assertFalse(result.isMatch)
+    }
+
+    @Test
+    fun bop_facilityStateMismatch_notSurfaced() {
+        // Corroborated by middle + age, but the contact resolves to CA while the
+        // facility (USP ATLANTA) is in GA → suppressed by the agreement gate.
+        val json = bopJson(inmate(first = "JOHN", last = "SMITH"))
+        val result = verifier.verifyBopInmateJson(json, "John Smith", corro(state = "CA"))
+        assertFalse(result.isMatch)
+    }
+
+    @Test
+    fun bop_facilityStateUnknown_notSurfaced() {
+        // Facility not in BopFacilityCatalog → cannot establish agreement →
+        // not surfaced, even when fully corroborated.
+        val json = bopJson(inmate(first = "JOHN", last = "SMITH", facl = "FCI NOWHERELAND"))
+        val result = verifier.verifyBopInmateJson(json, "John Smith", corro(state = "GA"))
+        assertFalse(result.isMatch)
+    }
+
+    @Test
+    fun bop_contactStateUnknown_notSurfaced() {
+        // Contact geography unresolved → no agreement possible → not surfaced.
+        val json = bopJson(inmate(first = "JOHN", last = "SMITH"))
+        val result = verifier.verifyBopInmateJson(json, "John Smith", corro(state = null))
+        assertFalse(result.isMatch)
+    }
+
+    @Test
+    fun bop_fullyCorroboratedWithStateAgreement_matches() {
+        val json = bopJson(inmate(first = "JOHN", last = "SMITH"))
+        val result = verifier.verifyBopInmateJson(json, "John Smith", corro())
         assertTrue(result.isMatch)
-        assertTrue(result.basis!!.contains("name only"))
         assertEquals("12345-678", result.matchKey)
     }
 
     @Test
     fun bop_dismissedRecord_isSuppressed() {
         val json = bopJson(inmate(first = "JOHN", last = "SMITH", inmateNum = "99999-111"))
-        // Without dismissal it matches…
-        assertTrue(verifier.verifyBopInmateJson(json, "John Smith").isMatch)
+        // With full corroboration it matches…
+        assertTrue(verifier.verifyBopInmateJson(json, "John Smith", corro()).isMatch)
         // …but a previously-rejected record id is skipped.
         assertFalse(
             verifier.verifyBopInmateJson(
-                json, "John Smith",
+                json, "John Smith", corro(),
                 dismissedKeys = setOf("99999-111")
             ).isMatch
         )

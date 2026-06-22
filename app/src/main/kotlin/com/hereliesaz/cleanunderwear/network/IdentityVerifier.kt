@@ -14,9 +14,7 @@ import javax.inject.Singleton
  * "B" inside "Bob" on some unrelated booking page.
  */
 @Singleton
-class IdentityVerifier @Inject constructor(
-    private val researchAgent: OnDeviceResearchAgent
-) {
+class IdentityVerifier @Inject constructor() {
     fun verifyIdentity(documentText: String, targetName: String): VerificationResult {
         return when (val v = NameValidator.validate(targetName)) {
             is NameValidator.Result.Skip -> VerificationResult(
@@ -34,9 +32,11 @@ class IdentityVerifier @Inject constructor(
         firstName: String,
         lastName: String
     ): VerificationResult {
-        val firstNameCandidates = (listOf(firstName) + researchAgent.getNicknames(firstName))
+        // Nickname expansion was removed to tighten matching: only the exact
+        // first name is accepted, so a nickname like "Bill" no longer matches
+        // "William" and widens the candidate set.
+        val firstNameCandidates = listOf(firstName)
             .filter { NameValidator.isAcceptableToken(it) }
-            .distinct()
 
         val lastQ = Regex.escape(lastName)
         for (firstAlt in firstNameCandidates) {
@@ -95,10 +95,11 @@ class IdentityVerifier @Inject constructor(
             return VerificationResult(isMatch = false, snippet = null)
         } ?: return VerificationResult(isMatch = false, snippet = null)
 
-        val firstCandidates = (listOf(name.first) + researchAgent.getNicknames(name.first))
+        // Exact first name only — nickname expansion is deliberately not applied
+        // here, to keep the national BOP search from widening on common nicknames.
+        val firstCandidates = listOf(name.first)
             .filter { NameValidator.isAcceptableToken(it) }
             .map { it.lowercase() }
-            .distinct()
         val targetLast = name.last.lowercase()
 
         for (element in records) {
@@ -109,8 +110,7 @@ class IdentityVerifier @Inject constructor(
             if (recFirst.isBlank() || recLast.isBlank()) continue
 
             // Exact name match (not token-contains): a compound record first
-            // name like "JOHN-PAUL" must NOT match a contact "John". Nickname
-            // expansion is still honored via firstCandidates.
+            // name like "JOHN-PAUL" must NOT match a contact "John".
             val recFirstNorm = recFirst.lowercase().trim().replace(Regex("\\s+"), " ")
             val firstMatch = recFirstNorm in firstCandidates
             val lastMatch = tokensOf(recLast).contains(targetLast)
@@ -132,7 +132,27 @@ class IdentityVerifier @Inject constructor(
             val corro = assessCorroboration(corroboration, recMiddle, recAge)
             if (corro.conflict) continue
 
-            val facility = stringField(record, "faclName").ifBlank { "a federal facility" }
+            // Strictest gate (national BOP only): a name-only hit is never
+            // surfaced. The national database has many same-name records, so we
+            // require a *positive* corroborator — an agreeing middle name or age
+            // — before treating the record as a possible match.
+            if (!corro.corroborated) continue
+
+            // Strictest gate: facility-state agreement. The contact's resolved
+            // state must equal the facility's state. Either side unknown ⇒ we
+            // cannot establish agreement ⇒ skip (a false negative is preferred
+            // to a false positive here). NOTE: federal inmates are often held
+            // out-of-state, so this can suppress genuine matches by design.
+            val recFacl = stringField(record, "faclName")
+            val facilityState = BopFacilityCatalog.stateFor(recFacl)
+            val contactState = corroboration.state?.trim()?.takeIf { it.isNotBlank() }
+            if (facilityState == null || contactState == null ||
+                !facilityState.equals(contactState, ignoreCase = true)
+            ) {
+                continue
+            }
+
+            val facility = recFacl.ifBlank { "a federal facility" }
             val projRel = stringField(record, "projRelDate")
             val snippet = buildString {
                 append(recFirst.trim())
@@ -158,7 +178,11 @@ class IdentityVerifier @Inject constructor(
         return VerificationResult(isMatch = false, snippet = null)
     }
 
-    private data class CorroborationResult(val conflict: Boolean, val basis: String)
+    private data class CorroborationResult(
+        val conflict: Boolean,
+        val corroborated: Boolean,
+        val basis: String
+    )
 
     /**
      * Compares enrichment-sourced identity data against a candidate record.
@@ -179,7 +203,7 @@ class IdentityVerifier @Inject constructor(
         val rMid = recMiddle.trim().lowercase().takeIf { it.isNotBlank() }
         if (cMid != null && rMid != null) {
             if (cMid.first() != rMid.first()) {
-                return CorroborationResult(true, "middle-name conflict ($cMid ≠ $rMid)")
+                return CorroborationResult(true, false, "middle-name conflict ($cMid ≠ $rMid)")
             }
             signals += "middle name"
         }
@@ -188,7 +212,7 @@ class IdentityVerifier @Inject constructor(
         val rAge = recAge.toIntOrNull()
         if (cAge != null && rAge != null) {
             if (kotlin.math.abs(cAge - rAge) > 1) {
-                return CorroborationResult(true, "age conflict ($cAge ≠ $rAge)")
+                return CorroborationResult(true, false, "age conflict ($cAge ≠ $rAge)")
             }
             signals += "age"
         }
@@ -198,7 +222,7 @@ class IdentityVerifier @Inject constructor(
         } else {
             signals.joinToString(" + ") + " corroborated"
         }
-        return CorroborationResult(false, basis)
+        return CorroborationResult(conflict = false, corroborated = signals.isNotEmpty(), basis = basis)
     }
 
     /**
@@ -279,6 +303,12 @@ class IdentityVerifier @Inject constructor(
     data class Corroboration(
         val middleName: String? = null,
         val dob: String? = null,
-        val area: String? = null
+        val area: String? = null,
+        /**
+         * The contact's resolved US state code (e.g. "GA"), from
+         * [SourceCatalog.resolveLocale]. Used by the national BOP path's
+         * facility-state agreement gate; null when geography can't be resolved.
+         */
+        val state: String? = null
     )
 }
