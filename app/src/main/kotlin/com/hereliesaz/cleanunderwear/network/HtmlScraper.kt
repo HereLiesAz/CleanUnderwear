@@ -53,6 +53,30 @@ class HtmlScraper @Inject constructor(
         }
     }
 
+    /**
+     * Fetches a JSON inmate-locator endpoint (currently the Federal BOP API) and
+     * verifies the target structurally via [IdentityVerifier.verifyBopInmateJson].
+     * Unlike [scrapeMugshots] this must NOT run the body through Jsoup — the
+     * compact JSON would be flattened into unsearchable text and the discrete
+     * name fields lost.
+     */
+    suspend fun scrapeBopInmate(url: String, targetName: String): IdentityVerifier.VerificationResult =
+        withContext(Dispatchers.IO) {
+            try {
+                val request = Request.Builder()
+                    .url(sanitize(url))
+                    .header("User-Agent", DESKTOP_UA)
+                    .header("Accept", "application/json")
+                    .build()
+                val response = okHttpClient.newCall(request).execute()
+                if (!response.isSuccessful) return@withContext IdentityVerifier.VerificationResult.fetchFailed()
+                verifier.verifyBopInmateJson(response.body.string(), targetName)
+            } catch (e: Exception) {
+                Log.e("HtmlScraper", "Failed to fetch BOP JSON $url", e)
+                IdentityVerifier.VerificationResult.fetchFailed()
+            }
+        }
+
     private fun fetch(request: Request, targetName: String): IdentityVerifier.VerificationResult {
         val response = okHttpClient.newCall(request).execute()
         if (!response.isSuccessful) return IdentityVerifier.VerificationResult.fetchFailed()

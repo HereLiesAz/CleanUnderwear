@@ -839,9 +839,12 @@
     {
       "id": "bop_inmate_locator",
       "label": "Federal BOP Inmate Locator",
-      "kind": "MANUAL_LANDING",
-      "url_template": "https://www.bop.gov/inmateloc/",
-      "render": "WEBVIEW",
+      "kind": "QUERY_TEMPLATE",
+      "method": "GET",
+      "url_template": "https://www.bop.gov/PublicInfo/execute/inmateloc?todo=query&output=json&nameFirst={first}&nameLast={last}",
+      "evidence_url_template": "https://www.bop.gov/inmateloc/",
+      "render": "BASIC",
+      "result_format": "BOP_JSON",
       "scope": "MULTI_STATE",
       "covers_country": "US"
     },

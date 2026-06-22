@@ -21,6 +21,14 @@ enum class SourceKind {
 
 enum class RenderMode { BASIC, WEBVIEW }
 
+/**
+ * How a fetched response is interpreted by the scraper.
+ *  - [HTML]: server-rendered markup, verified via text-proximity name matching.
+ *  - [BOP_JSON]: the Federal BOP inmate-locator JSON API, verified structurally
+ *    (and custody-filtered) via [IdentityVerifier.verifyBopInmateJson].
+ */
+enum class ResultFormat { HTML, BOP_JSON }
+
 enum class SourceScope { COUNTY, STATE, AREA_CODE, MULTI_STATE }
 
 enum class SourceCategory { LOCKUP, OBITUARY, IDENTITY }
@@ -36,6 +44,7 @@ data class Source(
     val urlTemplate: String,
     val formFields: Map<String, String>,
     val render: RenderMode,
+    val resultFormat: ResultFormat,
     val renderSettleMs: Int,
     val readySelector: String?,
     val evidenceUrlTemplate: String,
@@ -75,6 +84,7 @@ class SourceCatalog @Inject constructor(
         val url_template: String? = null,
         val form_fields: Map<String, String>? = null,
         val render: String? = null,
+        val result_format: String? = null,
         val render_settle_ms: Int? = null,
         val ready_selector: String? = null,
         val evidence_url_template: String? = null,
@@ -339,6 +349,7 @@ class SourceCatalog @Inject constructor(
         val kind = parseKind(this.kind) ?: return null
         val urlTemplate = url_template ?: return null
         val render = parseRender(this.render) ?: RenderMode.BASIC
+        val resultFormat = parseResultFormat(this.result_format) ?: ResultFormat.HTML
         val scope = parseScope(this.scope) ?: SourceScope.STATE
         val evidenceUrl = evidence_url_template?.takeIf { it.isNotBlank() } ?: urlTemplate
 
@@ -350,6 +361,7 @@ class SourceCatalog @Inject constructor(
             urlTemplate = urlTemplate,
             formFields = form_fields.orEmpty(),
             render = render,
+            resultFormat = resultFormat,
             renderSettleMs = render_settle_ms ?: 1500,
             readySelector = ready_selector,
             evidenceUrlTemplate = evidenceUrl,
@@ -369,6 +381,12 @@ class SourceCatalog @Inject constructor(
     private fun parseRender(raw: String?): RenderMode? = when (raw?.uppercase()) {
         "BASIC" -> RenderMode.BASIC
         "WEBVIEW" -> RenderMode.WEBVIEW
+        else -> null
+    }
+
+    private fun parseResultFormat(raw: String?): ResultFormat? = when (raw?.uppercase()) {
+        "HTML" -> ResultFormat.HTML
+        "BOP_JSON" -> ResultFormat.BOP_JSON
         else -> null
     }
 

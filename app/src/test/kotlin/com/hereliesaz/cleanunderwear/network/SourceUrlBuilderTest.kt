@@ -20,6 +20,7 @@ class SourceUrlBuilderTest {
         urlTemplate = urlTemplate,
         formFields = formFields,
         render = RenderMode.WEBVIEW,
+        resultFormat = ResultFormat.HTML,
         renderSettleMs = 1500,
         readySelector = null,
         evidenceUrlTemplate = evidenceUrlTemplate ?: urlTemplate,
