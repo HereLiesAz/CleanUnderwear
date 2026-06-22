@@ -21,10 +21,13 @@ val versionProps = Properties().apply {
 // auto-incremented versionBuild/versionPatch and wrote them back, so the APK
 // version was always the file value + 1 and the committed file drifted on
 // every local build.)
-val verMajor = versionProps.getProperty("versionMajor", "1")
-val verMinor = versionProps.getProperty("versionMinor", "0")
-val verPatch = versionProps.getProperty("versionPatch", "0")
-val verBuild = versionProps.getProperty("versionBuild", "1").toInt()
+// Properties.load() strips leading but not trailing whitespace, so trim each
+// value — a stray trailing space in a hand-edited file would otherwise crash
+// versionBuild.toInt() or produce a malformed versionName like "1.0.5 ".
+val verMajor = versionProps.getProperty("versionMajor", "1").trim()
+val verMinor = versionProps.getProperty("versionMinor", "0").trim()
+val verPatch = versionProps.getProperty("versionPatch", "0").trim()
+val verBuild = versionProps.getProperty("versionBuild", "1").trim().toInt()
 val currentVersionName = "$verMajor.$verMinor.$verPatch"
 
 kotlin {
