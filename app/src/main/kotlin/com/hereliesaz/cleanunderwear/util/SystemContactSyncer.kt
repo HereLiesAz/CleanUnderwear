@@ -34,6 +34,7 @@ class SystemContactSyncer @Inject constructor(@ApplicationContext private val co
             val statusText = when (target.status) {
                 TargetStatus.MONITORING -> "Monitoring"
                 TargetStatus.UNVERIFIED -> "Unverified"
+                TargetStatus.POSSIBLE_MATCH -> "Possible match — review"
                 TargetStatus.INCARCERATED -> "Incarcerated"
                 TargetStatus.DECEASED -> "Deceased"
                 TargetStatus.IGNORED -> "Archived"

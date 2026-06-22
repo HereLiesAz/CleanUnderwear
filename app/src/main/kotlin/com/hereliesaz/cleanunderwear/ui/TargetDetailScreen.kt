@@ -130,6 +130,74 @@ fun TargetDetailScreen(
                 }
             }
 
+            // POSSIBLE_MATCH review. The vigil found a roster record matching
+            // this contact's name but cannot prove it's the same person, so it
+            // surfaces the candidate here for the user to confirm or reject.
+            if (target.status == TargetStatus.POSSIBLE_MATCH) {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Possible incarceration match — needs your review",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = target.lastVerificationSnippet
+                                ?: "A roster record matched this contact's name. Confirm it is the same person.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        target.lockupUrl?.takeIf { sourceCatalog.isFromCatalog(it) }?.let { url ->
+                            AzButton(
+                                text = "Open roster page to verify",
+                                onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = AzButtonShape.RECTANGLE
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            AzButton(
+                                text = "Confirm — incarcerated",
+                                onClick = { onUpdateTarget(target.copy(status = TargetStatus.INCARCERATED)) },
+                                modifier = Modifier.weight(1f),
+                                shape = AzButtonShape.RECTANGLE
+                            )
+                            AzButton(
+                                text = "Not a match",
+                                onClick = {
+                                    val key = extractInmateKey(target.lastVerificationSnippet)
+                                    val dismissed = target.dismissedMatchKeys
+                                        ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
+                                        ?: emptyList()
+                                    val updated = (if (key != null) dismissed + key else dismissed)
+                                        .distinct().joinToString(",")
+                                    onUpdateTarget(
+                                        target.copy(
+                                            status = TargetStatus.MONITORING,
+                                            dismissedMatchKeys = updated.ifEmpty { null },
+                                            lastVerificationSnippet = null,
+                                            lockupUrl = null
+                                        )
+                                    )
+                                },
+                                modifier = Modifier.weight(1f),
+                                shape = AzButtonShape.RECTANGLE
+                            )
+                        }
+                    }
+                }
+            }
+
             // UNVERIFIED status explainer. Tells the user why nothing's
             // happening and offers to launch identity enrichment. The button
             // is a placeholder until BrowserScreen lands; it currently routes
@@ -453,6 +521,14 @@ private fun splitDisplayName(displayName: String): Pair<String, String> {
         else -> tokens.dropLast(1).joinToString(" ") to tokens.last()
     }
 }
+
+/**
+ * Pulls the record identifier the verifier embedded as "[#id]" in a possible-
+ * match snippet, so "Not a match" can remember exactly which record to suppress.
+ */
+private fun extractInmateKey(snippet: String?): String? =
+    snippet?.let { Regex("\\[#([^\\]]+)]").find(it)?.groupValues?.getOrNull(1)?.trim() }
+        ?.takeIf { it.isNotEmpty() }
 
 @Composable
 fun DetailRow(label: String, value: String) {

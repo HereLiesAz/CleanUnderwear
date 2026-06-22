@@ -47,12 +47,41 @@ data class Target(
      * reverse a bad merge. Null until the contact is enriched.
      */
     @ColumnInfo(name = "enrichment_provenance")
-    val enrichmentProvenance: String? = null
+    val enrichmentProvenance: String? = null,
+    /**
+     * Contact's middle name, captured from a CyberBackgroundChecks detail page
+     * during enrichment. Used to corroborate a same-name roster/BOP hit before
+     * it is ever surfaced as a possible match. Null until enriched.
+     */
+    @ColumnInfo(name = "middle_name")
+    val middleName: String? = null,
+    /**
+     * Contact's date of birth or age, captured from a CyberBackgroundChecks
+     * detail page. Free-form (the site exposes "Age N" and/or a DOB); compared
+     * loosely against a roster record's age. Null until enriched.
+     */
+    @ColumnInfo(name = "date_of_birth")
+    val dateOfBirth: String? = null,
+    /**
+     * CSV of record identifiers (e.g. BOP inmate numbers) the user explicitly
+     * marked "not a match" for this contact. The vigil skips these so a
+     * dismissed false positive does not resurface on the next run.
+     */
+    @ColumnInfo(name = "dismissed_match_keys")
+    val dismissedMatchKeys: String? = null
 )
 
 enum class TargetStatus {
     MONITORING,
     UNVERIFIED,
+    /**
+     * A name match was found on a roster (e.g. the Federal BOP locator) but it
+     * is NOT confirmed — name alone cannot prove identity. The candidate is
+     * surfaced to the user (see [Target.lastVerificationSnippet] / [Target.lockupUrl])
+     * to confirm (→ [INCARCERATED]) or mark a mismatch. The vigil never sets
+     * [INCARCERATED] on its own.
+     */
+    POSSIBLE_MATCH,
     INCARCERATED,
     DECEASED,
     IGNORED,

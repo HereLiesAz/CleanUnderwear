@@ -125,8 +125,11 @@ class IdentityVerifierTest {
         actRel: String = "",
         facl: String = "USP ATLANTA",
         projRel: String = "01/01/2030",
-    ) = """{"nameLast":"$last","nameFirst":"$first","nameMiddle":"A","sex":"Male",""" +
-        """"age":"45","inmateNum":"12345-678","faclName":"$facl",""" +
+        mid: String = "A",
+        age: String = "45",
+        inmateNum: String = "12345-678",
+    ) = """{"nameLast":"$last","nameFirst":"$first","nameMiddle":"$mid","sex":"Male",""" +
+        """"age":"$age","inmateNum":"$inmateNum","faclName":"$facl",""" +
         """"projRelDate":"$projRel","actRelDate":"$actRel"}"""
 
     @Test
@@ -211,5 +214,81 @@ class IdentityVerifierTest {
         val result = verifier.verifyBopInmateJson(bopJson(inmate("MADONNA", "X")), "Madonna")
         assertFalse(result.isMatch)
         assertTrue(result.skipped)
+    }
+
+    // ---- corroboration (kills common-name false positives) ----
+
+    @Test
+    fun bop_compoundFirstName_doesNotMatchPlainFirst() {
+        // "JOHN-PAUL SMITH" must NOT match contact "John Smith": exact first-name
+        // match, not token-contains.
+        val json = bopJson(inmate(first = "JOHN-PAUL", last = "SMITH"))
+        assertFalse(verifier.verifyBopInmateJson(json, "John Smith").isMatch)
+    }
+
+    @Test
+    fun bop_middleNameConflict_rejected() {
+        // Contact's known middle name disagrees with the record → not our person.
+        val json = bopJson(inmate(first = "JOHN", last = "SMITH", mid = "A"))
+        val result = verifier.verifyBopInmateJson(
+            json, "John Smith",
+            IdentityVerifier.Corroboration(middleName = "Brian")
+        )
+        assertFalse(result.isMatch)
+    }
+
+    @Test
+    fun bop_middleNameAgrees_corroborated() {
+        val json = bopJson(inmate(first = "JOHN", last = "SMITH", mid = "A"))
+        val result = verifier.verifyBopInmateJson(
+            json, "John Smith",
+            IdentityVerifier.Corroboration(middleName = "Alan")
+        )
+        assertTrue(result.isMatch)
+        assertTrue(result.basis!!.contains("middle name"))
+    }
+
+    @Test
+    fun bop_ageConflict_rejected() {
+        val json = bopJson(inmate(first = "JOHN", last = "SMITH", age = "45"))
+        val result = verifier.verifyBopInmateJson(
+            json, "John Smith",
+            IdentityVerifier.Corroboration(dob = "60")
+        )
+        assertFalse(result.isMatch)
+    }
+
+    @Test
+    fun bop_ageAgrees_corroborated() {
+        val json = bopJson(inmate(first = "JOHN", last = "SMITH", age = "45"))
+        val result = verifier.verifyBopInmateJson(
+            json, "John Smith",
+            IdentityVerifier.Corroboration(dob = "45")
+        )
+        assertTrue(result.isMatch)
+        assertTrue(result.basis!!.contains("age"))
+    }
+
+    @Test
+    fun bop_uncorroborated_isStillMatchButFlaggedNameOnly() {
+        val json = bopJson(inmate(first = "JOHN", last = "SMITH"))
+        val result = verifier.verifyBopInmateJson(json, "John Smith")
+        assertTrue(result.isMatch)
+        assertTrue(result.basis!!.contains("name only"))
+        assertEquals("12345-678", result.matchKey)
+    }
+
+    @Test
+    fun bop_dismissedRecord_isSuppressed() {
+        val json = bopJson(inmate(first = "JOHN", last = "SMITH", inmateNum = "99999-111"))
+        // Without dismissal it matches…
+        assertTrue(verifier.verifyBopInmateJson(json, "John Smith").isMatch)
+        // …but a previously-rejected record id is skipped.
+        assertFalse(
+            verifier.verifyBopInmateJson(
+                json, "John Smith",
+                dismissedKeys = setOf("99999-111")
+            ).isMatch
+        )
     }
 }

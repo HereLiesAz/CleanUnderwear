@@ -27,6 +27,47 @@ class CyberBackgroundChecksEnricherTest {
         areaCode = areaCode,
     )
 
+    // ---- parseFindings: detail page captures middle name + DOB ----
+
+    @Test
+    fun parseFindings_detailPage_capturesMiddleNameAndDob() {
+        val detailHtml = """
+            <html><body>
+              <h1 class="full-name">John Alan Smith</h1>
+              <div class="current-address">100 Oak St, Austin, TX 78701</div>
+              <a href="tel:+15125550199" class="phone">(512) 555-0199</a>
+              <span class="dob">Age 45</span>
+            </body></html>
+        """.trimIndent()
+
+        val f = enricher.parseFindings(detailHtml)
+        assertNotNull(f)
+        assertEquals("John Alan Smith", f!!.name)
+        assertEquals("Alan", f.middleName)
+        assertTrue(f.dob!!.contains("45"))
+    }
+
+    @Test
+    fun parseFindings_blankPage_returnsNull() {
+        assertNull(enricher.parseFindings(""))
+    }
+
+    @Test
+    fun merge_gapFillsMiddleNameAndDob_nonDestructively() {
+        val existing = target(displayName = "John Smith").copy(middleName = "Existing")
+        val findings = CyberBackgroundChecksEnricher.Findings(
+            name = "John Alan Smith",
+            address = null,
+            phone = null,
+            middleName = "Alan",
+            dob = "45"
+        )
+        val merged = enricher.merge(existing, findings)
+        // Existing middle name is preserved (non-destructive); DOB fills the gap.
+        assertEquals("Existing", merged.middleName)
+        assertEquals("45", merged.dateOfBirth)
+    }
+
     // ---- pickAllMissions ----
 
     @Test
