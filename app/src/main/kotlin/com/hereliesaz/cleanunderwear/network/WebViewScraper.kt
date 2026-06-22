@@ -3,6 +3,7 @@ package com.hereliesaz.cleanunderwear.network
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -70,10 +71,19 @@ class WebViewScraper @Inject constructor(@ApplicationContext private val context
 
                 continuation.invokeOnCancellation { resumeOnce(null) }
 
+                // Ride the user's real browser identity: the device WebView's
+                // default User-Agent and the shared CookieManager session (any
+                // login / captcha solve the user already performed in
+                // BrowserScreen). Do NOT spoof a hardcoded Chrome UA — anti-bot
+                // defenses are tuned to catch a UA that doesn't match the device
+                // actually making the request.
+                CookieManager.getInstance().apply {
+                    setAcceptCookie(true)
+                    setAcceptThirdPartyCookies(webView, true)
+                }
                 webView.settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = true
-                    userAgentString = "Mozilla/5.0 (Linux; Android 14; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.82 Mobile Safari/537.36"
                 }
 
                 webView.addJavascriptInterface(AndroidInterface(), "AndroidInterface")
@@ -128,10 +138,19 @@ class WebViewScraper @Inject constructor(@ApplicationContext private val context
                     resumeOnce(null)
                 }
 
+                // Ride the user's real browser identity: the device WebView's
+                // default User-Agent and the shared CookieManager session (any
+                // login / captcha solve the user already performed in
+                // BrowserScreen). Do NOT spoof a hardcoded Chrome UA — anti-bot
+                // defenses are tuned to catch a UA that doesn't match the device
+                // actually making the request.
+                CookieManager.getInstance().apply {
+                    setAcceptCookie(true)
+                    setAcceptThirdPartyCookies(webView, true)
+                }
                 webView.settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = true
-                    userAgentString = "Mozilla/5.0 (Linux; Android 14; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.82 Mobile Safari/537.36"
                 }
 
                 class HtmlDumpInterface {

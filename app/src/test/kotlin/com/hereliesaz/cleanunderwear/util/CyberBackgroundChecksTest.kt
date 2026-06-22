@@ -70,4 +70,65 @@ class CyberBackgroundChecksTest {
             CyberBackgroundChecks.getEmailSearchUrl("noatsign")
         )
     }
+
+    // ---- address ----
+
+    @Test
+    fun address_fullStreetAddress_stateAndZipCombined() {
+        assertEquals(
+            "https://www.cyberbackgroundchecks.com/address/123-main-st/new-orleans/la",
+            CyberBackgroundChecks.getAddressSearchUrl("123 Main St, New Orleans, LA 70130")
+        )
+    }
+
+    @Test
+    fun address_harvestedCityRegionZip_noStreet() {
+        // ContactHarvester assembles structured-postal data as "city, region, zip".
+        // The old parser mapped city→street/state→city/zip→state; this must now
+        // resolve to city + state.
+        assertEquals(
+            "https://www.cyberbackgroundchecks.com/address/new-orleans/la",
+            CyberBackgroundChecks.getAddressSearchUrl("New Orleans, LA, 70130")
+        )
+    }
+
+    @Test
+    fun address_commaLessFreeform_cityStateZip() {
+        assertEquals(
+            "https://www.cyberbackgroundchecks.com/address/new-orleans/la",
+            CyberBackgroundChecks.getAddressSearchUrl("New Orleans LA 70130")
+        )
+    }
+
+    @Test
+    fun address_cityStateNoZip() {
+        assertEquals(
+            "https://www.cyberbackgroundchecks.com/address/new-orleans/la",
+            CyberBackgroundChecks.getAddressSearchUrl("New Orleans, LA")
+        )
+    }
+
+    @Test
+    fun address_streetOnly() {
+        assertEquals(
+            "https://www.cyberbackgroundchecks.com/address/123-main-st",
+            CyberBackgroundChecks.getAddressSearchUrl("123 Main St")
+        )
+    }
+
+    @Test
+    fun address_fullStreetAddressStateAndZipAsSeparateParts() {
+        assertEquals(
+            "https://www.cyberbackgroundchecks.com/address/123-main-st/new-orleans/la",
+            CyberBackgroundChecks.getAddressSearchUrl("123 Main St, New Orleans, LA, 70130")
+        )
+    }
+
+    @Test
+    fun address_empty_fallsBackToBasePath() {
+        assertEquals(
+            "https://www.cyberbackgroundchecks.com/address",
+            CyberBackgroundChecks.getAddressSearchUrl("   ")
+        )
+    }
 }

@@ -320,19 +320,30 @@ fun TargetDetailScreen(
                     )
                 }
 
-                // Catalog-derived MANUAL_LANDING sources for this contact's
-                // locale (county sheriff, state DOC, VINELink, etc.) — clicking
-                // a chip opens the source's landing page in the user's browser.
-                val manualLockup = sourceCatalog
+                // Catalog-derived lockup sources for this contact's locale
+                // (county sheriff, state DOC, VINELink, federal BOP, etc.) —
+                // clicking a chip opens a human-facing page in the browser.
+                // MANUAL_LANDING sources open their landing URL; automatable
+                // sources (e.g. the BOP JSON query) open their evidence URL so
+                // the operator never lands on a raw API/JSON response. Sources
+                // whose landing URL still carries unfilled {first}/{last} slots
+                // are skipped here — they have no operator-friendly page.
+                val lockupChips = sourceCatalog
                     .lockupSourcesFor(target.areaCode, target.residenceInfo)
-                    .filter { it.kind == SourceKind.MANUAL_LANDING }
-                manualLockup.forEach { source ->
-                    AssistChip(
-                        onClick = {
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(source.urlTemplate)))
-                        },
-                        label = { Text(source.label) }
-                    )
+                lockupChips.forEach { source ->
+                    val landing = if (source.kind == SourceKind.MANUAL_LANDING) {
+                        source.urlTemplate
+                    } else {
+                        source.evidenceUrlTemplate
+                    }
+                    if (!landing.contains("{")) {
+                        AssistChip(
+                            onClick = {
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(landing)))
+                            },
+                            label = { Text(source.label) }
+                        )
+                    }
                 }
             }
 

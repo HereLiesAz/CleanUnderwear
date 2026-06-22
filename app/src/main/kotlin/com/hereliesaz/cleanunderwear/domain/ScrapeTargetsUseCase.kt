@@ -8,6 +8,7 @@ import com.hereliesaz.cleanunderwear.network.HtmlScraper
 import com.hereliesaz.cleanunderwear.network.IdentityVerifier
 import com.hereliesaz.cleanunderwear.network.NameValidator
 import com.hereliesaz.cleanunderwear.network.RenderMode
+import com.hereliesaz.cleanunderwear.network.ResultFormat
 import com.hereliesaz.cleanunderwear.network.Source
 import com.hereliesaz.cleanunderwear.network.SourceCatalog
 import com.hereliesaz.cleanunderwear.network.SourceKind
@@ -225,13 +226,14 @@ class ScrapeTargetsUseCase @Inject constructor(
         val name = "$first $last"
 
         return when (source.render) {
-            RenderMode.BASIC -> {
-                if (source.method.uppercase() == "POST") {
+            RenderMode.BASIC -> when {
+                source.resultFormat == ResultFormat.BOP_JSON ->
+                    basicScraper.scrapeBopInmate(fetchUrl, name)
+                source.method.uppercase() == "POST" -> {
                     val fields = SourceUrlBuilder.buildFormFields(source, first, last)
                     basicScraper.scrapePost(fetchUrl, fields, name)
-                } else {
-                    basicScraper.scrapeMugshots(fetchUrl, name)
                 }
+                else -> basicScraper.scrapeMugshots(fetchUrl, name)
             }
             RenderMode.WEBVIEW -> {
                 val doc = stealthScraper.scrapeGhostTown(

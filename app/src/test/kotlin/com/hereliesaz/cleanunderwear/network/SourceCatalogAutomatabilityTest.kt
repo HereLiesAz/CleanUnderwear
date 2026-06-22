@@ -4,7 +4,7 @@ import android.content.Context
 import android.content.res.AssetManager
 import io.mockk.every
 import io.mockk.mockk
-import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -13,17 +13,13 @@ import org.junit.Test
  * Guards the automatability contract that drives [com.hereliesaz.cleanunderwear
  * .data.MonitorabilityState.NO_AUTOMATED_SOURCE]. Reads the real sources.json.
  *
- * The shipped catalog currently has NO automatable (non-MANUAL_LANDING) lockup
- * or obituary source — every gov roster the project surveyed either bot-blocks a
- * non-browser fetch or has no deep-linkable, name-queryable result page, so they
- * are all operator-launch-only. These tests pin that honest reality: the daily
- * vigil cannot auto-confirm a status change today, and Triage routes such
- * contacts to NO_AUTOMATED_SOURCE instead of silently reporting "no change".
- *
- * When a genuinely automatable source is later curated (a QUERY_TEMPLATE /
- * ROSTER_PAGE entry, or a `multi_state_obituary` with a server-rendered result
- * page), [hasNoAutomatableSource_forKnownMetro] will start failing — that is the
- * intended signal to update this test and confirm the auto-path is wired on.
+ * The federal BOP inmate-locator JSON API is automatable (a QUERY_TEMPLATE with
+ * result_format BOP_JSON), so every US contact resolves to at least one source
+ * the daily vigil can fetch + verify on its own. County/state gov rosters remain
+ * operator-launch-only (MANUAL_LANDING) — they bot-block non-browser fetches or
+ * expose no name-queryable deep link — and surface as in-app chips. These tests
+ * pin that contract: a US locale is automatable via BOP, while the locale-
+ * specific rosters stay manual.
  */
 class SourceCatalogAutomatabilityTest {
 
@@ -40,19 +36,34 @@ class SourceCatalogAutomatabilityTest {
     }
 
     @Test
-    fun knownMetro_resolvesToSources_butNoneAreAutomatable() {
+    fun usMetro_isAutomatableViaFederalBop_whileLocalRostersStayManual() {
         val catalog = loadCatalog()
         // New Orleans (504) + an Orleans Parish ZIP resolves to lockup sources.
         val lockup = catalog.lockupSourcesFor("504", "123 Magazine St, New Orleans, LA 70130")
         assertTrue("expected catalog to resolve lockup sources for a known metro", lockup.isNotEmpty())
 
-        // ...but every one of them is operator-launch-only.
+        // The federal BOP locator is automatable and covers every US contact.
+        val bop = lockup.firstOrNull { it.id == "bop_inmate_locator" }
+        assertNotNull("federal BOP source should resolve for a US locale", bop)
+        assertEquals(SourceKind.QUERY_TEMPLATE, bop!!.kind)
+        assertEquals(ResultFormat.BOP_JSON, bop.resultFormat)
         assertTrue(
-            "shipped catalog should have only MANUAL_LANDING lockup sources",
-            lockup.all { it.kind == SourceKind.MANUAL_LANDING }
+            "BOP fetch URL should query the JSON API with name slots",
+            bop.urlTemplate.contains("output=json") &&
+                bop.urlTemplate.contains("{first}") &&
+                bop.urlTemplate.contains("{last}")
         )
-        assertFalse(
-            "no automatable source should exist for the shipped catalog (see class doc)",
+
+        // The locale-specific gov rosters remain operator-launch-only.
+        val localRosters = lockup.filter { it.id != "bop_inmate_locator" }
+        assertTrue("expected county/state rosters alongside BOP", localRosters.isNotEmpty())
+        assertTrue(
+            "county/state rosters should stay MANUAL_LANDING",
+            localRosters.all { it.kind == SourceKind.MANUAL_LANDING }
+        )
+
+        assertTrue(
+            "a US contact should be automatable via the federal BOP path",
             catalog.hasAutomatableSourceFor("504", "123 Magazine St, New Orleans, LA 70130")
         )
     }

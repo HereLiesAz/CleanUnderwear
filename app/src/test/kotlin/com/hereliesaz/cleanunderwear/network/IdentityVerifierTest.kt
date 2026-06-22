@@ -113,4 +113,103 @@ class IdentityVerifierTest {
         val result = verifier.verifyIdentity(documentText, "Mary-Jane Watson")
         assertTrue(result.isMatch)
     }
+
+    // ---- verifyBopInmateJson (Federal BOP inmate-locator API) ----
+
+    private fun bopJson(vararg records: String): String =
+        """{"Captcha":"","Messages":[],"FormToken":"x","InmateLocator":[${records.joinToString(",")}]}"""
+
+    private fun inmate(
+        first: String,
+        last: String,
+        actRel: String = "",
+        facl: String = "USP ATLANTA",
+        projRel: String = "01/01/2030",
+    ) = """{"nameLast":"$last","nameFirst":"$first","nameMiddle":"A","sex":"Male",""" +
+        """"age":"45","inmateNum":"12345-678","faclName":"$facl",""" +
+        """"projRelDate":"$projRel","actRelDate":"$actRel"}"""
+
+    @Test
+    fun bop_currentInmateMatchingName_isMatchWithCustodySnippet() {
+        val json = bopJson(inmate(first = "JOHN", last = "SMITH"))
+        val result = verifier.verifyBopInmateJson(json, "John Smith")
+        assertTrue(result.isMatch)
+        assertTrue(result.snippet!!.contains("BOP custody"))
+        assertTrue(result.snippet!!.contains("USP ATLANTA"))
+    }
+
+    @Test
+    fun bop_namesAreLastThenFirstInJson_stillMatches() {
+        // Regression guard: the API emits nameLast before nameFirst with no
+        // whitespace between them, which the text-proximity matcher cannot see.
+        val json = bopJson(inmate(first = "JOHN", last = "SMITH"))
+        assertFalse(
+            "control: text proximity cannot match the compact JSON",
+            verifier.verifyIdentity(json, "John Smith").isMatch
+        )
+        assertTrue(verifier.verifyBopInmateJson(json, "John Smith").isMatch)
+    }
+
+    @Test
+    fun bop_releasedInmate_isNotMatched() {
+        // actRelDate is populated -> the person was released and must not flip
+        // the contact to INCARCERATED.
+        val json = bopJson(inmate(first = "JOHN", last = "SMITH", actRel = "06/01/2015"))
+        assertFalse(verifier.verifyBopInmateJson(json, "John Smith").isMatch)
+    }
+
+    @Test
+    fun bop_differentPerson_isNotMatched() {
+        val json = bopJson(inmate(first = "JANE", last = "DOE"))
+        assertFalse(verifier.verifyBopInmateJson(json, "John Smith").isMatch)
+    }
+
+    @Test
+    fun bop_emptyResultSet_isNotMatched() {
+        assertFalse(verifier.verifyBopInmateJson(bopJson(), "John Smith").isMatch)
+    }
+
+    @Test
+    fun bop_picksCurrentRecordAmongMixed() {
+        // A released "John Smith" and a different in-custody person — no match,
+        // because the only current inmate is someone else.
+        val json = bopJson(
+            inmate(first = "JOHN", last = "SMITH", actRel = "06/01/2015"),
+            inmate(first = "BOB", last = "JONES"),
+        )
+        assertFalse(verifier.verifyBopInmateJson(json, "John Smith").isMatch)
+
+        // Add a current John Smith and it matches.
+        val json2 = bopJson(
+            inmate(first = "JOHN", last = "SMITH", actRel = "06/01/2015"),
+            inmate(first = "JOHN", last = "SMITH", facl = "FCI BUTNER"),
+        )
+        val r = verifier.verifyBopInmateJson(json2, "John Smith")
+        assertTrue(r.isMatch)
+        assertTrue(r.snippet!!.contains("FCI BUTNER"))
+    }
+
+    @Test
+    fun bop_nicknameExpansion_matches() {
+        val agent = mockk<OnDeviceResearchAgent>(relaxed = true).also {
+            every { it.getNicknames(any<String>()) } returns listOf("William")
+        }
+        val v = IdentityVerifier(agent)
+        val json = bopJson(inmate(first = "WILLIAM", last = "SMITH"))
+        assertTrue(v.verifyBopInmateJson(json, "Bill Smith").isMatch)
+    }
+
+    @Test
+    fun bop_malformedJson_isCleanMissNotCrash() {
+        assertFalse(verifier.verifyBopInmateJson("<html>403 Forbidden</html>", "John Smith").isMatch)
+        assertFalse(verifier.verifyBopInmateJson("", "John Smith").isMatch)
+        assertFalse(verifier.verifyBopInmateJson("{truncated", "John Smith").isMatch)
+    }
+
+    @Test
+    fun bop_mononym_skips() {
+        val result = verifier.verifyBopInmateJson(bopJson(inmate("MADONNA", "X")), "Madonna")
+        assertFalse(result.isMatch)
+        assertTrue(result.skipped)
+    }
 }
