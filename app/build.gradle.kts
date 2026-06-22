@@ -15,28 +15,19 @@ val versionProps = Properties().apply {
     }
 }
 
-var currentVersionCode = versionProps.getProperty("versionBuild", "1").toInt()
-var currentVersionPatch = versionProps.getProperty("versionPatch", "0").toInt()
-
-// Automatically increment version values for builds
-val isBuilding = gradle.startParameter.taskNames.any {
-    val task = it.lowercase()
-    task.contains("assemble") || task.contains("bundle") || task.contains("install")
-}
-
-if (isBuilding) {
-    currentVersionCode++
-    currentVersionPatch++
-    versionProps.setProperty("versionBuild", currentVersionCode.toString())
-    versionProps.setProperty("versionPatch", currentVersionPatch.toString())
-    versionPropsFile.outputStream().use {
-        versionProps.store(it, "Auto-incremented by build")
-    }
-}
-
-val verMajor = versionProps.getProperty("versionMajor", "1")
-val verMinor = versionProps.getProperty("versionMinor", "0")
-val verPatch = versionProps.getProperty("versionPatch", "0")
+// version.properties is the single source of truth for the version. The build
+// reads it verbatim and never mutates it — bumping the version is a deliberate
+// edit to that file, not a side effect of compiling. (Previously the build
+// auto-incremented versionBuild/versionPatch and wrote them back, so the APK
+// version was always the file value + 1 and the committed file drifted on
+// every local build.)
+// Properties.load() strips leading but not trailing whitespace, so trim each
+// value — a stray trailing space in a hand-edited file would otherwise crash
+// versionBuild.toInt() or produce a malformed versionName like "1.0.5 ".
+val verMajor = versionProps.getProperty("versionMajor", "1").trim()
+val verMinor = versionProps.getProperty("versionMinor", "0").trim()
+val verPatch = versionProps.getProperty("versionPatch", "0").trim()
+val verBuild = versionProps.getProperty("versionBuild", "1").trim().toInt()
 val currentVersionName = "$verMajor.$verMinor.$verPatch"
 
 kotlin {
@@ -62,7 +53,7 @@ android {
         applicationId = "com.hereliesaz.cleanunderwear"
         minSdk = 26
         targetSdk = 37
-        versionCode = currentVersionCode
+        versionCode = verBuild
         versionName = currentVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
