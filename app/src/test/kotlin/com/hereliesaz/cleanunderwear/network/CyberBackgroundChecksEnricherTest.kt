@@ -27,6 +27,77 @@ class CyberBackgroundChecksEnricherTest {
         areaCode = areaCode,
     )
 
+    // ---- parseFindings: detail page captures middle name + DOB ----
+
+    @Test
+    fun parseFindings_detailPage_capturesMiddleNameAndDob() {
+        val detailHtml = """
+            <html><body>
+              <h1 class="full-name">John Alan Smith</h1>
+              <div class="current-address">100 Oak St, Austin, TX 78701</div>
+              <a href="tel:+15125550199" class="phone">(512) 555-0199</a>
+              <span class="dob">Age 45</span>
+            </body></html>
+        """.trimIndent()
+
+        val f = enricher.parseFindings(detailHtml)
+        assertNotNull(f)
+        assertEquals("John Alan Smith", f!!.name)
+        assertEquals("Alan", f.middleName)
+        assertTrue(f.dob!!.contains("45"))
+    }
+
+    @Test
+    fun parseFindings_blankPage_returnsNull() {
+        assertNull(enricher.parseFindings(""))
+    }
+
+    @Test
+    fun parseFindings_noResultsPage_doesNotAdoptHeaderAsName() {
+        // A "No Results Found" page has no result card, so root falls back to
+        // <body>. The generic h1/h2/h3 fallback must NOT fire there, otherwise
+        // the contact would be falsely renamed to the page header.
+        val noResults = """
+            <html><body>
+              <h1>No Results Found</h1>
+              <p>We couldn't find anyone matching your search.</p>
+            </body></html>
+        """.trimIndent()
+        assertNull(enricher.parseFindings(noResults))
+    }
+
+    @Test
+    fun parseFindings_cardWithPlainHeader_stillCapturesName() {
+        // Inside a real result card the generic header fallback is still allowed.
+        val cardHtml = """
+            <html><body>
+              <div class="person-card">
+                <h2>Jane Roe</h2>
+                <span class="phone">555-123-4567</span>
+              </div>
+            </body></html>
+        """.trimIndent()
+        val f = enricher.parseFindings(cardHtml)
+        assertNotNull(f)
+        assertEquals("Jane Roe", f!!.name)
+    }
+
+    @Test
+    fun merge_gapFillsMiddleNameAndDob_nonDestructively() {
+        val existing = target(displayName = "John Smith").copy(middleName = "Existing")
+        val findings = CyberBackgroundChecksEnricher.Findings(
+            name = "John Alan Smith",
+            address = null,
+            phone = null,
+            middleName = "Alan",
+            dob = "45"
+        )
+        val merged = enricher.merge(existing, findings)
+        // Existing middle name is preserved (non-destructive); DOB fills the gap.
+        assertEquals("Existing", merged.middleName)
+        assertEquals("45", merged.dateOfBirth)
+    }
+
     // ---- pickAllMissions ----
 
     @Test

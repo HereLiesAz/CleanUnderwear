@@ -139,20 +139,42 @@ class ScrapeTargetsUseCase @Inject constructor(
             var discoveredObitUrl: String? = null
             var verificationSnippet: String? = null
 
-            // Lockup loop. First confirmed match wins.
+            // Corroboration data captured during CBC enrichment, plus the set of
+            // records the user already rejected for this contact.
+            val corroboration = IdentityVerifier.Corroboration(
+                middleName = target.middleName,
+                dob = target.dateOfBirth,
+                area = target.areaCode ?: target.residenceInfo,
+                state = sourceCatalog.resolveLocale(target.areaCode, target.residenceInfo).state
+            )
+            val dismissedKeys = target.dismissedMatchKeys
+                ?.split(',')
+                ?.map { it.trim() }
+                ?.filter { it.isNotEmpty() }
+                ?.toSet()
+                ?: emptySet()
+
+            // Lockup loop. The first name match becomes a *possible* match for
+            // the user to confirm — a name hit (even corroborated) never auto-sets
+            // INCARCERATED on its own, because name alone cannot prove identity.
             if (lockupSources.isEmpty()) {
                 emitStep("no automated lockup source for area ${target.areaCode ?: "?"}")
             } else {
                 for (source in lockupSources) {
+                    // Sources without a stable record id (county mugshots, state DOC,
+                    // WEBVIEW) are dismissed by their evidence URL — skip a source the
+                    // user already rejected so it can't re-surface as a POSSIBLE_MATCH.
+                    val evidenceUrl = SourceUrlBuilder.buildEvidenceUrl(source, firstName, lastName)
+                    if (evidenceUrl in dismissedKeys) continue
                     emitStep("checking ${source.label}")
-                    val result = scrapeAgainstSource(source, firstName, lastName)
+                    val result = scrapeAgainstSource(source, firstName, lastName, corroboration, dismissedKeys)
                     if (result.skipped) break
                     if (result.isMatch) {
                         DiagnosticLogger.log(
-                            "MATCH: ${target.displayName} found via ${source.id}",
+                            "POSSIBLE MATCH: ${target.displayName} via ${source.id} (${result.basis ?: "name"})",
                             DiagnosticLogger.LogEntry.LogLevel.WARN
                         )
-                        newStatus = TargetStatus.INCARCERATED
+                        newStatus = TargetStatus.POSSIBLE_MATCH
                         discoveredLockupUrl = SourceUrlBuilder.buildEvidenceUrl(source, firstName, lastName)
                         verificationSnippet = result.snippet
                         break
@@ -214,7 +236,9 @@ class ScrapeTargetsUseCase @Inject constructor(
     private suspend fun scrapeAgainstSource(
         source: Source,
         first: String,
-        last: String
+        last: String,
+        corroboration: IdentityVerifier.Corroboration = IdentityVerifier.Corroboration(),
+        dismissedKeys: Set<String> = emptySet()
     ): IdentityVerifier.VerificationResult {
         val fetchUrl = try {
             SourceUrlBuilder.buildFetchUrl(source, first, last)
@@ -228,7 +252,7 @@ class ScrapeTargetsUseCase @Inject constructor(
         return when (source.render) {
             RenderMode.BASIC -> when {
                 source.resultFormat == ResultFormat.BOP_JSON ->
-                    basicScraper.scrapeBopInmate(fetchUrl, name)
+                    basicScraper.scrapeBopInmate(fetchUrl, name, corroboration, dismissedKeys)
                 source.method.uppercase() == "POST" -> {
                     val fields = SourceUrlBuilder.buildFormFields(source, first, last)
                     basicScraper.scrapePost(fetchUrl, fields, name)

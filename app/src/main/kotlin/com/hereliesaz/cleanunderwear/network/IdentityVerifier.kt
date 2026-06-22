@@ -14,9 +14,7 @@ import javax.inject.Singleton
  * "B" inside "Bob" on some unrelated booking page.
  */
 @Singleton
-class IdentityVerifier @Inject constructor(
-    private val researchAgent: OnDeviceResearchAgent
-) {
+class IdentityVerifier @Inject constructor() {
     fun verifyIdentity(documentText: String, targetName: String): VerificationResult {
         return when (val v = NameValidator.validate(targetName)) {
             is NameValidator.Result.Skip -> VerificationResult(
@@ -34,9 +32,11 @@ class IdentityVerifier @Inject constructor(
         firstName: String,
         lastName: String
     ): VerificationResult {
-        val firstNameCandidates = (listOf(firstName) + researchAgent.getNicknames(firstName))
+        // Nickname expansion was removed to tighten matching: only the exact
+        // first name is accepted, so a nickname like "Bill" no longer matches
+        // "William" and widens the candidate set.
+        val firstNameCandidates = listOf(firstName)
             .filter { NameValidator.isAcceptableToken(it) }
-            .distinct()
 
         val lastQ = Regex.escape(lastName)
         for (firstAlt in firstNameCandidates) {
@@ -72,7 +72,12 @@ class IdentityVerifier @Inject constructor(
      * must NOT flip a contact to INCARCERATED. Only a record with a blank actual
      * release date counts as a match.
      */
-    fun verifyBopInmateJson(jsonBody: String, targetName: String): VerificationResult {
+    fun verifyBopInmateJson(
+        jsonBody: String,
+        targetName: String,
+        corroboration: Corroboration = Corroboration(),
+        dismissedKeys: Set<String> = emptySet()
+    ): VerificationResult {
         val name = when (val v = NameValidator.validate(targetName)) {
             is NameValidator.Result.Skip -> return VerificationResult(
                 isMatch = false, snippet = null, skipped = true, skipReason = v.reason
@@ -90,10 +95,11 @@ class IdentityVerifier @Inject constructor(
             return VerificationResult(isMatch = false, snippet = null)
         } ?: return VerificationResult(isMatch = false, snippet = null)
 
-        val firstCandidates = (listOf(name.first) + researchAgent.getNicknames(name.first))
+        // Exact first name only — nickname expansion is deliberately not applied
+        // here, to keep the national BOP search from widening on common nicknames.
+        val firstCandidates = listOf(name.first)
             .filter { NameValidator.isAcceptableToken(it) }
             .map { it.lowercase() }
-            .distinct()
         val targetLast = name.last.lowercase()
 
         for (element in records) {
@@ -103,7 +109,10 @@ class IdentityVerifier @Inject constructor(
             val recLast = stringField(record, "nameLast")
             if (recFirst.isBlank() || recLast.isBlank()) continue
 
-            val firstMatch = tokensOf(recFirst).any { it in firstCandidates }
+            // Exact name match (not token-contains): a compound record first
+            // name like "JOHN-PAUL" must NOT match a contact "John".
+            val recFirstNorm = recFirst.lowercase().trim().replace(Regex("\\s+"), " ")
+            val firstMatch = recFirstNorm in firstCandidates
             val lastMatch = tokensOf(recLast).contains(targetLast)
             if (!firstMatch || !lastMatch) continue
 
@@ -111,16 +120,129 @@ class IdentityVerifier @Inject constructor(
             // counts. Blank/absent actRelDate == still in BOP custody.
             if (stringField(record, "actRelDate").isNotBlank()) continue
 
-            val facility = stringField(record, "faclName").ifBlank { "a federal facility" }
+            // Records the user already marked "not a match" must not resurface.
+            val inmateNum = stringField(record, "inmateNum")
+            if (inmateNum.isNotBlank() && inmateNum in dismissedKeys) continue
+
+            // Corroborate against enrichment data. A clear conflict (different
+            // middle name / age) means this same-name record is NOT our contact
+            // — skip it and keep scanning. This is what removes false positives.
+            val recMiddle = stringField(record, "nameMiddle")
+            val recAge = stringField(record, "age")
+            val corro = assessCorroboration(corroboration, recMiddle, recAge)
+            if (corro.conflict) continue
+
+            // Strictest gate (national BOP only): a name-only hit is never
+            // surfaced. The national database has many same-name records, so we
+            // require a *positive* corroborator — an agreeing middle name or age
+            // — before treating the record as a possible match.
+            if (!corro.corroborated) continue
+
+            // Strictest gate: facility-state agreement. The contact's resolved
+            // state must equal the facility's state. Either side unknown ⇒ we
+            // cannot establish agreement ⇒ skip (a false negative is preferred
+            // to a false positive here). NOTE: federal inmates are often held
+            // out-of-state, so this can suppress genuine matches by design.
+            val recFacl = stringField(record, "faclName")
+            val facilityState = BopFacilityCatalog.stateFor(recFacl)
+            val contactState = corroboration.state?.trim()?.takeIf { it.isNotBlank() }
+            if (facilityState == null || contactState == null ||
+                !facilityState.equals(contactState, ignoreCase = true)
+            ) {
+                continue
+            }
+
+            val facility = recFacl.ifBlank { "a federal facility" }
             val projRel = stringField(record, "projRelDate")
             val snippet = buildString {
-                append(recFirst.trim()).append(' ').append(recLast.trim())
-                append(" — in BOP custody at ").append(facility)
+                append(recFirst.trim())
+                if (recMiddle.isNotBlank()) append(' ').append(recMiddle.trim())
+                append(' ').append(recLast.trim())
+                if (recAge.isNotBlank()) append(", age ").append(recAge)
+                append(" — BOP custody at ").append(facility)
                 if (projRel.isNotBlank()) append(" (proj. release ").append(projRel).append(')')
+                if (inmateNum.isNotBlank()) append(" [#").append(inmateNum).append(']')
+                corroboration.area?.takeIf { it.isNotBlank() }?.let {
+                    append(". Contact area: ").append(it)
+                }
+                append(". Corroboration: ").append(corro.basis)
+                append(". Verify this is the right person before confirming.")
             }
-            return VerificationResult(isMatch = true, snippet = snippet)
+            return VerificationResult(
+                isMatch = true,
+                snippet = snippet,
+                matchKey = inmateNum.ifBlank { null },
+                basis = corro.basis
+            )
         }
         return VerificationResult(isMatch = false, snippet = null)
+    }
+
+    private data class CorroborationResult(
+        val conflict: Boolean,
+        val corroborated: Boolean,
+        val basis: String
+    )
+
+    /**
+     * Compares enrichment-sourced identity data against a candidate record.
+     * Returns `conflict = true` only on a *confident* disagreement (different
+     * middle-name initial, or ages differing by more than a year), which rejects
+     * the record. Agreement is reported in [CorroborationResult.basis] to drive
+     * the confidence shown in review; absent data is neither agreement nor
+     * conflict — the match simply stays "name only".
+     */
+    private fun assessCorroboration(
+        c: Corroboration,
+        recMiddle: String,
+        recAge: String
+    ): CorroborationResult {
+        val signals = mutableListOf<String>()
+
+        val cMid = c.middleName?.trim()?.lowercase()?.takeIf { it.isNotBlank() }
+        val rMid = recMiddle.trim().lowercase().takeIf { it.isNotBlank() }
+        if (cMid != null && rMid != null) {
+            if (cMid.first() != rMid.first()) {
+                return CorroborationResult(true, false, "middle-name conflict ($cMid ≠ $rMid)")
+            }
+            signals += "middle name"
+        }
+
+        val cAge = approxAge(c.dob)
+        val rAge = recAge.toIntOrNull()
+        if (cAge != null && rAge != null) {
+            if (kotlin.math.abs(cAge - rAge) > 1) {
+                return CorroborationResult(true, false, "age conflict ($cAge ≠ $rAge)")
+            }
+            signals += "age"
+        }
+
+        val basis = if (signals.isEmpty()) {
+            "name only (uncorroborated)"
+        } else {
+            signals.joinToString(" + ") + " corroborated"
+        }
+        return CorroborationResult(conflict = false, corroborated = signals.isNotEmpty(), basis = basis)
+    }
+
+    /**
+     * Best-effort age from a free-form DOB/age string: a bare 1–120 integer is
+     * treated as an age; otherwise a 4-digit birth year yields an approximate
+     * age. Returns null when nothing usable is present.
+     */
+    private fun approxAge(dob: String?): Int? {
+        val s = dob?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        s.toIntOrNull()?.let { if (it in 1..120) return it }
+        val year = Regex("(19|20)\\d{2}").find(s)?.value?.toIntOrNull()
+        if (year != null) {
+            val age = java.time.Year.now().value - year
+            if (age in 0..120) return age
+        }
+        // CBC's `.age` field is the literal "Age 45" — pull a bare number out so
+        // age corroboration isn't silently skipped. (Checked after the year rule
+        // so a 4-digit birth year is never misread as an age.)
+        Regex("\\b\\d{1,3}\\b").find(s)?.value?.toIntOrNull()?.let { if (it in 1..120) return it }
+        return null
     }
 
     /** Case-insensitively locate the `InmateLocator` array in the BOP payload. */
@@ -152,10 +274,41 @@ class IdentityVerifier @Inject constructor(
         val isMatch: Boolean,
         val snippet: String?,
         val skipped: Boolean = false,
-        val skipReason: String? = null
+        val skipReason: String? = null,
+        /**
+         * Stable identifier of the matched record (BOP inmate number) so the
+         * pipeline can remember a user-dismissed false positive and not
+         * resurface it. Null for the text-proximity path.
+         */
+        val matchKey: String? = null,
+        /**
+         * Human-readable corroboration basis for a match (e.g. "middle name +
+         * age corroborated" or "name only (uncorroborated)"). Drives the
+         * confidence shown in the review UI.
+         */
+        val basis: String? = null
     ) {
         companion object {
             fun fetchFailed() = VerificationResult(isMatch = false, snippet = null)
         }
     }
+
+    /**
+     * Identity data we can corroborate a same-name roster hit against, sourced
+     * from a contact's CyberBackgroundChecks enrichment. All optional — when a
+     * field is absent we simply can't use it (the match stays a low-confidence
+     * "name only" candidate); when present and it *conflicts*, the record is
+     * rejected outright, which is what kills the common-name false positives.
+     */
+    data class Corroboration(
+        val middleName: String? = null,
+        val dob: String? = null,
+        val area: String? = null,
+        /**
+         * The contact's resolved US state code (e.g. "GA"), from
+         * [SourceCatalog.resolveLocale]. Used by the national BOP path's
+         * facility-state agreement gate; null when geography can't be resolved.
+         */
+        val state: String? = null
+    )
 }

@@ -87,6 +87,9 @@ fun BrowserScreen(
     var pageReady by remember { mutableStateOf(false) }
     var automationRan by remember { mutableStateOf(false) }
     var paused by remember { mutableStateOf(false) }
+    // Increments on every page-finish. Drill-in missions (CBC) re-run their
+    // extraction script on each navigation, keyed off this counter.
+    var pageLoadCount by remember { mutableIntStateOf(0) }
     var webView: WebView? by remember { mutableStateOf(null) }
 
     val mission = missions[currentIndex]
@@ -106,6 +109,7 @@ fun BrowserScreen(
         pageReady = false
         automationRan = false
         paused = false
+        pageLoadCount = 0
         webView?.stopLoading()
         webView?.loadUrl(mission.initialUrl)
         DiagnosticLogger.log("BrowserScreen: loading mission ${currentIndex + 1}/${missions.size}: ${mission.initialUrl}")
@@ -115,14 +119,19 @@ fun BrowserScreen(
     // then auto-evaluate the extraction script. Browse-only missions
     // (autoExtract == false) skip this entirely — the user dismisses them
     // manually via the back arrow.
-    LaunchedEffect(currentIndex, pageReady, paused) {
+    //
+    // Keyed on pageLoadCount so drill-in missions (CBC) re-run after each
+    // navigation: the script walks the results list into the first result's
+    // detail page, dumping only once it arrives. Non-drill missions still
+    // extract exactly once (the automationRan guard).
+    LaunchedEffect(currentIndex, pageLoadCount, paused) {
         if (!mission.autoExtract) return@LaunchedEffect
-        if (pageReady && !automationRan && !paused) {
-            delay(1200L)
-            if (!automationRan && !paused) {
-                automationRan = true
-                webView?.evaluateJavascript(mission.extractionScript, null)
-            }
+        if (paused || !pageReady) return@LaunchedEffect
+        if (!mission.drillToFirstResult && automationRan) return@LaunchedEffect
+        delay(1200L)
+        if (!paused) {
+            automationRan = true
+            webView?.evaluateJavascript(mission.extractionScript, null)
         }
     }
 
@@ -222,6 +231,9 @@ fun BrowserScreen(
                         webViewClient = object : WebViewClient() {
                             override fun onPageFinished(view: WebView?, url: String?) {
                                 pageReady = true
+                                // Each navigation bumps the counter so drill-in
+                                // missions re-trigger extraction on the new page.
+                                pageLoadCount += 1
                                 DiagnosticLogger.log("BrowserScreen: loaded $url")
                             }
                         }

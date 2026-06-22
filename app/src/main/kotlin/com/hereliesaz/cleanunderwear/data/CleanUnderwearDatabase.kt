@@ -10,7 +10,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 /**
  * The physical manifestation of your localized surveillance state.
  */
-@Database(entities = [Target::class], version = 10, exportSchema = false)
+@Database(entities = [Target::class], version = 11, exportSchema = false)
 abstract class CleanUnderwearDatabase : RoomDatabase() {
     abstract fun targetDao(): TargetDao
 
@@ -176,6 +176,21 @@ abstract class CleanUnderwearDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Adds the corroboration + review columns: middle_name and date_of_birth
+         * (captured from CyberBackgroundChecks detail pages, used to corroborate
+         * a same-name roster hit) and dismissed_match_keys (record ids the user
+         * marked "not a match", so they don't resurface). All nullable; existing
+         * rows backfill to NULL.
+         */
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE targets ADD COLUMN middle_name TEXT")
+                database.execSQL("ALTER TABLE targets ADD COLUMN date_of_birth TEXT")
+                database.execSQL("ALTER TABLE targets ADD COLUMN dismissed_match_keys TEXT")
+            }
+        }
+
         fun getDatabase(context: Context): CleanUnderwearDatabase {
             return Instance ?: synchronized(this) {
                 Room.databaseBuilder(
@@ -186,7 +201,7 @@ abstract class CleanUnderwearDatabase : RoomDatabase() {
                 .addMigrations(
                     MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
                     MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
-                    MIGRATION_9_10
+                    MIGRATION_9_10, MIGRATION_10_11
                 )
                 .build()
                 .also { Instance = it }

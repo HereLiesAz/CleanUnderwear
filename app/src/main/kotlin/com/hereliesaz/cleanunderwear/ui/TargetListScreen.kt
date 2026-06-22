@@ -506,6 +506,7 @@ fun StatusBadge(status: TargetStatus) {
     val (color: Color, text: String) = when (status) {
         TargetStatus.MONITORING -> VerifiedGreen to "Monitoring"
         TargetStatus.UNVERIFIED -> UnverifiedAmber to "Unverified"
+        TargetStatus.POSSIBLE_MATCH -> Color(0xFFFF6D00) to "Review match"
         TargetStatus.INCARCERATED -> WarningRed to "Incarcerated"
         TargetStatus.DECEASED -> Color.Gray to "Deceased"
         TargetStatus.IGNORED -> Color.LightGray to "Archived"

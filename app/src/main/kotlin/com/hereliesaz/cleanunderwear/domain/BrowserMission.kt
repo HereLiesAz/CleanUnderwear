@@ -50,6 +50,14 @@ sealed class BrowserMission {
     open val autoExtract: Boolean = true
 
     /**
+     * When true, BrowserScreen re-runs [extractionScript] after each in-page
+     * navigation (rather than once), letting a script drill from a results
+     * list into the first result's detail page before dumping. See the CBC
+     * missions and DRILL_TO_FIRST_RESULT_SCRIPT.
+     */
+    open val drillToFirstResult: Boolean = false
+
+    /**
      * Browse-only mission: open [initialUrl] in the in-app WebView, no
      * automation, no extraction. Used for the doxray identity-correlation
      * chips that must run through the user's WebView session (CBC and
@@ -65,21 +73,29 @@ sealed class BrowserMission {
     data class CbcByPhone(val phone: String) : BrowserMission() {
         override val initialUrl: String = CyberBackgroundChecks.getPhoneSearchUrl(phone)
         override val label: String = "Identity lookup · phone"
+        override val drillToFirstResult: Boolean = true
+        override val extractionScript: String = DRILL_TO_FIRST_RESULT_SCRIPT
     }
 
     data class CbcByEmail(val email: String) : BrowserMission() {
         override val initialUrl: String = CyberBackgroundChecks.getEmailSearchUrl(email)
         override val label: String = "Identity lookup · email"
+        override val drillToFirstResult: Boolean = true
+        override val extractionScript: String = DRILL_TO_FIRST_RESULT_SCRIPT
     }
 
     data class CbcByAddress(val address: String) : BrowserMission() {
         override val initialUrl: String = CyberBackgroundChecks.getAddressSearchUrl(address)
         override val label: String = "Identity lookup · address"
+        override val drillToFirstResult: Boolean = true
+        override val extractionScript: String = DRILL_TO_FIRST_RESULT_SCRIPT
     }
 
     data class CbcByName(val displayName: String) : BrowserMission() {
         override val initialUrl: String = CyberBackgroundChecks.getNameSearchUrl(displayName)
         override val label: String = "Identity lookup · name"
+        override val drillToFirstResult: Boolean = true
+        override val extractionScript: String = DRILL_TO_FIRST_RESULT_SCRIPT
     }
 
     object HarvestFacebookFriends : BrowserMission() {
@@ -88,6 +104,37 @@ sealed class BrowserMission {
         override val extractionScript: String = FACEBOOK_HARVEST_SCRIPT
     }
 }
+
+/**
+ * CyberBackgroundChecks drill-in script. A CBC search lands on a results LIST;
+ * the rich identity data (middle name, DOB) lives on the first result's DETAIL
+ * page. This script is list-vs-detail aware and BrowserScreen re-runs it after
+ * each navigation (see [BrowserMission.drillToFirstResult]):
+ *   - On the list (a result card with a link is present) → navigate to the
+ *     first result's detail page.
+ *   - On the detail page (or when there are no results) → dump the DOM.
+ * Selectors are deliberately permissive — CBC markup drifts, and the
+ * downstream verify-before-merge rejects a wrong-person card anyway.
+ */
+private val DRILL_TO_FIRST_RESULT_SCRIPT = """
+(function(){
+  var firstLink = document.querySelector(
+    '.person-card a[href], .result-card a[href], .search-result a[href],' +
+    ' [data-result-card] a[href], a[href*="/person"], a[href*="/people"]'
+  );
+  var hasList = document.querySelector(
+    '.person-card, .result-card, .search-result, [data-result-card]'
+  );
+  if (hasList && firstLink && firstLink.href) {
+    // On a results list: drill into the first result. The navigation triggers
+    // another page-finish, on which this script runs again and dumps the detail.
+    window.location.href = firstLink.href;
+    return;
+  }
+  // Detail page (or no results): hand the DOM back for parsing.
+  window.HTMLOUT.dump(document.documentElement.outerHTML);
+})();
+""".trimIndent()
 
 /**
  * Pagination + dump script for mbasic.facebook.com/me/friends. Walks every

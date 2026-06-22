@@ -89,31 +89,55 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
         if (html.isBlank()) return null
         val doc = Jsoup.parse(html)
 
-        // The first result card. CSS classes drift across CBC redesigns,
-        // so try a handful of plausible roots. If none match, the page
-        // isn't a result page (CBC's /notfound chrome would otherwise feed
-        // garbage to mergeAll via the generic h2/h3 fallback we used to
-        // apply when the card lookup missed).
-        val firstCard: Element = doc.selectFirst(
+        // Two page shapes feed this: a results LIST (a "first result card") and,
+        // after drilling into the first result, a person DETAIL page (where the
+        // middle name / DOB live). Prefer a result card; if none, fall back to
+        // the document body for the detail page. CSS classes drift across CBC
+        // redesigns, so the selectors stay deliberately permissive — and
+        // verify-before-merge ([enrich]) guards against adopting a wrong card.
+        val root: Element = doc.selectFirst(
             ".person-card, .result-card, .search-result, .card-person, [data-result-card]"
-        ) ?: return null
+        ) ?: doc.body() ?: return null
 
-        val name = firstCard
-            .selectFirst(".name, h1.full-name, .full-name, .person-name, h2, h3")
+        // Generic h1/h2/h3 are only trustworthy inside a real result card. When
+        // root fell back to doc.body() (e.g. a "No Results Found" page) those
+        // headers are page chrome — capturing them would falsely rename the
+        // contact, and because CBC lookups are unique-id the bad name can pass
+        // verify-before-merge. So restrict the generic fallback to non-body root.
+        val name = (root.selectFirst(".name, h1.full-name, .full-name, .person-name")
+            ?: if (root !== doc.body()) root.selectFirst("h1, h2, h3") else null)
             ?.text()?.trim()?.takeIf { it.isNotBlank() }
 
-        val address = firstCard
+        val address = root
             .selectFirst(".address, .current-address, .person-address, .city-state")
             ?.text()?.trim()?.takeIf { it.isNotBlank() }
 
-        val phone = firstCard
+        val phone = root
             .selectFirst(".phone, .phone-number, [href^=tel]")
             ?.text()?.trim()
             ?.filter { it.isDigit() || it == '+' }
             ?.takeIf { it.length >= 10 }
 
-        if (name == null && address == null && phone == null) return null
-        return Findings(name = name, address = address, phone = phone)
+        // DOB / age — a dedicated field if present, else "Age N" / "DOB ..." text.
+        val dob = root
+            .selectFirst(".dob, .date-of-birth, .born, .age, [data-dob]")
+            ?.text()?.trim()?.takeIf { it.isNotBlank() }
+            ?: Regex("(?:Age|DOB|Born)[:\\s]+([0-9/]{1,10}|\\d{1,3})", RegexOption.IGNORE_CASE)
+                .find(root.text())?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
+
+        // Middle name is the token(s) between first and last of the parsed name.
+        val middleName = name?.let { middleFrom(it) }
+
+        if (name == null && address == null && phone == null && dob == null) return null
+        return Findings(name = name, address = address, phone = phone, middleName = middleName, dob = dob)
+    }
+
+    /** Middle token(s) of a full name ("John A. Smith" → "A."), or null. */
+    private fun middleFrom(fullName: String): String? {
+        val tokens = NameValidator.tokenize(fullName)
+        return if (tokens.size >= 3) {
+            tokens.subList(1, tokens.size - 1).joinToString(" ").takeIf { it.isNotBlank() }
+        } else null
     }
 
     /**
@@ -130,7 +154,9 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
             displayName = if (nameWasPlaceholder && findings.name != null) findings.name else target.displayName,
             phoneNumber = target.phoneNumber ?: findings.phone,
             residenceInfo = target.residenceInfo ?: findings.address,
-            areaCode = target.areaCode ?: findings.phone?.takeLast(10)?.take(3)
+            areaCode = target.areaCode ?: findings.phone?.takeLast(10)?.take(3),
+            middleName = target.middleName ?: findings.middleName,
+            dateOfBirth = target.dateOfBirth ?: findings.dob
         )
         DiagnosticLogger.log("CYBG merge: ${target.displayName} → ${merged.displayName} (phone=${merged.phoneNumber != null}, addr=${merged.residenceInfo != null})")
         return merged
@@ -155,6 +181,8 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
             phoneNumber = target.phoneNumber ?: consensus.phone,
             residenceInfo = target.residenceInfo ?: consensus.address,
             areaCode = target.areaCode ?: consensus.phone?.filter { it.isDigit() }?.takeLast(10)?.take(3),
+            middleName = target.middleName ?: consensus.middleName,
+            dateOfBirth = target.dateOfBirth ?: consensus.dob,
         )
         DiagnosticLogger.log("CYBG mergeAll: ${target.displayName} → ${merged.displayName} (${results.size} sources)")
         return merged
@@ -199,6 +227,8 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
                 phoneNumber = target.phoneNumber ?: consensus.phone,
                 residenceInfo = target.residenceInfo ?: consensus.address,
                 areaCode = target.areaCode ?: consensus.phone?.filter { it.isDigit() }?.takeLast(10)?.take(3),
+                middleName = target.middleName ?: consensus.middleName,
+                dateOfBirth = target.dateOfBirth ?: consensus.dob,
                 enrichmentProvenance = prov
             )
             DiagnosticLogger.log("CYBG enrich(verified): ${target.displayName} → ${merged.displayName} [$prov]")
@@ -250,7 +280,9 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
         return Findings(
             name = consensus { it.name },
             address = consensus { it.address },
-            phone = consensus { it.phone }
+            phone = consensus { it.phone },
+            middleName = consensus { it.middleName },
+            dob = consensus { it.dob }
         )
     }
 
@@ -337,7 +369,13 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
         return BLOCK_MARKERS.any { it in lower }
     }
 
-    data class Findings(val name: String?, val address: String?, val phone: String?)
+    data class Findings(
+        val name: String?,
+        val address: String?,
+        val phone: String?,
+        val middleName: String? = null,
+        val dob: String? = null
+    )
 
     private companion object {
         private val BLOCK_MARKERS = listOf(
