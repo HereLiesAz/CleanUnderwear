@@ -87,8 +87,7 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          export BUILD_NUMBER=$(git rev-list --count HEAD)
-          ./gradlew assembleRelease -PversionBuild=$BUILD_NUMBER \
+          ./gradlew assembleRelease \
             -Pandroid.injected.signing.store.file=$(pwd)/app/keystore.jks \
             -Pandroid.injected.signing.store.password=$KEYSTORE_PASSWORD \
             -Pandroid.injected.signing.key.alias=$KEY_ALIAS \
@@ -98,21 +97,19 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          export BUILD_NUMBER=$(git rev-list --count HEAD)
-
+          # version.properties is the single source of truth — no git-derived
+          # patch/build numbers. VERSION_NAME mirrors the APK's internal
+          # versionName.versionCode (e.g. 1.0.5.16).
           MAJOR=$(grep 'versionMajor=' version.properties | cut -d'=' -f2 | tr -d '\r ')
           MINOR=$(grep 'versionMinor=' version.properties | cut -d'=' -f2 | tr -d '\r ')
+          PATCH=$(grep 'versionPatch=' version.properties | cut -d'=' -f2 | tr -d '\r ')
+          BUILD=$(grep 'versionBuild=' version.properties | cut -d'=' -f2 | tr -d '\r ')
 
-          # Calculate patch from commits since last minor bump
-          MINOR_COMMIT=$(git blame -L '/versionMinor=/',+1 version.properties | awk '{print $1}' | tr -d '^')
-          if [ -n "$MINOR_COMMIT" ]; then
-            PATCH=$(git rev-list --count $MINOR_COMMIT..HEAD)
-          else
-            PATCH=$(grep 'versionPatch=' version.properties | cut -d'=' -f2 | tr -d '\r ')
-          fi
-
-          VERSION_NAME="${MAJOR}.${MINOR}.${PATCH}.${BUILD_NUMBER}"
+          VERSION_NAME="${MAJOR}.${MINOR}.${PATCH}.${BUILD}"
           TAG_NAME="latest-release-v${MAJOR}.${MINOR}"
+
+          # Dynamic app name from settings.gradle.kts
+          APP_NAME=$(grep 'rootProject.name' settings.gradle.kts | sed -E "s/.*=.*[\"'](.*)[\"']/\1/" || echo "App")
 
           # Locate built APK
           APK_ORIGINAL=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
@@ -122,7 +119,7 @@ jobs:
             exit 1
           fi
 
-          TARGET_NAME="GraffitiXR-${VERSION_NAME}-release.apk"
+          TARGET_NAME="${APP_NAME}-${VERSION_NAME}-release.apk"
           mv "$APK_ORIGINAL" "$TARGET_NAME"
 
           git config user.name "github-actions[bot]"

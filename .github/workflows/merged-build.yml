@@ -45,10 +45,9 @@ jobs:
         id: gradle-build
         run: |
           set +e
-          export BUILD_NUMBER=$(git rev-list --count HEAD)
 
-          # Build the APK
-          ./gradlew assembleDebug -PversionBuild=$BUILD_NUMBER --build-cache > build.log 2>&1
+          # Build the APK (version comes from version.properties, not the build)
+          ./gradlew assembleDebug --build-cache > build.log 2>&1
 
           EXIT_CODE=$?
           echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
@@ -99,14 +98,14 @@ jobs:
         if: success() && github.event_name == 'push'
         id: release_vars
         run: |
-          export BUILD_NUMBER=$(git rev-list --count HEAD)
-
-          # Extract version info from properties file
+          # version.properties is the single source of truth. VERSION_NAME
+          # mirrors the APK's internal versionName.versionCode (e.g. 1.0.5.16).
           MAJOR=$(grep 'versionMajor=' version.properties | cut -d'=' -f2 | tr -d '\r ' || echo "1")
           MINOR=$(grep 'versionMinor=' version.properties | cut -d'=' -f2 | tr -d '\r ' || echo "0")
           PATCH=$(grep 'versionPatch=' version.properties | cut -d'=' -f2 | tr -d '\r ' || echo "0")
+          BUILD=$(grep 'versionBuild=' version.properties | cut -d'=' -f2 | tr -d '\r ' || echo "1")
 
-          VERSION_NAME="$MAJOR.$MINOR.$PATCH.$BUILD_NUMBER"
+          VERSION_NAME="$MAJOR.$MINOR.$PATCH.$BUILD"
 
           TAG_NAME="latest-debug-v${MAJOR}.${MINOR}"
 
