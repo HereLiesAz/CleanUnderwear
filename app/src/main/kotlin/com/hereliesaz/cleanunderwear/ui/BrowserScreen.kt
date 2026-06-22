@@ -5,14 +5,19 @@ import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -29,7 +34,9 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.hereliesaz.aznavrail.AzButton
@@ -176,10 +183,13 @@ fun BrowserScreen(
                 .padding(paddingValues),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            AndroidView(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f),
+                    .weight(1f)
+            ) {
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
                 factory = { context ->
                     val cookies = CookieManager.getInstance()
                     cookies.setAcceptCookie(true)
@@ -222,6 +232,40 @@ fun BrowserScreen(
                     view
                 }
             )
+
+                // Darkening filter. While an auto-extract mission is loading or
+                // running its extraction, scrim the page and swallow every touch
+                // so the user cannot perturb the automation mid-flight. The
+                // scrim lifts the instant the mission pauses for required
+                // interaction (captcha / login) — see [paused] — handing the
+                // live page back to the user. Browse-only missions are never
+                // darkened.
+                val darkened = mission.autoExtract && !paused
+                if (darkened) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.75f))
+                            .pointerInput(Unit) {
+                                awaitPointerEventScope {
+                                    while (true) {
+                                        awaitPointerEvent().changes.forEach { it.consume() }
+                                    }
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = if (!pageReady) "Loading…" else "Working — please don't touch the screen",
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            }
 
             if (paused) {
                 Column(
@@ -267,25 +311,12 @@ fun BrowserScreen(
                         )
                     }
                 }
-            } else if (mission.autoExtract) {
-                AzButton(
-                    text = if (!pageReady) "Loading…" else "Auto-extracting…",
-                    onClick = {
-                        // Manual fallback: re-fire the extraction in case the
-                        // settle delay raced the page. No-op while running.
-                        if (pageReady && !automationRan) {
-                            automationRan = true
-                            webView?.evaluateJavascript(mission.extractionScript, null)
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    shape = AzButtonShape.RECTANGLE
-                )
             }
-            // Browse-only missions show no bottom button — the user dismisses
-            // via the up-arrow in the top bar when they're done reading.
+            // During an auto-extract mission the darkening filter over the
+            // WebView is the sole status surface ("Loading…" / "Working…") and
+            // also blocks interference — there is no bottom button to tap, by
+            // design. Browse-only missions show no bottom button either; the
+            // user dismisses via the up-arrow in the top bar when done reading.
         }
     }
 }
