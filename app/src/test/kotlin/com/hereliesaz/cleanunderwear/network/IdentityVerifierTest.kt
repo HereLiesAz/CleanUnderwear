@@ -270,6 +270,32 @@ class IdentityVerifierTest {
     }
 
     @Test
+    fun bop_ageFromAgeLabel_corroborated() {
+        // CBC's `.age` field yields the literal "Age 45"; corroboration must read
+        // the number out of it rather than silently skipping age.
+        val json = bopJson(inmate(first = "JOHN", last = "SMITH", age = "45"))
+        val result = verifier.verifyBopInmateJson(
+            json, "John Smith",
+            IdentityVerifier.Corroboration(dob = "Age 45")
+        )
+        assertTrue(result.isMatch)
+        assertTrue(result.basis!!.contains("age"))
+    }
+
+    @Test
+    fun bop_ageFromBirthYear_corroborated() {
+        // A 4-digit birth year resolves to roughly the record's age.
+        val thisYear = java.time.Year.now().value
+        val json = bopJson(inmate(first = "JOHN", last = "SMITH", age = (thisYear - 1980).toString()))
+        val result = verifier.verifyBopInmateJson(
+            json, "John Smith",
+            IdentityVerifier.Corroboration(dob = "1980")
+        )
+        assertTrue(result.isMatch)
+        assertTrue(result.basis!!.contains("age"))
+    }
+
+    @Test
     fun bop_uncorroborated_isStillMatchButFlaggedNameOnly() {
         val json = bopJson(inmate(first = "JOHN", last = "SMITH"))
         val result = verifier.verifyBopInmateJson(json, "John Smith")

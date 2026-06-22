@@ -99,8 +99,13 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
             ".person-card, .result-card, .search-result, .card-person, [data-result-card]"
         ) ?: doc.body() ?: return null
 
-        val name = root
-            .selectFirst(".name, h1.full-name, .full-name, .person-name, h1, h2, h3")
+        // Generic h1/h2/h3 are only trustworthy inside a real result card. When
+        // root fell back to doc.body() (e.g. a "No Results Found" page) those
+        // headers are page chrome — capturing them would falsely rename the
+        // contact, and because CBC lookups are unique-id the bad name can pass
+        // verify-before-merge. So restrict the generic fallback to non-body root.
+        val name = (root.selectFirst(".name, h1.full-name, .full-name, .person-name")
+            ?: if (root !== doc.body()) root.selectFirst("h1, h2, h3") else null)
             ?.text()?.trim()?.takeIf { it.isNotBlank() }
 
         val address = root

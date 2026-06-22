@@ -38,9 +38,10 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
     val searchQuery by viewModel.searchQuery.collectAsState()
     var isSearchOverlayVisible by remember { mutableStateOf(false) }
 
-    // The active/selected rail item is rendered white so it stands out from
-    // the inactive items (which use their default content color).
-    val activeColor = Color.White
+    // The active/selected rail item stands out from the inactive items. White
+    // reads well on the dark rail (the default theme); in light theme it would
+    // be invisible, so fall back to the primary color there.
+    val activeColor = if (isDarkTheme) Color.White else MaterialTheme.colorScheme.primary
     val surfaceColor = MaterialTheme.colorScheme.surface
     val backgroundColor = MaterialTheme.colorScheme.background
 

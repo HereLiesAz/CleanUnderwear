@@ -214,6 +214,10 @@ class IdentityVerifier @Inject constructor(
             val age = java.time.Year.now().value - year
             if (age in 0..120) return age
         }
+        // CBC's `.age` field is the literal "Age 45" — pull a bare number out so
+        // age corroboration isn't silently skipped. (Checked after the year rule
+        // so a 4-digit birth year is never misread as an age.)
+        Regex("\\b\\d{1,3}\\b").find(s)?.value?.toIntOrNull()?.let { if (it in 1..120) return it }
         return null
     }
 

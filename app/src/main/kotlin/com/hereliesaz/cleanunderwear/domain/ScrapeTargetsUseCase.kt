@@ -160,6 +160,11 @@ class ScrapeTargetsUseCase @Inject constructor(
                 emitStep("no automated lockup source for area ${target.areaCode ?: "?"}")
             } else {
                 for (source in lockupSources) {
+                    // Sources without a stable record id (county mugshots, state DOC,
+                    // WEBVIEW) are dismissed by their evidence URL — skip a source the
+                    // user already rejected so it can't re-surface as a POSSIBLE_MATCH.
+                    val evidenceUrl = SourceUrlBuilder.buildEvidenceUrl(source, firstName, lastName)
+                    if (evidenceUrl in dismissedKeys) continue
                     emitStep("checking ${source.label}")
                     val result = scrapeAgainstSource(source, firstName, lastName, corroboration, dismissedKeys)
                     if (result.skipped) break

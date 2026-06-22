@@ -53,6 +53,36 @@ class CyberBackgroundChecksEnricherTest {
     }
 
     @Test
+    fun parseFindings_noResultsPage_doesNotAdoptHeaderAsName() {
+        // A "No Results Found" page has no result card, so root falls back to
+        // <body>. The generic h1/h2/h3 fallback must NOT fire there, otherwise
+        // the contact would be falsely renamed to the page header.
+        val noResults = """
+            <html><body>
+              <h1>No Results Found</h1>
+              <p>We couldn't find anyone matching your search.</p>
+            </body></html>
+        """.trimIndent()
+        assertNull(enricher.parseFindings(noResults))
+    }
+
+    @Test
+    fun parseFindings_cardWithPlainHeader_stillCapturesName() {
+        // Inside a real result card the generic header fallback is still allowed.
+        val cardHtml = """
+            <html><body>
+              <div class="person-card">
+                <h2>Jane Roe</h2>
+                <span class="phone">555-123-4567</span>
+              </div>
+            </body></html>
+        """.trimIndent()
+        val f = enricher.parseFindings(cardHtml)
+        assertNotNull(f)
+        assertEquals("Jane Roe", f!!.name)
+    }
+
+    @Test
     fun merge_gapFillsMiddleNameAndDob_nonDestructively() {
         val existing = target(displayName = "John Smith").copy(middleName = "Existing")
         val findings = CyberBackgroundChecksEnricher.Findings(

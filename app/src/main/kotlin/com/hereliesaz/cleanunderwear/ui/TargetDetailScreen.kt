@@ -175,7 +175,11 @@ fun TargetDetailScreen(
                             AzButton(
                                 text = "Not a match",
                                 onClick = {
+                                    // Non-BOP sources carry no inmate number, so the
+                                    // snippet has no [#id]; fall back to the evidence URL
+                                    // (the deterministic lockupUrl) so the dismissal sticks.
                                     val key = extractInmateKey(target.lastVerificationSnippet)
+                                        ?: target.lockupUrl
                                     val dismissed = target.dismissedMatchKeys
                                         ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
                                         ?: emptyList()
