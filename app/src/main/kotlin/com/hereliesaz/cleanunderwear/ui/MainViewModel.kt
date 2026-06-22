@@ -108,7 +108,7 @@ class MainViewModel @Inject constructor(
     private val _pendingEnrichmentFilter = MutableStateFlow<Boolean?>(null)
     val pendingEnrichmentFilter: StateFlow<Boolean?> = _pendingEnrichmentFilter
 
-    private val _isDarkTheme = MutableStateFlow(prefs.getBoolean("dark_theme", false))
+    private val _isDarkTheme = MutableStateFlow(prefs.getBoolean("dark_theme", true))
     val isDarkTheme: StateFlow<Boolean> = _isDarkTheme
     
     private val _showDiagnosticLog = MutableStateFlow(prefs.getBoolean("show_diagnostic_log", false))

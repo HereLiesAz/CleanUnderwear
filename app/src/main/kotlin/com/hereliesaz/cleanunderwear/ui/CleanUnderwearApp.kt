@@ -38,7 +38,9 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
     val searchQuery by viewModel.searchQuery.collectAsState()
     var isSearchOverlayVisible by remember { mutableStateOf(false) }
 
-    val activeColor = MaterialTheme.colorScheme.primary
+    // The active/selected rail item is rendered white so it stands out from
+    // the inactive items (which use their default content color).
+    val activeColor = Color.White
     val surfaceColor = MaterialTheme.colorScheme.surface
     val backgroundColor = MaterialTheme.colorScheme.background
 
@@ -76,7 +78,6 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
             azRailItem(
                 id = "search",
                 text = "Search",
-                content = "Search",
                 onClick = { isSearchOverlayVisible = !isSearchOverlayVisible }
             )
 
@@ -84,42 +85,40 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                 id = "registry",
                 text = "Registry",
                 route = "targetList",
-                content = "Registry",
                 info = "View the complete surveillance list."
             )
 
             azRailHostItem(
                 id = "intelligence_ops",
-                text = "Operations",
-                content = "Operations"
+                text = "Operations"
             )
 
             azRailSubItem(
                 id = "ingest",
                 hostId = "intelligence_ops",
                 text = "Entry",
-                content = "Entry",
+                shape = AzButtonShape.NONE,
                 onClick = { viewModel.setShowManualEntryDialog(true) }
             )
             azRailSubItem(
                 id = "harvest",
                 hostId = "intelligence_ops",
                 text = "Harvest",
-                content = "Harvest",
+                shape = AzButtonShape.NONE,
                 onClick = { viewModel.sweepContacts() }
             )
             azRailSubItem(
                 id = "update",
                 hostId = "intelligence_ops",
                 text = "Update",
-                content = "Update",
+                shape = AzButtonShape.NONE,
                 onClick = { viewModel.triggerManualInterrogation() }
             )
             azRailSubItem(
                 id = "resolve",
                 hostId = "intelligence_ops",
                 text = "Resolve",
-                content = "Resolve",
+                shape = AzButtonShape.NONE,
                 onClick = { viewModel.resolveUnverifiedBatch() }
             )
 
@@ -135,28 +134,27 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
 
             azRailHostItem(
                 id = "sort_host",
-                text = "Sort",
-                content = "Sort"
+                text = "Sort"
             )
             azRailSubItem(
                 id = "sort_name",
                 hostId = "sort_host",
                 text = "By Name",
-                content = "Name",
+                shape = AzButtonShape.NONE,
                 onClick = { viewModel.setSortOrder(MainViewModel.SortOrder.NAME) }
             )
             azRailSubItem(
                 id = "sort_status",
                 hostId = "sort_host",
                 text = "By Status",
-                content = "Status",
+                shape = AzButtonShape.NONE,
                 onClick = { viewModel.setSortOrder(MainViewModel.SortOrder.STATUS) }
             )
             azRailSubItem(
                 id = "sort_date",
                 hostId = "sort_host",
                 text = "By Date",
-                content = "Date",
+                shape = AzButtonShape.NONE,
                 onClick = { viewModel.setSortOrder(MainViewModel.SortOrder.DATE) }
             )
 
@@ -165,8 +163,7 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
             azRailItem(
                 id = "settings",
                 text = "Settings",
-                route = "settings",
-                content = "Settings"
+                route = "settings"
             )
             
             azMenuToggle(
