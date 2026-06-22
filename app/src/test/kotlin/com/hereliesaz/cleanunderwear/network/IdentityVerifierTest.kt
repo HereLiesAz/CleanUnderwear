@@ -119,12 +119,13 @@ class IdentityVerifierTest {
         last: String,
         actRel: String = "",
         facl: String = "USP ATLANTA",
+        faclCode: String = "",
         projRel: String = "01/01/2030",
         mid: String = "A",
         age: String = "45",
         inmateNum: String = "12345-678",
     ) = """{"nameLast":"$last","nameFirst":"$first","nameMiddle":"$mid","sex":"Male",""" +
-        """"age":"$age","inmateNum":"$inmateNum","faclName":"$facl",""" +
+        """"age":"$age","inmateNum":"$inmateNum","faclName":"$facl","faclCode":"$faclCode",""" +
         """"projRelDate":"$projRel","actRelDate":"$actRel"}"""
 
     /**
@@ -319,6 +320,15 @@ class IdentityVerifierTest {
         val json = bopJson(inmate(first = "JOHN", last = "SMITH"))
         val result = verifier.verifyBopInmateJson(json, "John Smith", corro(state = "CA"))
         assertFalse(result.isMatch)
+    }
+
+    @Test
+    fun bop_resolvesViaFacilityCode_whenNameUnparseable() {
+        // A stable faclCode resolves the facility state even when faclName is
+        // garbage — the format-robust path.
+        val json = bopJson(inmate(first = "JOHN", last = "SMITH", facl = "???", faclCode = "ATL"))
+        val result = verifier.verifyBopInmateJson(json, "John Smith", corro(state = "GA"))
+        assertTrue(result.isMatch)
     }
 
     @Test
