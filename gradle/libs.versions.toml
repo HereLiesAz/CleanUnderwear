@@ -23,7 +23,7 @@ hiltWork = "1.3.0"
 litert = "2.17.0"
 litert-ops = "2.16.1"
 appcompat = "1.7.1"
-aznavrail = "9.13"
+aznavrail = "10.13"
 paging = "3.5.0"
 
 [libraries]
