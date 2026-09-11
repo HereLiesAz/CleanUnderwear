@@ -8,6 +8,10 @@
 name: Labeler
 on: [pull_request]
 
+# Least-privilege default token; jobs needing more declare their own permissions block.
+permissions:
+  contents: read
+
 jobs:
   label:
 
@@ -17,10 +21,8 @@ jobs:
       pull-requests: write
 
     steps:
-    - uses: actions/checkout@v4
-      env:
-        FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-    - uses: actions/labeler@v5
+    - uses: actions/checkout@v7
+    - uses: actions/labeler@v7
       with:
-        repo-token: "${{ secrets.GITHUB_TOKEN }}"
+        repo-token: "${{ secrets.GH_TOKEN }}"
         sync-labels: false
