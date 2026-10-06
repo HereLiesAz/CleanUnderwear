@@ -1,0 +1,19 @@
+# CleanUnderwear: built, signed and published by HereLiesAz/workflows
+# (.github/workflows/android-play-release.yml): Google Play on the shared tracks.
+# This file is the trigger contract; the central sync replaces it with a tracker.
+name: Android Play Release
+permissions: {}
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "gradle/**"
+      - "*.gradle.kts"
+      - "gradle.properties"
+  workflow_dispatch:
+jobs:
+  hand-off:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "CleanUnderwear Android Play Release runs centrally in HereLiesAz/workflows."
