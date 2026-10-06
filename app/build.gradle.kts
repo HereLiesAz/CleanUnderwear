@@ -29,6 +29,11 @@ val verMinor = versionProps.getProperty("versionMinor", "0").trim()
 val verPatch = versionProps.getProperty("versionPatch", "0").trim()
 val verBuild = versionProps.getProperty("versionBuild", "1").trim().toInt()
 val currentVersionName = "$verMajor.$verMinor.$verPatch"
+// The central release workflows (HereLiesAz/workflows) rewrite version.properties
+// on the runner and also pass -PversionCodeOverride / -PversionName; honour those
+// when present so the uploaded build carries exactly the code Play expects.
+val releaseVersionCode = (findProperty("versionCodeOverride") as String?)?.trim()?.toIntOrNull() ?: verBuild
+val releaseVersionName = (findProperty("versionName") as String?)?.trim()?.takeIf { it.isNotEmpty() } ?: currentVersionName
 
 kotlin {
     jvmToolchain(21)
@@ -53,8 +58,8 @@ android {
         applicationId = "com.hereliesaz.cleanunderwear"
         minSdk = 26
         targetSdk = 37
-        versionCode = verBuild
-        versionName = currentVersionName
+        versionCode = releaseVersionCode
+        versionName = releaseVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
