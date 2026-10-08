@@ -56,7 +56,17 @@ object CyberBackgroundChecks {
         if (parts.isEmpty()) return "$BASE_URL/address"
 
         val zipRegex = Regex("^\\d{5}(-\\d{4})?$")
-        fun isState(w: String) = w.length == 2 && w.all { it.isLetter() }
+        // Only a genuine USPS state/territory code may be interpreted as a state.
+        // Arbitrary two-letter suffixes such as "St" and "Dr" are street types.
+        val stateCodes = setOf(
+            "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL",
+            "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME",
+            "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH",
+            "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI",
+            "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI",
+            "WY", "PR"
+        )
+        fun isState(w: String) = w.uppercase() in stateCodes
 
         // Peel a trailing ZIP — its own part ("…, 70130") or the last word of
         // the last part ("LA 70130").
@@ -71,7 +81,10 @@ object CyberBackgroundChecks {
 
         // Peel a trailing 2-letter STATE the same way.
         var state = ""
-        if (parts.isNotEmpty()) {
+        // A single component starting with a house number is a street-only
+        // address, even when its suffix ("Ct", "Hi", "In") matches a state code.
+        val streetOnly = parts.size == 1 && parts[0].firstOrNull()?.isDigit() == true
+        if (parts.isNotEmpty() && !streetOnly) {
             val words = parts.last().split(Regex("\\s+")).filter { it.isNotBlank() }
             when {
                 words.size == 1 && isState(words[0]) -> {
