@@ -117,6 +117,22 @@ class CyberBackgroundChecksTest {
     }
 
     @Test
+    fun address_streetOnlyWithStateLikeSuffix_isNotAState() {
+        assertEquals(
+            "https://www.cyberbackgroundchecks.com/address/123-oak-ct",
+            CyberBackgroundChecks.getAddressSearchUrl("123 Oak Ct")
+        )
+    }
+
+    @Test
+    fun address_cityWithValidStateCodeStillParses() {
+        assertEquals(
+            "https://www.cyberbackgroundchecks.com/address/hartford/ct",
+            CyberBackgroundChecks.getAddressSearchUrl("Hartford, CT")
+        )
+    }
+
+    @Test
     fun address_fullStreetAddressStateAndZipAsSeparateParts() {
         assertEquals(
             "https://www.cyberbackgroundchecks.com/address/123-main-st/new-orleans/la",
