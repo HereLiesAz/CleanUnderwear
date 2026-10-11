@@ -421,7 +421,7 @@ fun TargetDetailScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Identity correlation — face recognition, reverse image search,
+            // Identity verification — face recognition, reverse image search,
             // and name-based OSINT services ported from the doxray project.
             // All entries are MANUAL_LANDING: face/image services need a
             // photo upload the Registry doesn't carry, and the name-based
@@ -438,7 +438,13 @@ fun TargetDetailScreen(
                 val needsLast = source.urlTemplate.contains("{last}")
                 (!needsFirst || first.isNotBlank()) && (!needsLast || last.isNotBlank())
             }
-            if (identitySources.isNotEmpty()) {
+            // Verification only: shown when a records match exists to confirm
+            // or reject (a roster candidate, or a status set from a roster or
+            // obituary hit), never on a contact with nothing to verify.
+            val hasMatchToVerify = target.status == TargetStatus.POSSIBLE_MATCH ||
+                target.status == TargetStatus.INCARCERATED ||
+                target.status == TargetStatus.DECEASED
+            if (hasMatchToVerify && identitySources.isNotEmpty()) {
                 Text(
                     text = "Verify Identity (rule out false matches)",
                     style = MaterialTheme.typography.labelMedium,
