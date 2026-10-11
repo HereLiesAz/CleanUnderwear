@@ -29,6 +29,14 @@ object SourceUrlBuilder {
         return source.formFields.mapValues { (_, value) -> fillSlots(value, first, last, encode = false) }
     }
 
+    /** Fills a raw body template; values are JSON-escaped when [json] is true. */
+    fun buildBody(source: Source, first: String, last: String): String? {
+        val template = source.bodyTemplate ?: return null
+        val json = source.contentType?.contains("json", ignoreCase = true) == true
+        fun esc(s: String) = if (json) s.replace("\\", "\\\\").replace("\"", "\\\"") else URLEncoder.encode(s, "UTF-8")
+        return template.replace("{first}", esc(first)).replace("{last}", esc(last))
+    }
+
     private fun fillSlots(template: String, first: String, last: String, encode: Boolean = true): String {
         val firstSlot = if (encode) URLEncoder.encode(first, "UTF-8") else first
         val lastSlot = if (encode) URLEncoder.encode(last, "UTF-8") else last

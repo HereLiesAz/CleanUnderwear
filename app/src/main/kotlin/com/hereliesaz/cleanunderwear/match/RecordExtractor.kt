@@ -33,8 +33,12 @@ object RecordExtractor {
         // misread middle name would wrongly reject the record.
         val forward = Regex("(?i)\\b$firstQ\\b((?:\\s+[A-Za-z][A-Za-z.'-]*){0,2}?)\\s+\\b$lastQ\\b")
         val inverted = Regex("(?i)\\b$lastQ\\b\\s*,\\s*\\b$firstQ\\b()")
+        // Roster tables often print "SMITH JOHN" in adjacent columns with no comma.
+        // Too ambiguous in prose, so only for custody rosters.
+        val columns = Regex("(?i)\\b$lastQ\\s+$firstQ\\b()")
 
-        val hits = (forward.findAll(text) + inverted.findAll(text))
+        val hits = (forward.findAll(text) + inverted.findAll(text) +
+            (if (kind == EventKind.CUSTODY) columns.findAll(text) else emptySequence()))
             .sortedBy { it.range.first }
             .toList()
         val out = mutableListOf<CandidateRecord>()
@@ -59,7 +63,7 @@ object RecordExtractor {
                 lastName = lastName,
                 middleName = middleOf(hit.groupValues.getOrNull(1)),
                 age = age(after) ?: if (birthYear != null && deathYear != null) deathYear - birthYear else null,
-                birthYear = birthYear ?: bornYear(window),
+                birthYear = birthYear ?: bornYear(window) ?: if (kind == EventKind.CUSTODY) rosterBirthYear(after) else null,
                 city = place?.city,
                 state = place?.state,
                 relatives = if (kind == EventKind.DEATH) survivors(after, lastName) else emptyList(),
@@ -106,6 +110,24 @@ object RecordExtractor {
         val b = m.groupValues[1].toInt()
         val d = m.groupValues[2].toInt()
         return if (d >= b && d - b <= 120) b to d else null to null
+    }
+
+    private val BIRTH_LABEL = Regex("(?i)\\bbirth\\s*(?:year|date)?\\s*:?\\s*(?:\\d{1,2}/\\d{1,2}/)?((?:19|20)\\d{2})\\b")
+    private val SLASH_DATE = Regex("\\b\\d{1,2}/\\d{1,2}/((?:19|20)\\d{2})\\b")
+    private val BARE_YEAR = Regex("^[\\s|,;:-]*((?:19|20)\\d{2})\\b")
+
+    /**
+     * A roster's DOB or birth-year column right after the name ("SMITH JOHN
+     * 1/22/1965", "Smith, John Edward 1977"). Only dates at least 14 years old
+     * count, so a booking date in the same row is not read as a birth date.
+     */
+    internal fun rosterBirthYear(after: String, currentYear: Int = java.time.Year.now().value): Int? {
+        val head = after.take(120)
+        val year = BIRTH_LABEL.find(head)?.groupValues?.get(1)?.toIntOrNull()
+            ?: SLASH_DATE.find(head)?.groupValues?.get(1)?.toIntOrNull()
+            ?: BARE_YEAR.find(after.substringAfter(' ', after).take(30))?.groupValues?.get(1)?.toIntOrNull()
+            ?: BARE_YEAR.find(head)?.groupValues?.get(1)?.toIntOrNull()
+        return year?.takeIf { it in 1900..(currentYear - 14) }
     }
 
     internal fun bornYear(window: String): Int? =

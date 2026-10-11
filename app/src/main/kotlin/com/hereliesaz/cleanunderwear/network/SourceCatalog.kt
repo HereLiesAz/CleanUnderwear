@@ -28,8 +28,12 @@ enum class RenderMode { BASIC, WEBVIEW }
  *    (and custody-filtered) via [IdentityVerifier.verifyBopInmateJson].
  *  - [NEWS_RSS]: a news-search RSS feed; each item is classified as a death or
  *    arrest report and read by [NewsFeed]. One source yields both kinds.
+ *  - [JSON_RECORDS]: a JSON API returning person records; fields are mapped by
+ *    [Source.jsonFields] and read by [StructuredRecords].
+ *  - [HTML_TABLE]: a results table; columns are mapped by header text via
+ *    [Source.tableColumns] and read by [StructuredRecords].
  */
-enum class ResultFormat { HTML, BOP_JSON, NEWS_RSS }
+enum class ResultFormat { HTML, BOP_JSON, NEWS_RSS, JSON_RECORDS, HTML_TABLE }
 
 enum class SourceScope { COUNTY, STATE, AREA_CODE, MULTI_STATE }
 
@@ -52,7 +56,44 @@ data class Source(
     val evidenceUrlTemplate: String,
     val scope: SourceScope,
     val appliesToAreaCodes: Set<String>,
-    val coversCountry: String?
+    val coversCountry: String?,
+    /**
+     * For [ResultFormat.JSON_RECORDS]: dot paths to the record list and to each
+     * field within a record. Keys: records, first, last, middle, age, dob,
+     * status, id, facility, city, state.
+     */
+    val jsonFields: Map<String, String> = emptyMap(),
+    /**
+     * For [ResultFormat.HTML_TABLE]: field key → regex matched against column
+     * header text. Same keys as [jsonFields] minus records; "name" holds a
+     * combined name ("LAST, FIRST MIDDLE" or "First Middle Last").
+     */
+    val tableColumns: Map<String, String> = emptyMap(),
+    /**
+     * A URL to GET, with the search's cookies, after the search request, for
+     * sites that store the search in the session and serve results separately.
+     */
+    val resultsUrl: String? = null,
+    /** Force HTTP/1.1; some state servers drop HTTP/2 clients. */
+    val http1: Boolean = false,
+    /**
+     * A page to GET before the search, for forms that need a per-session token
+     * (ASP.NET __VIEWSTATE, CSRF). Its hidden inputs and cookies are sent with
+     * the search request; [formFields] override them.
+     */
+    val tokenPage: String? = null,
+    /** Regex (case-insensitive) on a record's text or status marking a person no longer held. */
+    val releasedPattern: String? = null,
+    /**
+     * Regex (case-insensitive) a record's text or status must match to count as
+     * in custody, for sources that list everyone and mark the held ("Secure").
+     */
+    val custodyPattern: String? = null,
+    /** Extra request headers. */
+    val headers: Map<String, String> = emptyMap(),
+    /** Raw request body template (e.g. JSON) with {first}/{last}; sent instead of form fields. */
+    val bodyTemplate: String? = null,
+    val contentType: String? = null
 )
 
 /**
@@ -92,7 +133,17 @@ class SourceCatalog @Inject constructor(
         val evidence_url_template: String? = null,
         val scope: String? = null,
         val applies_to_area_codes: List<String>? = null,
-        val covers_country: String? = null
+        val covers_country: String? = null,
+        val json_fields: Map<String, String>? = null,
+        val table_columns: Map<String, String>? = null,
+        val results_url: String? = null,
+        val http1: Boolean? = null,
+        val token_page: String? = null,
+        val released_pattern: String? = null,
+        val custody_pattern: String? = null,
+        val headers: Map<String, String>? = null,
+        val body_template: String? = null,
+        val content_type: String? = null
     )
 
     private data class CountyEntry(
@@ -237,6 +288,14 @@ class SourceCatalog @Inject constructor(
     fun lockupSourcesFor(areaCode: String?, residenceInfo: String? = null): List<Source> =
         sourcesForLocale(resolveLocale(areaCode, residenceInfo), SourceCategory.LOCKUP)
 
+    /**
+     * State-level lockup sources for [state] (a 2-letter code). Used to add the
+     * prison search of every state a contact is tied to, not only the one
+     * their locale resolves to (a Texas number on a Louisiana address checks both).
+     */
+    fun stateLockupSources(state: String): List<Source> =
+        stateLockup[state.uppercase()].orEmpty().filter { it.scope == SourceScope.STATE }
+
     fun obituarySourcesFor(areaCode: String?, residenceInfo: String? = null): List<Source> =
         sourcesForLocale(resolveLocale(areaCode, residenceInfo), SourceCategory.OBITUARY)
 
@@ -369,7 +428,17 @@ class SourceCatalog @Inject constructor(
             evidenceUrlTemplate = evidenceUrl,
             scope = scope,
             appliesToAreaCodes = applies_to_area_codes.orEmpty().toSet(),
-            coversCountry = covers_country
+            coversCountry = covers_country,
+            jsonFields = json_fields.orEmpty(),
+            tableColumns = table_columns.orEmpty(),
+            resultsUrl = results_url,
+            http1 = http1 == true,
+            tokenPage = token_page,
+            releasedPattern = released_pattern,
+            custodyPattern = custody_pattern,
+            headers = headers.orEmpty(),
+            bodyTemplate = body_template,
+            contentType = content_type
         )
     }
 
@@ -390,6 +459,8 @@ class SourceCatalog @Inject constructor(
         "HTML" -> ResultFormat.HTML
         "BOP_JSON" -> ResultFormat.BOP_JSON
         "NEWS_RSS" -> ResultFormat.NEWS_RSS
+        "JSON_RECORDS" -> ResultFormat.JSON_RECORDS
+        "HTML_TABLE" -> ResultFormat.HTML_TABLE
         else -> null
     }
 

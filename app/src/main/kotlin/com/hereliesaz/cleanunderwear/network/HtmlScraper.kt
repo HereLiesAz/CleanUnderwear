@@ -4,6 +4,8 @@ import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.jsoup.Jsoup
@@ -83,28 +85,59 @@ class HtmlScraper @Inject constructor(
         }
 
     /**
-     * GETs (or POSTs, with [formFields]) a server-rendered page and returns its
-     * visible text, or null on any failure. Used by the candidate pipeline,
-     * which extracts and verifies records itself rather than taking the first
-     * name hit.
+     * Runs one catalog search as configured on [source] and returns the raw
+     * response body, or null on failure.
+     *
+     * With [Source.tokenPage], first GETs that page and carries its hidden
+     * form inputs (ASP.NET __VIEWSTATE, CSRF tokens) into the search;
+     * [formFields] take precedence over the harvested inputs. Cookies persist
+     * across the token page, the search and any redirect.
+     * A [Source.bodyTemplate] is sent as the raw body instead of form fields.
      */
-    suspend fun fetchText(url: String, formFields: Map<String, String>? = null): String? =
-        withContext(Dispatchers.IO) {
-            try {
-                val builder = Request.Builder()
-                    .url(sanitize(url))
-                    .header("User-Agent", DESKTOP_UA)
-                if (formFields != null) {
-                    builder.post(FormBody.Builder().apply { formFields.forEach { (k, v) -> add(k, v) } }.build())
-                }
-                val response = okHttpClient.newCall(builder.build()).execute()
-                if (!response.isSuccessful) return@withContext null
-                Jsoup.parse(response.body.string()).text()
-            } catch (e: Exception) {
-                Log.e("HtmlScraper", "Failed to fetch text $url", e)
-                null
+    suspend fun fetchSource(
+        source: Source,
+        url: String,
+        formFields: Map<String, String>,
+        body: String?
+    ): String? = withContext(Dispatchers.IO) {
+        try {
+            // A fresh cookie jar per search: several state locators set a session
+            // cookie on the POST and require it on the redirected results GET.
+            val client = okHttpClient.newBuilder().cookieJar(SessionCookieJar()).apply {
+                if (source.http1) protocols(listOf(okhttp3.Protocol.HTTP_1_1))
+            }.build()
+            val fields = LinkedHashMap<String, String>()
+            source.tokenPage?.let { page ->
+                val tokenResponse = client.newCall(
+                    Request.Builder().url(sanitize(page)).header("User-Agent", DESKTOP_UA).build()
+                ).execute()
+                val doc = Jsoup.parse(tokenResponse.body.string())
+                doc.select("input[type=hidden][name]").forEach { fields[it.attr("name")] = it.attr("value") }
             }
+            fields.putAll(formFields)
+
+            val builder = Request.Builder().url(sanitize(url)).header("User-Agent", DESKTOP_UA)
+            source.headers.forEach { (k, v) -> builder.header(k, v) }
+            when {
+                body != null -> builder.post(
+                    body.toRequestBody((source.contentType ?: "application/json").toMediaTypeOrNull())
+                )
+                source.method.uppercase() == "POST" ->
+                    builder.post(FormBody.Builder().apply { fields.forEach { (k, v) -> add(k, v) } }.build())
+            }
+            val response = client.newCall(builder.build()).execute()
+            if (!response.isSuccessful) return@withContext null
+            val searchBody = response.body.string()
+            val resultsUrl = source.resultsUrl ?: return@withContext searchBody
+            val results = client.newCall(
+                Request.Builder().url(sanitize(resultsUrl)).header("User-Agent", DESKTOP_UA).build()
+            ).execute()
+            if (results.isSuccessful) results.body.string() else null
+        } catch (e: Exception) {
+            Log.e("HtmlScraper", "Failed source fetch ${source.id}", e)
+            null
         }
+    }
 
     /** GETs [url] and returns the raw response body (for XML/JSON feeds), or null on failure. */
     suspend fun fetchBody(url: String): String? = withContext(Dispatchers.IO) {
@@ -132,5 +165,19 @@ class HtmlScraper @Inject constructor(
     companion object {
         private const val DESKTOP_UA =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    }
+
+    /** In-memory cookies for one search; discarded with it. */
+    private class SessionCookieJar : okhttp3.CookieJar {
+        private val cookies = mutableListOf<okhttp3.Cookie>()
+
+        @Synchronized
+        override fun saveFromResponse(url: okhttp3.HttpUrl, cookies: List<okhttp3.Cookie>) {
+            this.cookies.removeAll { old -> cookies.any { it.name == old.name && it.domain == old.domain } }
+            this.cookies.addAll(cookies)
+        }
+
+        @Synchronized
+        override fun loadForRequest(url: okhttp3.HttpUrl): List<okhttp3.Cookie> = cookies.filter { it.matches(url) }
     }
 }
