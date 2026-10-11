@@ -31,6 +31,7 @@ Apple iCloud has no first-party web surface that survives bot detection on Andro
 
 ### 2. Monitoring Engine
 - **The Daily Check**: Every morning at 9:00 AM (battery-not-low + network constraints), the app runs the pipeline (dedupe → triage → scrape) over the Registry.
+- **National news search**: Every US and Canadian contact is searched daily on Google News (`"First Last"` plus obituary/arrest terms). Google News indexes local papers, TV stations, Legacy.com, Dignity Memorial and funeral-home obituaries, so this one query reaches reports no single roster carries. `NewsFeed` classifies each headline as a death or arrest report (arrests older than a year are skipped), reads lifespan and place from obituary headlines ("Name Obituary (1961 - 2026) - Kenner, LA") or the funeral home's town, and treats each publisher as its own source.
 - **Geographic source routing**: `SourceCatalog` maps a contact's ZIP/area code to county → state → multi-state records sources (`sources.json`), most-specific first.
 - **Honest automatability**: The daily check can *automatically* confirm a status change only for sources it can fetch and verify on its own. The **Federal BOP Inmate Locator** is fully automated: every US contact is checked against the Bureau of Prisons public JSON API (`bop.gov/PublicInfo/execute/inmateloc`), and a match is only recorded when the located inmate's name corroborates *and* the record shows current custody (released inmates, which the API also returns, are ignored). Most county/state rosters and obituary aggregators bot-block non-browser requests or expose no name-queryable deep link, so they ship as **operator-launch-only** (`MANUAL_LANDING`) and are surfaced as in-app source chips you open in your own browser session. When a contact's locale has **no** automatable source, triage marks it `NO_AUTOMATED_SOURCE` and the profile says so plainly — the absence of an alert is never silently treated as "all clear." Adding a genuinely automatable source (a `QUERY_TEMPLATE`/`ROSTER_PAGE` entry, or a `multi_state_obituary` with a server-rendered result page) to `sources.json` turns its auto-path on with no code change.
 - **Legitimate-identity fetching**: scraping never uses an obvious bot browser. `WebViewScraper` (JS-heavy pages) drives the WebView with the device's **default User-Agent** and the shared `CookieManager` session — i.e. the user's real browser identity and any login/captcha they already solved — rather than a spoofed Chrome string. `WebViewIdentityInterceptor` does the same for the OkHttp paths that target bot-defended hosts. `HtmlScraper` handles plain server-rendered HTML and JSON APIs (the BOP path uses a structured, custody-aware JSON verifier rather than text matching). All run only against automatable (non-`MANUAL_LANDING`) sources.
@@ -38,7 +39,8 @@ Apple iCloud has no first-party web surface that survives bot detection on Andro
 
 - **Automatic match verification**: Every automatable source is queried, and every record naming the contact becomes a candidate. `RecordExtractor` reads middle name, age, birth year, city/state and obituary survivors from the text around each mention; `MatchVerifier` scores each candidate (log-odds: a bare name starts far below even, agreeing age, middle name, city, survivors who are also your contacts, and other sources reporting the same event each add evidence). A confidently different age or middle name rejects the record outright.
   - **Strong** (≥ 80%): status `POSSIBLE_MATCH`, notified, with confidence and reasons shown for review.
-  - **Weak**: status `WEAK_MATCH`, shown in the app flagged weak, never notified.
+  - **Weak**: status `WEAK_MATCH`, shown in the app flagged weak, never notified. Needs at least one agreeing fact beyond the name (age, middle initial or city); a name-only or name-and-state hit is dropped as insufficient, so a common name doesn't sit on a permanent weak match.
+  - Another source counts as corroboration only when its record agrees on a fact beyond the name (birth year or city), so two obituaries for two different people with the same name never vouch for each other.
   - Nothing is set to Incarcerated or Deceased without your confirmation, and a status you confirmed is never overwritten by a later check.
 
 ### 3. Decentralized Persistence (Note Injection)
@@ -58,6 +60,7 @@ The app uses your phone's native address book as its "external memory":
 | Data | Sent to | When |
 | --- | --- | --- |
 | Contact name, plus city/ZIP/area code where known | Public inmate, arrest and obituary sources (e.g. the Federal Bureau of Prisons inmate locator) | Daily check, for automatable sources |
+| Contact name | Google News search | Daily check, every US and Canadian contact |
 | Contact name, phone, email or address | CyberBackgroundChecks | When you run Resolve: every contact missing an age, and every unverified contact |
 | Contact name | Sites you open from a profile's source chips | Only when you tap a chip; it opens in your browser |
 | Your session on Facebook, WhatsApp, Instagram, Google Contacts | That service only | Only when you start an import from Settings |

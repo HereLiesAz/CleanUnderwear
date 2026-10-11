@@ -12,7 +12,14 @@ enum class MatchTier {
     WEAK,
 
     /** A field confidently disagrees (age, middle name): not this person. */
-    REJECTED
+    REJECTED,
+
+    /**
+     * Nothing beyond the name (or name and state) to go on. Not a match that
+     * failed verification but no evidence at all; dropped, never shown, so a
+     * common name doesn't sit on a permanent "weak match".
+     */
+    INSUFFICIENT
 }
 
 data class Verification(
@@ -63,7 +70,9 @@ class MatchVerifier(
         /** Per additional independent source reporting the same event kind. */
         val corroboratingSource: Double = 3.0,
         val corroborationCap: Double = 6.0,
-        val strongThreshold: Double = 0.80
+        val strongThreshold: Double = 0.80,
+        /** Below this a candidate is [MatchTier.INSUFFICIENT]: name-only or name-and-state. */
+        val weakFloor: Double = 0.05
     )
 
     fun verify(
@@ -88,7 +97,11 @@ class MatchVerifier(
             reasons += "Also reported by ${others.size} other source${if (others.size == 1) "" else "s"}"
         }
         val p = probability(bits)
-        val tier = if (p >= config.strongThreshold) MatchTier.STRONG else MatchTier.WEAK
+        val tier = when {
+            p >= config.strongThreshold -> MatchTier.STRONG
+            p >= config.weakFloor -> MatchTier.WEAK
+            else -> MatchTier.INSUFFICIENT
+        }
         return Verification(candidate, tier, p, reasons, others)
     }
 
@@ -150,17 +163,33 @@ class MatchVerifier(
 
     /**
      * Verifies every candidate, counts cross-source agreement per event kind,
-     * and returns the survivors best-first. Rejected candidates are dropped.
+     * and returns the survivors best-first. Rejected and insufficient
+     * candidates are dropped; cross-source agreement can lift an insufficient
+     * one, so they are dropped only after it is counted.
      */
     fun verifyAll(contact: ContactProfile, candidates: List<CandidateRecord>): List<Verification> {
         val firstPass = candidates.map { verify(contact, it) }
             .filter { it.tier != MatchTier.REJECTED }
-        val sourcesByKind = firstPass.groupBy { it.candidate.kind }
-            .mapValues { (_, v) -> v.map { it.candidate.sourceId }.distinct() }
         return firstPass.map { v ->
-            val others = sourcesByKind[v.candidate.kind].orEmpty()
-            if (others.size > 1) verify(contact, v.candidate, others) else v
-        }.sortedByDescending { it.confidence }
+            // Another source corroborates only if its record describes the same
+            // event about plausibly the same person: same kind, and agreeing on a
+            // fact beyond the name. Two name-only obituaries for two John Smiths
+            // must not vouch for each other.
+            val others = firstPass
+                .filter { it !== v && it.candidate.kind == v.candidate.kind }
+                .filter { sameEvent(v.candidate, it.candidate) }
+                .map { it.candidate.sourceId }
+                .distinct()
+            if (others.isNotEmpty()) verify(contact, v.candidate, others) else v
+        }.filter { it.tier != MatchTier.INSUFFICIENT }.sortedByDescending { it.confidence }
+    }
+
+    private fun sameEvent(a: CandidateRecord, b: CandidateRecord): Boolean {
+        val aBirth = a.birthYear ?: a.age?.let { currentYear - it }
+        val bBirth = b.birthYear ?: b.age?.let { currentYear - it }
+        val birthAgrees = aBirth != null && bBirth != null && abs(aBirth - bBirth) <= config.ageTolerance + 1
+        val cityAgrees = a.city != null && a.city.equals(b.city, ignoreCase = true)
+        return birthAgrees || cityAgrees
     }
 
     private fun rejected(candidate: CandidateRecord, reasons: List<String>) =

@@ -115,9 +115,23 @@ object RecordExtractor {
         "\\b(?:of|from|in)\\s+([A-Z][a-zA-Z.'-]+(?:\\s+[A-Z][a-zA-Z.'-]+){0,2})(?:\\s*,\\s*([A-Z][a-zA-Z.]+(?:\\s+[A-Z][a-z]+)?))?"
     )
 
-    /** First "of/from/in City[, State]" after the name; state as a 2-letter code. */
+    // Obituary headlines: "John Smith Obituary (1925 - 2026) - San Antonio, TX - Publisher".
+    private val DASH_PLACE = Regex(
+        "\\s[-–—]\\s([A-Z][a-zA-Z.'-]+(?:\\s+[A-Z][a-zA-Z.'-]+){0,2}),\\s*([A-Z]{2})\\b"
+    )
+
+    /**
+     * The first place named after the name: "of/from/in City[, State]" or a
+     * headline's " - City, ST". State as a 2-letter code.
+     */
     internal fun place(after: String): Place? {
-        val m = OF_PLACE.find(after.take(300)) ?: return null
+        val head = after.take(300)
+        val dash = DASH_PLACE.find(head)?.takeIf { UsStates.code(it.groupValues[2]) != null }
+        val of = OF_PLACE.find(head)
+        if (dash != null && (of == null || dash.range.first < of.range.first)) {
+            return Place(city = dash.groupValues[1].trim(), state = UsStates.code(dash.groupValues[2]))
+        }
+        val m = of ?: return null
         val name = m.groupValues[1].trim()
         if (name.lowercase() in NOT_PLACE) return null
         val stateOnly = UsStates.code(name)

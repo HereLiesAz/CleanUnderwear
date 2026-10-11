@@ -14,6 +14,7 @@ import com.hereliesaz.cleanunderwear.match.UsStates
 import com.hereliesaz.cleanunderwear.network.HtmlScraper
 import com.hereliesaz.cleanunderwear.network.IdentityVerifier
 import com.hereliesaz.cleanunderwear.network.NameValidator
+import com.hereliesaz.cleanunderwear.network.NewsFeed
 import com.hereliesaz.cleanunderwear.network.RenderMode
 import com.hereliesaz.cleanunderwear.network.ResultFormat
 import com.hereliesaz.cleanunderwear.network.Source
@@ -295,6 +296,12 @@ class ScrapeTargetsUseCase @Inject constructor(
         val evidenceUrl = SourceUrlBuilder.buildEvidenceUrl(source, first, last)
         val text = when (source.render) {
             RenderMode.BASIC -> when {
+                source.resultFormat == ResultFormat.NEWS_RSS -> {
+                    // A news feed reports deaths and arrests alike; NewsFeed
+                    // classifies each item, so [kind] is not used here.
+                    val xml = basicScraper.fetchBody(fetchUrl) ?: return emptyList()
+                    return NewsFeed.candidates(xml, first, last, source.id, source.label)
+                }
                 source.resultFormat == ResultFormat.BOP_JSON -> {
                     val r = basicScraper.scrapeBopInmate(fetchUrl, "$first $last", corroboration, dismissedKeys)
                     return listOfNotNull(r.record?.copy(evidenceUrl = evidenceUrl))

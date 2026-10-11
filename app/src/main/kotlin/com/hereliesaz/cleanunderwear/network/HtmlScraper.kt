@@ -106,6 +106,18 @@ class HtmlScraper @Inject constructor(
             }
         }
 
+    /** GETs [url] and returns the raw response body (for XML/JSON feeds), or null on failure. */
+    suspend fun fetchBody(url: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder().url(sanitize(url)).header("User-Agent", DESKTOP_UA).build()
+            val response = okHttpClient.newCall(request).execute()
+            if (response.isSuccessful) response.body.string() else null
+        } catch (e: Exception) {
+            Log.e("HtmlScraper", "Failed to fetch body $url", e)
+            null
+        }
+    }
+
     private fun fetch(request: Request, targetName: String): IdentityVerifier.VerificationResult {
         val response = okHttpClient.newCall(request).execute()
         if (!response.isSuccessful) return IdentityVerifier.VerificationResult.fetchFailed()

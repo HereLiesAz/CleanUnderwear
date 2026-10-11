@@ -70,12 +70,14 @@ class SourceCatalogAutomatabilityTest {
 
     @Test
     fun obituarySources_readFromMultiStateObituaryBlock() {
-        // The multi_state_obituary block is now wired (was hardcoded empty). It
-        // ships empty, so obituary lookups resolve to nothing until a source is
-        // curated. This guards the wiring: a malformed/renamed JSON key would
-        // make this throw or change behavior.
+        // The multi_state_obituary block carries the national news search, which
+        // reports deaths and arrests alike. This guards the wiring: a malformed or
+        // renamed JSON key would make this throw or come back empty.
         val catalog = loadCatalog()
         val obit = catalog.obituarySourcesFor("504", "123 Magazine St, New Orleans, LA 70130")
-        assertTrue("obituary sources ship empty until a per-name source is curated", obit.isEmpty())
+        assertTrue(
+            "a US contact should resolve to the automated news-search source",
+            obit.any { it.resultFormat == ResultFormat.NEWS_RSS && it.kind != SourceKind.MANUAL_LANDING }
+        )
     }
 }

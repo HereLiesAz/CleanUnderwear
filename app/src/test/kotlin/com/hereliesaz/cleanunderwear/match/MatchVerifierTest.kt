@@ -21,10 +21,21 @@ class MatchVerifierTest {
     private val contact = ContactProfile("John", "Smith", age = 45, city = "Metairie", state = "LA")
 
     @Test
-    fun `name only is weak`() {
-        val v = verifier.verify(ContactProfile("John", "Smith"), rec())
-        assertEquals(MatchTier.WEAK, v.tier)
-        assertTrue(v.confidence < 0.1)
+    fun `name only is insufficient and dropped`() {
+        assertEquals(MatchTier.INSUFFICIENT, verifier.verify(ContactProfile("John", "Smith"), rec()).tier)
+        assertTrue(verifier.verifyAll(ContactProfile("John", "Smith"), listOf(rec(), rec(source = "b"))).isEmpty())
+    }
+
+    @Test
+    fun `name and state alone is insufficient`() {
+        val c = ContactProfile("John", "Smith", state = "LA")
+        assertEquals(MatchTier.INSUFFICIENT, verifier.verify(c, rec(state = "LA")).tier)
+    }
+
+    @Test
+    fun `middle initial agreement is enough to show as weak`() {
+        val c = ContactProfile("John", "Smith", middleName = "R")
+        assertEquals(MatchTier.WEAK, verifier.verify(c, rec(middle = "Robert")).tier)
     }
 
     @Test
