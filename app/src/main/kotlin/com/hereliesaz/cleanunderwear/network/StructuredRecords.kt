@@ -71,7 +71,13 @@ object StructuredRecords {
             if (!index.containsKey("name") && !(index.containsKey("first") && index.containsKey("last"))) continue
             for (tr in rows) {
                 if (tr === headerRow) continue
-                val cells = tr.select("th, td").map { it.text().trim() }
+                // Responsive tables repeat the column label inside each cell
+                // (<div class="col-header">First Name</div>John); drop it.
+                val cells = tr.select("th, td").map { cell ->
+                    val c = cell.clone()
+                    c.select("[class*=header], [class*=label]").remove()
+                    c.text().trim()
+                }
                 if (cells.isEmpty()) continue
                 val row = index.mapValues { (_, i) -> cells.getOrNull(i) }
                 build(row, cells.joinToString(" "), source, first, last, kind, evidenceUrl)?.let { out += it }

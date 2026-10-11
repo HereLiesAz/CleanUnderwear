@@ -73,4 +73,22 @@ class StructuredRecordsTest {
         assertEquals(Triple("John", "Q", "Public"), StructuredRecords.splitName("John Q Public"))
         assertEquals(Triple("John", null, "Smith"), StructuredRecords.splitName("John Smith"))
     }
+
+    @Test
+    fun `responsive cells drop their repeated column label`() {
+        val html = """
+            <table><thead><tr><th>IDOC Number</th><th>Last Name</th><th>First</th><th>Birth Year</th><th>Status</th></tr></thead>
+            <tr><td><div class="col-header">IDOC Number</div>111194</td><td><div class="col-header">Last Name</div>Smith</td>
+            <td><div class="col-header">First Name</div>John</td><td><div class="col-header">Birth Year</div>1991</td>
+            <td><div class="col-header">Status</div>In custody</td></tr></table>
+        """
+        val s = source(emptyMap()).copy(
+            resultFormat = ResultFormat.HTML_TABLE,
+            custodyPattern = "In custody",
+            tableColumns = mapOf("id" to "IDOC", "last" to "Last", "first" to "^First", "dob" to "Birth", "status" to "Status")
+        )
+        val r = StructuredRecords.fromTable(html, s, "John", "Smith", EventKind.CUSTODY, "u").single()
+        assertEquals(1991, r.birthYear)
+        assertEquals("xx_doc:111194", r.recordKey)
+    }
 }
