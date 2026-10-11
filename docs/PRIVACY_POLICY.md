@@ -19,7 +19,7 @@ CleanUnderwear helps you keep the contacts you already have up to date, and tell
 ## 3. What leaves your device
 To look someone up, the app has to send their details to the site being searched:
 - **Public records** (daily, automatic): a contact's name, and where known a city, ZIP or area code, is sent to public inmate, arrest and obituary sources, including the Federal Bureau of Prisons inmate locator.
-- **People-search** (only when you ask): when you look up missing details for a contact, their name, phone number or email is sent to CyberBackgroundChecks.
+- **People-search** (only when you run Resolve): every contact without a known age, and every unverified contact, is looked up on CyberBackgroundChecks by phone number, email, address or name, to learn their age and confirm their details.
 - **Links you open**: profile source chips open search sites (records sites, obituary sites, reverse-image and name-search services) in your browser with the contact's name in the address. Nothing is sent until you tap one.
 - **Crash reports**: if the app crashes, the error message, stack trace, device model and Android version are posted as an issue in the app's public GitHub repository.
 

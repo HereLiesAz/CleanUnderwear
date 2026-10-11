@@ -394,8 +394,11 @@ class MainViewModel @Inject constructor(
     }
 
     /**
-     * Walks every UNVERIFIED contact and resolves their identity through the
-     * visible cyberbackgroundchecks browser flow, one mission at a time.
+     * Walks every UNVERIFIED contact, and every contact still missing an age or
+     * date of birth, and enriches them through the visible cyberbackgroundchecks
+     * browser flow, one mission at a time. Age is what lets
+     * [com.hereliesaz.cleanunderwear.match.MatchVerifier] tell two people with
+     * the same name apart, so it is gathered for everyone, not only on a match.
      *
      * Per the user's rule, this is *user-initiated*; the auto pipeline never
      * triggers it. If the auto pipeline (or any other coordinator-protected
@@ -404,14 +407,18 @@ class MainViewModel @Inject constructor(
     fun resolveUnverifiedBatch() {
         viewModelScope.launch {
             pipelineCoordinator.runExclusive("user-enrichment") {
-                val unverified = repository
+                val ids = repository
                     .getTargetWorkInfoPaged(limit = 5000, offset = 0)
-                    .filter { it.status == TargetStatus.UNVERIFIED }
+                    .filter { it.status != TargetStatus.IGNORED }
+                    .map { it.id }
+                val unverified = ids.chunked(500)
+                    .flatMap { repository.getTargetsByIds(it) }
+                    .filter { it.status == TargetStatus.UNVERIFIED || it.dateOfBirth.isNullOrBlank() }
 
                 if (unverified.isEmpty()) {
                     _operationState.value = OperationState(
                         isRunning = false,
-                        description = "No UNVERIFIED contacts queued."
+                        description = "Every contact is already enriched."
                     )
                     return@runExclusive
                 }
@@ -462,24 +469,33 @@ class MainViewModel @Inject constructor(
                     if (enrichment.verified) {
                         repository.updateTarget(
                             enrichment.target.copy(
-                                status = TargetStatus.MONITORING,
+                                // Enrichment resolves UNVERIFIED; any other status stands.
+                                status = if (target.status == TargetStatus.UNVERIFIED) {
+                                    TargetStatus.MONITORING
+                                } else {
+                                    target.status
+                                },
                                 monitorabilityState =
                                     com.hereliesaz.cleanunderwear.data.MonitorabilityState.READY
                             )
                         )
-                    } else {
+                    } else if (target.status == TargetStatus.UNVERIFIED) {
                         repository.updateTarget(
                             enrichment.target.copy(
                                 monitorabilityState =
                                     com.hereliesaz.cleanunderwear.data.MonitorabilityState.ENRICHMENT_FAILED
                             )
                         )
+                    } else {
+                        // An unconfirmed card on an already-monitored contact is
+                        // simply not used; the contact keeps monitoring as before.
+                        repository.updateTarget(target.copy(enrichmentProvenance = enrichment.target.enrichmentProvenance))
                     }
                 }
 
                 _operationState.value = OperationState(
                     isRunning = false,
-                    description = "Resolved $total UNVERIFIED contact${if (total == 1) "" else "s"}."
+                    description = "Enriched $total contact${if (total == 1) "" else "s"}."
                 )
             }
         }

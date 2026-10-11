@@ -82,6 +82,30 @@ class HtmlScraper @Inject constructor(
             }
         }
 
+    /**
+     * GETs (or POSTs, with [formFields]) a server-rendered page and returns its
+     * visible text, or null on any failure. Used by the candidate pipeline,
+     * which extracts and verifies records itself rather than taking the first
+     * name hit.
+     */
+    suspend fun fetchText(url: String, formFields: Map<String, String>? = null): String? =
+        withContext(Dispatchers.IO) {
+            try {
+                val builder = Request.Builder()
+                    .url(sanitize(url))
+                    .header("User-Agent", DESKTOP_UA)
+                if (formFields != null) {
+                    builder.post(FormBody.Builder().apply { formFields.forEach { (k, v) -> add(k, v) } }.build())
+                }
+                val response = okHttpClient.newCall(builder.build()).execute()
+                if (!response.isSuccessful) return@withContext null
+                Jsoup.parse(response.body.string()).text()
+            } catch (e: Exception) {
+                Log.e("HtmlScraper", "Failed to fetch text $url", e)
+                null
+            }
+        }
+
     private fun fetch(request: Request, targetName: String): IdentityVerifier.VerificationResult {
         val response = okHttpClient.newCall(request).execute()
         if (!response.isSuccessful) return IdentityVerifier.VerificationResult.fetchFailed()

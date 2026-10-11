@@ -4,6 +4,13 @@ import com.hereliesaz.cleanunderwear.data.MonitorabilityState
 import com.hereliesaz.cleanunderwear.data.Target
 import com.hereliesaz.cleanunderwear.data.TargetRepository
 import com.hereliesaz.cleanunderwear.data.TargetStatus
+import com.hereliesaz.cleanunderwear.match.CandidateRecord
+import com.hereliesaz.cleanunderwear.match.ContactProfile
+import com.hereliesaz.cleanunderwear.match.EventKind
+import com.hereliesaz.cleanunderwear.match.MatchTier
+import com.hereliesaz.cleanunderwear.match.MatchVerifier
+import com.hereliesaz.cleanunderwear.match.RecordExtractor
+import com.hereliesaz.cleanunderwear.match.UsStates
 import com.hereliesaz.cleanunderwear.network.HtmlScraper
 import com.hereliesaz.cleanunderwear.network.IdentityVerifier
 import com.hereliesaz.cleanunderwear.network.NameValidator
@@ -31,9 +38,13 @@ import javax.inject.Inject
  * from [SourceCatalog]. The scraper never falls back to a search engine and
  * never writes a non-catalog URL to [Target.lockupUrl] / [Target.obituaryUrl].
  *
- * Sources are tried most-specific-first (county → state → multi-state). The
- * first confirmed match flips the status; otherwise the contact stays in
- * MONITORING.
+ * Every automatable source is queried; each name hit becomes a
+ * [CandidateRecord] and is scored by [MatchVerifier] before anything reaches
+ * the user. A [MatchTier.STRONG] match becomes POSSIBLE_MATCH (notified); a
+ * [MatchTier.WEAK] one becomes WEAK_MATCH (shown, flagged, not notified);
+ * rejected records are dropped. Nothing is ever set to INCARCERATED or
+ * DECEASED without the user confirming, and a status the user confirmed is
+ * never overwritten.
  */
 class ScrapeTargetsUseCase @Inject constructor(
     private val repository: TargetRepository,
@@ -45,6 +56,7 @@ class ScrapeTargetsUseCase @Inject constructor(
     private val contactSyncer: SystemContactSyncer
 ) {
     private val semaphore = Semaphore(3)
+    private val matchVerifier = MatchVerifier()
 
     suspend operator fun invoke(onProgress: (Float, String) -> Unit = { _, _ -> }) = coroutineScope {
         val now = System.currentTimeMillis()
@@ -54,6 +66,12 @@ class ScrapeTargetsUseCase @Inject constructor(
             onProgress(1f, "Registry is up to date")
             return@coroutineScope
         }
+
+        // Survivor names in obituaries are checked against the user's other contacts.
+        val allNames = repository.getTargetsPaged(limit = Int.MAX_VALUE, offset = 0)
+            .map { it.displayName.trim() }
+            .filter { it.contains(' ') }
+            .toSet()
 
         val total = targetsToProcess.size
         val completionLock = Mutex()
@@ -70,7 +88,7 @@ class ScrapeTargetsUseCase @Inject constructor(
         targetsToProcess.map { target ->
             async {
                 semaphore.withPermit {
-                    processTarget(target, now) { step -> emit(target.displayName, step) }
+                    processTarget(target, now, allNames) { step -> emit(target.displayName, step) }
                     completionLock.withLock { completedCount++ }
                     onProgress(
                         completedCount.toFloat() / total,
@@ -86,9 +104,20 @@ class ScrapeTargetsUseCase @Inject constructor(
     private suspend fun processTarget(
         target: Target,
         now: Long,
+        allNames: Set<String>,
         emitStep: suspend (String) -> Unit
     ) {
         try {
+            // A status the user confirmed stands until they change it.
+            if (target.status == TargetStatus.INCARCERATED || target.status == TargetStatus.DECEASED) {
+                repository.updateTarget(
+                    target.copy(
+                        lastScrapedTimestamp = now,
+                        nextScheduledCheck = now + (target.checkFrequencyHours * 3600000L)
+                    )
+                )
+                return
+            }
             // Pre-flight: even though Triage already filters unverifiable names
             // out of READY, defensively skip here too. No scrape, no status flip.
             val nameResult = NameValidator.validate(target.displayName)
@@ -134,18 +163,14 @@ class ScrapeTargetsUseCase @Inject constructor(
                 return
             }
 
-            var newStatus = TargetStatus.MONITORING
-            var discoveredLockupUrl: String? = null
-            var discoveredObitUrl: String? = null
-            var verificationSnippet: String? = null
-
             // Corroboration data captured during CBC enrichment, plus the set of
             // records the user already rejected for this contact.
+            val locale = sourceCatalog.resolveLocale(target.areaCode, target.residenceInfo)
             val corroboration = IdentityVerifier.Corroboration(
                 middleName = target.middleName,
                 dob = target.dateOfBirth,
                 area = target.areaCode ?: target.residenceInfo,
-                state = sourceCatalog.resolveLocale(target.areaCode, target.residenceInfo).state
+                state = locale.state
             )
             val dismissedKeys = target.dismissedMatchKeys
                 ?.split(',')
@@ -154,57 +179,69 @@ class ScrapeTargetsUseCase @Inject constructor(
                 ?.toSet()
                 ?: emptySet()
 
-            // Lockup loop. The first name match becomes a *possible* match for
-            // the user to confirm — a name hit (even corroborated) never auto-sets
-            // INCARCERATED on its own, because name alone cannot prove identity.
+            // Gather every candidate from every automatable source, then verify.
+            val candidates = mutableListOf<CandidateRecord>()
             if (lockupSources.isEmpty()) {
                 emitStep("no automated lockup source for area ${target.areaCode ?: "?"}")
-            } else {
-                for (source in lockupSources) {
-                    // Sources without a stable record id (county mugshots, state DOC,
-                    // WEBVIEW) are dismissed by their evidence URL — skip a source the
-                    // user already rejected so it can't re-surface as a POSSIBLE_MATCH.
-                    val evidenceUrl = SourceUrlBuilder.buildEvidenceUrl(source, firstName, lastName)
-                    if (evidenceUrl in dismissedKeys) continue
-                    emitStep("checking ${source.label}")
-                    val result = scrapeAgainstSource(source, firstName, lastName, corroboration, dismissedKeys)
-                    if (result.skipped) break
-                    if (result.isMatch) {
-                        DiagnosticLogger.log(
-                            "POSSIBLE MATCH: ${target.displayName} via ${source.id} (${result.basis ?: "name"})",
-                            DiagnosticLogger.LogEntry.LogLevel.WARN
-                        )
-                        newStatus = TargetStatus.POSSIBLE_MATCH
-                        discoveredLockupUrl = SourceUrlBuilder.buildEvidenceUrl(source, firstName, lastName)
-                        verificationSnippet = result.snippet
-                        break
-                    }
-                }
+            }
+            for (source in lockupSources) {
+                val evidenceUrl = SourceUrlBuilder.buildEvidenceUrl(source, firstName, lastName)
+                if (evidenceUrl in dismissedKeys) continue
+                emitStep("checking ${source.label}")
+                candidates += candidatesFrom(source, EventKind.CUSTODY, firstName, lastName, corroboration, dismissedKeys)
+            }
+            for (source in obituarySources) {
+                val evidenceUrl = SourceUrlBuilder.buildEvidenceUrl(source, firstName, lastName)
+                if (evidenceUrl in dismissedKeys) continue
+                emitStep("checking ${source.label}")
+                candidates += candidatesFrom(source, EventKind.DEATH, firstName, lastName, corroboration, dismissedKeys)
             }
 
-            // Obituary loop only if no lockup hit.
-            if (newStatus == TargetStatus.MONITORING && obituarySources.isNotEmpty()) {
-                for (source in obituarySources) {
-                    emitStep("checking ${source.label}")
-                    val result = scrapeAgainstSource(source, firstName, lastName)
-                    if (result.skipped) break
-                    if (result.isMatch) {
-                        DiagnosticLogger.log(
-                            "OBIT MATCH: ${target.displayName} found via ${source.id}",
-                            DiagnosticLogger.LogEntry.LogLevel.WARN
-                        )
-                        newStatus = TargetStatus.DECEASED
-                        discoveredObitUrl = SourceUrlBuilder.buildEvidenceUrl(source, firstName, lastName)
-                        verificationSnippet = result.snippet
-                        break
-                    }
-                }
+            emitStep("verifying ${candidates.size} record${if (candidates.size == 1) "" else "s"}")
+            val profile = ContactProfile(
+                firstName = firstName,
+                lastName = lastName,
+                middleName = target.middleName,
+                age = verifier.approxAge(target.dateOfBirth),
+                city = cityOf(target.residenceInfo),
+                state = stateOf(target.residenceInfo) ?: locale.state,
+                otherContactNames = allNames - target.displayName.trim()
+            )
+            val best = matchVerifier.verifyAll(
+                profile,
+                candidates.filter { it.recordKey == null || it.recordKey !in dismissedKeys }
+            ).firstOrNull()
+
+            val newStatus = when (best?.tier) {
+                MatchTier.STRONG -> TargetStatus.POSSIBLE_MATCH
+                MatchTier.WEAK -> TargetStatus.WEAK_MATCH
+                else -> TargetStatus.MONITORING
             }
+            if (best != null) {
+                DiagnosticLogger.log(
+                    "${best.tier} ${best.candidate.kind} match: ${target.displayName} via " +
+                        "${best.candidate.sourceId} (p=${"%.2f".format(best.confidence)})",
+                    DiagnosticLogger.LogEntry.LogLevel.WARN
+                )
+            }
+            val isDeath = best?.candidate?.kind == EventKind.DEATH
+            val discoveredLockupUrl = best?.candidate?.evidenceUrl?.takeIf { !isDeath }
+            val discoveredObitUrl = best?.candidate?.evidenceUrl?.takeIf { isDeath }
+            val verificationSnippet = best?.candidate?.snippet
 
             var statusChangeTimestamp = target.lastStatusChangeTimestamp
             if (newStatus != target.status && target.status != TargetStatus.UNKNOWN) {
-                emitStep("notifying status change")
-                notifications.notifyStatusChange(target.copy(status = newStatus), target.status)
+                // Weak matches are shown in the app but never notified, nor is a
+                // weak match clearing back to monitoring.
+                val silent = newStatus == TargetStatus.WEAK_MATCH ||
+                    (target.status == TargetStatus.WEAK_MATCH && newStatus == TargetStatus.MONITORING)
+                if (!silent) {
+                    emitStep("notifying status change")
+                    notifications.notifyStatusChange(
+                        target.copy(status = newStatus, matchKind = best?.candidate?.kind?.name),
+                        target.status
+                    )
+                }
                 statusChangeTimestamp = now
             }
 
@@ -215,11 +252,14 @@ class ScrapeTargetsUseCase @Inject constructor(
             val updatedTarget = target.copy(
                 status = newStatus,
                 lastScrapedTimestamp = now,
-                lockupUrl = discoveredLockupUrl ?: keepIfFromCatalog(target.lockupUrl),
-                obituaryUrl = discoveredObitUrl ?: keepIfFromCatalog(target.obituaryUrl),
+                lockupUrl = discoveredLockupUrl,
+                obituaryUrl = discoveredObitUrl,
                 nextScheduledCheck = now + (target.checkFrequencyHours * 3600000L),
                 lastStatusChangeTimestamp = statusChangeTimestamp,
-                lastVerificationSnippet = verificationSnippet ?: target.lastVerificationSnippet
+                lastVerificationSnippet = verificationSnippet,
+                matchConfidence = best?.confidence,
+                matchKind = best?.candidate?.kind?.name,
+                matchReasons = best?.reasons?.joinToString("\n")
             )
             repository.updateTarget(updatedTarget)
 
@@ -233,43 +273,53 @@ class ScrapeTargetsUseCase @Inject constructor(
         }
     }
 
-    private suspend fun scrapeAgainstSource(
+    /**
+     * Queries one source and returns every record on it that names the contact.
+     * The BOP locator is parsed structurally (with its own custody and
+     * corroboration gates); every other source is fetched as text and read by
+     * [RecordExtractor].
+     */
+    private suspend fun candidatesFrom(
         source: Source,
+        kind: EventKind,
         first: String,
         last: String,
-        corroboration: IdentityVerifier.Corroboration = IdentityVerifier.Corroboration(),
-        dismissedKeys: Set<String> = emptySet()
-    ): IdentityVerifier.VerificationResult {
+        corroboration: IdentityVerifier.Corroboration,
+        dismissedKeys: Set<String>
+    ): List<CandidateRecord> {
         val fetchUrl = try {
             SourceUrlBuilder.buildFetchUrl(source, first, last)
         } catch (e: IllegalArgumentException) {
-            // Source needs name slots but got blank — should be unreachable
-            // because pre-flight rejects unverifiable names, but defend anyway.
-            return IdentityVerifier.VerificationResult.fetchFailed()
+            return emptyList()
         }
-        val name = "$first $last"
-
-        return when (source.render) {
+        val evidenceUrl = SourceUrlBuilder.buildEvidenceUrl(source, first, last)
+        val text = when (source.render) {
             RenderMode.BASIC -> when {
-                source.resultFormat == ResultFormat.BOP_JSON ->
-                    basicScraper.scrapeBopInmate(fetchUrl, name, corroboration, dismissedKeys)
-                source.method.uppercase() == "POST" -> {
-                    val fields = SourceUrlBuilder.buildFormFields(source, first, last)
-                    basicScraper.scrapePost(fetchUrl, fields, name)
+                source.resultFormat == ResultFormat.BOP_JSON -> {
+                    val r = basicScraper.scrapeBopInmate(fetchUrl, "$first $last", corroboration, dismissedKeys)
+                    return listOfNotNull(r.record?.copy(evidenceUrl = evidenceUrl))
                 }
-                else -> basicScraper.scrapeMugshots(fetchUrl, name)
+                source.method.uppercase() == "POST" ->
+                    basicScraper.fetchText(fetchUrl, SourceUrlBuilder.buildFormFields(source, first, last))
+                else -> basicScraper.fetchText(fetchUrl)
             }
-            RenderMode.WEBVIEW -> {
-                val doc = stealthScraper.scrapeGhostTown(
-                    url = fetchUrl,
-                    settleMs = source.renderSettleMs,
-                    readySelector = source.readySelector
-                ) ?: return IdentityVerifier.VerificationResult.fetchFailed()
-                verifier.verifyIdentity(doc.text(), name)
-            }
-        }
+            RenderMode.WEBVIEW -> stealthScraper.scrapeGhostTown(
+                url = fetchUrl,
+                settleMs = source.renderSettleMs,
+                readySelector = source.readySelector
+            )?.text()
+        } ?: return emptyList()
+        return RecordExtractor.extract(text, first, last, kind, source.id, source.label, evidenceUrl)
     }
 
-    private fun keepIfFromCatalog(url: String?): String? =
-        url?.takeIf { sourceCatalog.isFromCatalog(it) }
+    /** City from residenceInfo ("City, Region, Zip"); null when it holds only one part. */
+    private fun cityOf(residence: String?): String? {
+        val parts = residence?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() } ?: return null
+        return parts.firstOrNull()?.takeIf { parts.size >= 2 && it.none(Char::isDigit) }
+    }
+
+    /** State from the parts after the city, so a city named "Washington" isn't read as WA. */
+    private fun stateOf(residence: String?): String? =
+        residence?.split(',')?.map { it.trim() }?.drop(1)
+            ?.firstNotNullOfOrNull { UsStates.code(it) ?: UsStates.code(it.split(' ').first()) }
 }

@@ -10,7 +10,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 /**
  * The physical manifestation of your localized surveillance state.
  */
-@Database(entities = [Target::class], version = 11, exportSchema = false)
+@Database(entities = [Target::class], version = 12, exportSchema = false)
 abstract class CleanUnderwearDatabase : RoomDatabase() {
     abstract fun targetDao(): TargetDao
 
@@ -191,6 +191,15 @@ abstract class CleanUnderwearDatabase : RoomDatabase() {
             }
         }
 
+        /** Match verification columns: confidence, event kind and reasons. */
+        val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE targets ADD COLUMN match_confidence REAL")
+                database.execSQL("ALTER TABLE targets ADD COLUMN match_kind TEXT")
+                database.execSQL("ALTER TABLE targets ADD COLUMN match_reasons TEXT")
+            }
+        }
+
         fun getDatabase(context: Context): CleanUnderwearDatabase {
             return Instance ?: synchronized(this) {
                 Room.databaseBuilder(
@@ -201,7 +210,7 @@ abstract class CleanUnderwearDatabase : RoomDatabase() {
                 .addMigrations(
                     MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
                     MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
-                    MIGRATION_9_10, MIGRATION_10_11
+                    MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12
                 )
                 .build()
                 .also { Instance = it }

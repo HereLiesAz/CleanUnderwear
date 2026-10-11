@@ -133,7 +133,10 @@ fun TargetDetailScreen(
             // POSSIBLE_MATCH review. The vigil found a roster record matching
             // this contact's name but cannot prove it's the same person, so it
             // surfaces the candidate here for the user to confirm or reject.
-            if (target.status == TargetStatus.POSSIBLE_MATCH) {
+            if (target.status == TargetStatus.POSSIBLE_MATCH || target.status == TargetStatus.WEAK_MATCH) {
+                val weak = target.status == TargetStatus.WEAK_MATCH
+                val isDeath = target.matchKind == "DEATH"
+                val evidenceUrl = if (isDeath) target.obituaryUrl else target.lockupUrl
                 Card(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
@@ -144,19 +147,40 @@ fun TargetDetailScreen(
                         modifier = Modifier.padding(12.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        val event = when (target.matchKind) {
+                            "DEATH" -> "death"
+                            "ARREST" -> "arrest"
+                            else -> "incarceration"
+                        }
                         Text(
-                            text = "Possible incarceration match — needs your review",
+                            text = if (weak) {
+                                "Weak $event match — little beyond the name agrees"
+                            } else {
+                                "Possible $event match — needs your review"
+                            },
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.primary
                         )
+                        target.matchConfidence?.let { p ->
+                            Text(
+                                text = "Confidence: ${(p * 100).toInt()}%",
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
+                        target.matchReasons?.takeIf { it.isNotBlank() }?.let { reasons ->
+                            Text(
+                                text = reasons.lines().joinToString("\n") { "• $it" },
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
                         Text(
                             text = target.lastVerificationSnippet
                                 ?: "A roster record matched this contact's name. Confirm it is the same person.",
                             style = MaterialTheme.typography.bodySmall
                         )
-                        target.lockupUrl?.takeIf { sourceCatalog.isFromCatalog(it) }?.let { url ->
+                        evidenceUrl?.takeIf { sourceCatalog.isFromCatalog(it) }?.let { url ->
                             AzButton(
-                                text = "Open roster page to verify",
+                                text = if (isDeath) "Open obituary source to verify" else "Open roster page to verify",
                                 onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) },
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = AzButtonShape.RECTANGLE
@@ -167,8 +191,14 @@ fun TargetDetailScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             AzButton(
-                                text = "Confirm — incarcerated",
-                                onClick = { onUpdateTarget(target.copy(status = TargetStatus.INCARCERATED)) },
+                                text = if (isDeath) "Confirm — deceased" else "Confirm — incarcerated",
+                                onClick = {
+                                    onUpdateTarget(
+                                        target.copy(
+                                            status = if (isDeath) TargetStatus.DECEASED else TargetStatus.INCARCERATED
+                                        )
+                                    )
+                                },
                                 modifier = Modifier.weight(1f),
                                 shape = AzButtonShape.RECTANGLE
                             )
@@ -179,7 +209,7 @@ fun TargetDetailScreen(
                                     // snippet has no [#id]; fall back to the evidence URL
                                     // (the deterministic lockupUrl) so the dismissal sticks.
                                     val key = extractInmateKey(target.lastVerificationSnippet)
-                                        ?: target.lockupUrl
+                                        ?: evidenceUrl
                                     val dismissed = target.dismissedMatchKeys
                                         ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
                                         ?: emptyList()
@@ -190,7 +220,11 @@ fun TargetDetailScreen(
                                             status = TargetStatus.MONITORING,
                                             dismissedMatchKeys = updated.ifEmpty { null },
                                             lastVerificationSnippet = null,
-                                            lockupUrl = null
+                                            lockupUrl = null,
+                                            obituaryUrl = null,
+                                            matchConfidence = null,
+                                            matchKind = null,
+                                            matchReasons = null
                                         )
                                     )
                                 },
@@ -442,6 +476,7 @@ fun TargetDetailScreen(
             // or reject (a roster candidate, or a status set from a roster or
             // obituary hit), never on a contact with nothing to verify.
             val hasMatchToVerify = target.status == TargetStatus.POSSIBLE_MATCH ||
+                target.status == TargetStatus.WEAK_MATCH ||
                 target.status == TargetStatus.INCARCERATED ||
                 target.status == TargetStatus.DECEASED
             if (hasMatchToVerify && identitySources.isNotEmpty()) {

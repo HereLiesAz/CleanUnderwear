@@ -52,7 +52,11 @@ class NotificationHelper @Inject constructor(@ApplicationContext private val con
         )
 
         val statusText = when (target.status) {
-            TargetStatus.POSSIBLE_MATCH -> "may be incarcerated — tap to review and confirm."
+            TargetStatus.POSSIBLE_MATCH -> when (target.matchKind) {
+                "DEATH" -> "may have passed away — tap to review and confirm."
+                "ARREST" -> "may have been arrested — tap to review and confirm."
+                else -> "may be incarcerated — tap to review and confirm."
+            }
             TargetStatus.INCARCERATED -> "has been incarcerated."
             TargetStatus.DECEASED -> "has passed away."
             TargetStatus.MONITORING -> "is back under monitoring."

@@ -507,6 +507,7 @@ fun StatusBadge(status: TargetStatus) {
         TargetStatus.MONITORING -> VerifiedGreen to "Monitoring"
         TargetStatus.UNVERIFIED -> UnverifiedAmber to "Unverified"
         TargetStatus.POSSIBLE_MATCH -> Color(0xFFFF6D00) to "Review match"
+        TargetStatus.WEAK_MATCH -> UnverifiedAmber to "Weak match"
         TargetStatus.INCARCERATED -> WarningRed to "Incarcerated"
         TargetStatus.DECEASED -> Color.Gray to "Deceased"
         TargetStatus.IGNORED -> Color.LightGray to "Archived"

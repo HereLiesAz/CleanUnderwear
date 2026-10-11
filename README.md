@@ -10,7 +10,7 @@ The app works only from contacts you already have. It runs local-first:
 - **Lookups leave the device**: To check a record, the app sends a contact's name (and, where it has one, a city, ZIP or area code) to the public-records, obituary or people-search site being queried. See [What leaves your device](#-what-leaves-your-device).
 - **Daily checks**: A background worker checks public inmate rosters and obituary sources each morning, without manual intervention.
 - **Evidence-First Verification**: Every status change is backed by a "Verification Snippet"—the raw text found during the scan—allowing you to manually verify findings and correct false positives (e.g., surviving relatives mentioned in an obituary).
-- **Verify-before-merge enrichment**: When you resolve an UNVERIFIED contact via cyberbackgroundchecks, the result is only merged into the Registry if the candidate card is corroborated as the *same person* (a unique-identifier phone/email lookup, or a matching name). A conflicting card — e.g. a recycled phone number returning a stranger — is rejected, never written into your address book, and the reason is recorded as the contact's enrichment provenance.
+- **Verify-before-merge enrichment**: **Resolve** enriches every UNVERIFIED contact and every contact still missing an age or date of birth via cyberbackgroundchecks (age is what separates two people who share a name). For each one, the result is only merged into the Registry if the candidate card is corroborated as the *same person* (a unique-identifier phone/email lookup, or a matching name). A conflicting card — e.g. a recycled phone number returning a stranger — is rejected, never written into your address book, and the reason is recorded as the contact's enrichment provenance.
 
 ---
 
@@ -36,6 +36,11 @@ Apple iCloud has no first-party web surface that survives bot detection on Andro
 - **Legitimate-identity fetching**: scraping never uses an obvious bot browser. `WebViewScraper` (JS-heavy pages) drives the WebView with the device's **default User-Agent** and the shared `CookieManager` session — i.e. the user's real browser identity and any login/captcha they already solved — rather than a spoofed Chrome string. `WebViewIdentityInterceptor` does the same for the OkHttp paths that target bot-defended hosts. `HtmlScraper` handles plain server-rendered HTML and JSON APIs (the BOP path uses a structured, custody-aware JSON verifier rather than text matching). All run only against automatable (non-`MANUAL_LANDING`) sources.
 - **Darkening filter (interactive browser)**: when a flow runs in the app's own visible browser (`BrowserScreen` — e.g. enrichment), the page is overlaid with a darkening scrim that swallows all touch input while the automation loads and extracts, so the user can't perturb it mid-flight. The scrim lifts the instant the page needs the user (captcha/login), handing back the live page, then re-engages once they continue.
 
+- **Automatic match verification**: Every automatable source is queried, and every record naming the contact becomes a candidate. `RecordExtractor` reads middle name, age, birth year, city/state and obituary survivors from the text around each mention; `MatchVerifier` scores each candidate (log-odds: a bare name starts far below even, agreeing age, middle name, city, survivors who are also your contacts, and other sources reporting the same event each add evidence). A confidently different age or middle name rejects the record outright.
+  - **Strong** (≥ 80%): status `POSSIBLE_MATCH`, notified, with confidence and reasons shown for review.
+  - **Weak**: status `WEAK_MATCH`, shown in the app flagged weak, never notified.
+  - Nothing is set to Incarcerated or Deceased without your confirmation, and a status you confirmed is never overwritten by a later check.
+
 ### 3. Decentralized Persistence (Note Injection)
 The app uses your phone's native address book as its "external memory":
 - **Write-Back**: Status changes are injected directly into the system contact's "Notes" field.
@@ -53,7 +58,7 @@ The app uses your phone's native address book as its "external memory":
 | Data | Sent to | When |
 | --- | --- | --- |
 | Contact name, plus city/ZIP/area code where known | Public inmate, arrest and obituary sources (e.g. the Federal Bureau of Prisons inmate locator) | Daily check, for automatable sources |
-| Contact name, phone or email | CyberBackgroundChecks | When you look up missing details for a contact |
+| Contact name, phone, email or address | CyberBackgroundChecks | When you run Resolve: every contact missing an age, and every unverified contact |
 | Contact name | Sites you open from a profile's source chips | Only when you tap a chip; it opens in your browser |
 | Your session on Facebook, WhatsApp, Instagram, Google Contacts | That service only | Only when you start an import from Settings |
 | Status, record links and check date written to the contact's Notes field | Whatever account that contact syncs with (e.g. Google Contacts) | When a contact's status changes |
