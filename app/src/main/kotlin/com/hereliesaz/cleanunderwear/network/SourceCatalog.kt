@@ -26,8 +26,10 @@ enum class RenderMode { BASIC, WEBVIEW }
  *  - [HTML]: server-rendered markup, verified via text-proximity name matching.
  *  - [BOP_JSON]: the Federal BOP inmate-locator JSON API, verified structurally
  *    (and custody-filtered) via [IdentityVerifier.verifyBopInmateJson].
+ *  - [NEWS_RSS]: a news-search RSS feed; each item is classified as a death or
+ *    arrest report and read by [NewsFeed]. One source yields both kinds.
  */
-enum class ResultFormat { HTML, BOP_JSON }
+enum class ResultFormat { HTML, BOP_JSON, NEWS_RSS }
 
 enum class SourceScope { COUNTY, STATE, AREA_CODE, MULTI_STATE }
 
@@ -387,6 +389,7 @@ class SourceCatalog @Inject constructor(
     private fun parseResultFormat(raw: String?): ResultFormat? = when (raw?.uppercase()) {
         "HTML" -> ResultFormat.HTML
         "BOP_JSON" -> ResultFormat.BOP_JSON
+        "NEWS_RSS" -> ResultFormat.NEWS_RSS
         else -> null
     }
 

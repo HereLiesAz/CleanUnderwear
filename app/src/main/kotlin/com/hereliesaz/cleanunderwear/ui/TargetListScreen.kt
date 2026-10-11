@@ -131,7 +131,7 @@ fun TargetListScreen(
                             scope.launch {
                                 clipboard.setClipEntry(
                                     androidx.compose.ui.platform.ClipEntry(
-                                        android.content.ClipData.newPlainText("Intelligence Log", fullLog)
+                                        android.content.ClipData.newPlainText("Diagnostic Log", fullLog)
                                     )
                                 )
                             }
@@ -147,7 +147,7 @@ fun TargetListScreen(
                                 type = "text/plain"
                                 putExtra(android.content.Intent.EXTRA_TEXT, fullLog)
                             }
-                            context.startActivity(android.content.Intent.createChooser(intent, "Share Intelligence Log"))
+                            context.startActivity(android.content.Intent.createChooser(intent, "Share Diagnostic Log"))
                         },
                         modifier = Modifier.size(32.dp)
                     ) {
@@ -223,7 +223,7 @@ fun TargetListScreen(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
-                Text("The surveillance ledger is currently blank.")
+                Text("No contacts yet.")
             }
         } else {
             LazyColumn(
@@ -452,11 +452,11 @@ fun ManualEntryDialog(
         containerColor = MaterialTheme.colorScheme.background,
         titleContentColor = MaterialTheme.colorScheme.primary,
         textContentColor = MaterialTheme.colorScheme.onBackground,
-        title = { Text("Manual Intelligence Ingestion") },
+        title = { Text("Add Contact") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "Manually add a target that Meta or Apple refuses to sync with this device.",
+                    "Manually add a contact that didn't sync to this device.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -464,7 +464,7 @@ fun ManualEntryDialog(
                 AzTextBox(
                     value = name,
                     onValueChange = { name = it },
-                    hint = "Target Name",
+                    hint = "Name",
                     modifier = Modifier.fillMaxWidth(),
                     onSubmit = {}
                 )
@@ -478,13 +478,13 @@ fun ManualEntryDialog(
                 AzTextBox(
                     value = email,
                     onValueChange = { email = it },
-                    hint = "Intelligence Email",
+                    hint = "Email",
                     modifier = Modifier.fillMaxWidth(),
                     onSubmit = {}
                 )
                 
                 AzButton(
-                    text = "Ingest Target",
+                    text = "Add Contact",
                     onClick = { onConfirm(name, phone.takeIf { it.isNotBlank() }, email.takeIf { it.isNotBlank() }) },
                     modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
                     enabled = name.isNotBlank() && (phone.isNotBlank() || email.isNotBlank()),
@@ -507,6 +507,7 @@ fun StatusBadge(status: TargetStatus) {
         TargetStatus.MONITORING -> VerifiedGreen to "Monitoring"
         TargetStatus.UNVERIFIED -> UnverifiedAmber to "Unverified"
         TargetStatus.POSSIBLE_MATCH -> Color(0xFFFF6D00) to "Review match"
+        TargetStatus.WEAK_MATCH -> UnverifiedAmber to "Weak match"
         TargetStatus.INCARCERATED -> WarningRed to "Incarcerated"
         TargetStatus.DECEASED -> Color.Gray to "Deceased"
         TargetStatus.IGNORED -> Color.LightGray to "Archived"

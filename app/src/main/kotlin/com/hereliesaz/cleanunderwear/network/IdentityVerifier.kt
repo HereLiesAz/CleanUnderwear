@@ -3,6 +3,8 @@ package com.hereliesaz.cleanunderwear.network
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.hereliesaz.cleanunderwear.match.CandidateRecord
+import com.hereliesaz.cleanunderwear.match.EventKind
 import com.hereliesaz.cleanunderwear.util.DiagnosticLogger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -185,7 +187,19 @@ class IdentityVerifier @Inject constructor() {
                 isMatch = true,
                 snippet = snippet,
                 matchKey = inmateNum.ifBlank { null },
-                basis = corro.basis
+                basis = corro.basis,
+                record = CandidateRecord(
+                    sourceId = "bop_inmate_locator",
+                    sourceLabel = "Federal BOP Inmate Locator",
+                    kind = EventKind.CUSTODY,
+                    firstName = name.first,
+                    lastName = name.last,
+                    middleName = recMiddle.ifBlank { null },
+                    age = recAge.toIntOrNull(),
+                    state = facilityState,
+                    recordKey = inmateNum.ifBlank { null },
+                    snippet = snippet
+                )
             )
         }
         return VerificationResult(isMatch = false, snippet = null)
@@ -243,7 +257,7 @@ class IdentityVerifier @Inject constructor() {
      * treated as an age; otherwise a 4-digit birth year yields an approximate
      * age. Returns null when nothing usable is present.
      */
-    private fun approxAge(dob: String?): Int? {
+    fun approxAge(dob: String?): Int? {
         val s = dob?.trim()?.takeIf { it.isNotBlank() } ?: return null
         s.toIntOrNull()?.let { if (it in 1..120) return it }
         val year = Regex("(19|20)\\d{2}").find(s)?.value?.toIntOrNull()
@@ -299,7 +313,9 @@ class IdentityVerifier @Inject constructor() {
          * age corroborated" or "name only (uncorroborated)"). Drives the
          * confidence shown in the review UI.
          */
-        val basis: String? = null
+        val basis: String? = null,
+        /** Structured record for [com.hereliesaz.cleanunderwear.match.MatchVerifier], when the source yields one. */
+        val record: CandidateRecord? = null
     ) {
         companion object {
             fun fetchFailed() = VerificationResult(isMatch = false, snippet = null)

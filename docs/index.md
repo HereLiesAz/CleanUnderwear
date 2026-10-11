@@ -5,7 +5,7 @@ title: Home
 
 # Welcome to CleanUnderwear
 
-**CleanUnderwear** is a modern Android application built using Kotlin and Jetpack Compose. It aims to provide an intuitive and seamless user experience with a robust underlying architecture.
+**CleanUnderwear** is a modern Android application built using Kotlin and Jetpack Compose. It keeps the contacts you already have up to date and alerts you when one of them appears in public arrest, inmate or obituary records.
 
 This documentation site provides insights into the technical foundations and design decisions that drive the project.
 
@@ -13,6 +13,8 @@ This documentation site provides insights into the technical foundations and des
 
 *   [**Architecture Guide**](ARCHITECTURE.html): Deep dive into our use of Clean Architecture, MVVM, Coroutines, and Dagger Hilt.
 *   [**Design Guide**](DESIGN.html): Learn about our approach to UI/UX, utilizing Jetpack Compose and Material Design 3.
+*   [**Monitoring Guide**](MONITORING_GUIDE.html): How the daily records check, matching and contact-note recovery work.
+*   [**Privacy Policy**](PRIVACY_POLICY.html): What the app reads, stores and sends.
 
 ## Quick Links
 

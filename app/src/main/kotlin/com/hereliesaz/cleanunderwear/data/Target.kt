@@ -68,7 +68,18 @@ data class Target(
      * dismissed false positive does not resurface on the next run.
      */
     @ColumnInfo(name = "dismissed_match_keys")
-    val dismissedMatchKeys: String? = null
+    val dismissedMatchKeys: String? = null,
+    /**
+     * Verification of the current match (see [com.hereliesaz.cleanunderwear.match.MatchVerifier]):
+     * calibrated confidence 0..1, the event it reports (CUSTODY / ARREST / DEATH),
+     * and newline-separated reasons shown in review. Null when there is no match.
+     */
+    @ColumnInfo(name = "match_confidence")
+    val matchConfidence: Double? = null,
+    @ColumnInfo(name = "match_kind")
+    val matchKind: String? = null,
+    @ColumnInfo(name = "match_reasons")
+    val matchReasons: String? = null
 )
 
 enum class TargetStatus {
@@ -82,6 +93,11 @@ enum class TargetStatus {
      * [INCARCERATED] on its own.
      */
     POSSIBLE_MATCH,
+    /**
+     * A record names this contact but automatic verification found little
+     * beyond the name. Shown in the app, flagged weak; never notified.
+     */
+    WEAK_MATCH,
     INCARCERATED,
     DECEASED,
     IGNORED,

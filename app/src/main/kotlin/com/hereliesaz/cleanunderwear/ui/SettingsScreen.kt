@@ -59,7 +59,7 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             Text(
-                text = "Surveillance Configuration",
+                text = "Settings",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary
             )
@@ -72,7 +72,7 @@ fun SettingsScreen(
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Covert Mode (Dark Theme)", style = MaterialTheme.typography.bodyLarge)
                     Text(
-                        "Adapt the UI for low-light vigil.",
+                        "Use a darker theme in low light.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -91,7 +91,7 @@ fun SettingsScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Display Intelligence Log", style = MaterialTheme.typography.bodyLarge)
+                    Text("Display Diagnostic Log", style = MaterialTheme.typography.bodyLarge)
                     Text(
                         "Show real-time under-the-hood activity on the main screen.",
                         style = MaterialTheme.typography.bodySmall,
@@ -107,9 +107,9 @@ fun SettingsScreen(
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Global Surveillance Limit", style = MaterialTheme.typography.bodyLarge)
+                Text("Contact Limit", style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    "Maximum number of targets to keep in the active registry.",
+                    "Maximum number of contacts to monitor.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -124,7 +124,7 @@ fun SettingsScreen(
             HorizontalDivider()
 
             Text(
-                text = "Surveillance Permissions",
+                text = "Permissions",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary
             )
@@ -156,7 +156,7 @@ fun SettingsScreen(
             HorizontalDivider()
 
             Text(
-                text = "External Intelligence Sources",
+                text = "Import From Other Accounts",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary
             )
@@ -180,21 +180,21 @@ fun SettingsScreen(
             )
             
             AzButton(
-                text = "Interrogate Facebook Social Graph",
+                text = "Import Facebook Friends",
                 onClick = { viewModel.harvestFacebook() },
                 modifier = Modifier.fillMaxWidth(),
                 shape = AzButtonShape.RECTANGLE
             )
 
             AzButton(
-                text = "Interrogate WhatsApp Web",
+                text = "Import WhatsApp Chats",
                 onClick = { viewModel.harvestWhatsApp() },
                 modifier = Modifier.fillMaxWidth(),
                 shape = AzButtonShape.RECTANGLE
             )
 
             AzButton(
-                text = "Interrogate Instagram Followers",
+                text = "Import Instagram Followers",
                 onClick = { viewModel.harvestInstagram() },
                 modifier = Modifier.fillMaxWidth(),
                 shape = AzButtonShape.RECTANGLE

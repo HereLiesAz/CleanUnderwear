@@ -20,7 +20,7 @@ class NotificationHelper @Inject constructor(@ApplicationContext private val con
 
     companion object {
         private const val CHANNEL_ID = "panopticon_alerts"
-        private const val CHANNEL_NAME = "Panopticon Status Alerts"
+        private const val CHANNEL_NAME = "Status Alerts"
     }
 
     init {
@@ -31,7 +31,7 @@ class NotificationHelper @Inject constructor(@ApplicationContext private val con
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val importance = NotificationManager.IMPORTANCE_HIGH
             val channel = NotificationChannel(CHANNEL_ID, CHANNEL_NAME, importance).apply {
-                description = "Alerts when a target's status in the ledger changes."
+                description = "Alerts when a contact's status changes."
             }
             val notificationManager: NotificationManager =
                 context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -52,7 +52,11 @@ class NotificationHelper @Inject constructor(@ApplicationContext private val con
         )
 
         val statusText = when (target.status) {
-            TargetStatus.POSSIBLE_MATCH -> "may be incarcerated — tap to review and confirm."
+            TargetStatus.POSSIBLE_MATCH -> when (target.matchKind) {
+                "DEATH" -> "may have passed away — tap to review and confirm."
+                "ARREST" -> "may have been arrested — tap to review and confirm."
+                else -> "may be incarcerated — tap to review and confirm."
+            }
             TargetStatus.INCARCERATED -> "has been incarcerated."
             TargetStatus.DECEASED -> "has passed away."
             TargetStatus.MONITORING -> "is back under monitoring."
@@ -61,7 +65,7 @@ class NotificationHelper @Inject constructor(@ApplicationContext private val con
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_alert) // Generic alert icon
-            .setContentTitle("Ledger Update: ${target.displayName}")
+            .setContentTitle("Status update: ${target.displayName}")
             .setContentText("${target.displayName} $statusText")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pendingIntent)

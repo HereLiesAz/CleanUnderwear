@@ -859,6 +859,33 @@
     }
   ],
 
+  "_multi_state_obituary_comment": "National news search. Google News indexes local papers, TV stations, Legacy.com, Dignity Memorial and funeral-home obituaries, so one query per contact reaches death and arrest reports no single roster carries. Each item is classified (death vs arrest) and read by NewsFeed; MatchVerifier scores it before anything is shown. evidence_url_template is the bare host so item links (news.google.com/rss/articles/...) pass SourceCatalog.isFromCatalog.",
+  "multi_state_obituary": [
+    {
+      "id": "google_news_us",
+      "label": "Google News",
+      "kind": "QUERY_TEMPLATE",
+      "method": "GET",
+      "url_template": "https://news.google.com/rss/search?q=%22{first}+{last}%22+(obituary+OR+%22passed+away%22+OR+died+OR+arrested+OR+booked+OR+charged)&hl=en-US&gl=US&ceid=US:en",
+      "evidence_url_template": "https://news.google.com/",
+      "render": "BASIC",
+      "result_format": "NEWS_RSS",
+      "scope": "MULTI_STATE",
+      "covers_country": "US"
+    },
+    {
+      "id": "google_news_ca",
+      "label": "Google News",
+      "kind": "QUERY_TEMPLATE",
+      "method": "GET",
+      "url_template": "https://news.google.com/rss/search?q=%22{first}+{last}%22+(obituary+OR+%22passed+away%22+OR+died+OR+arrested+OR+charged)&hl=en-CA&gl=CA&ceid=CA:en",
+      "evidence_url_template": "https://news.google.com/",
+      "render": "BASIC",
+      "result_format": "NEWS_RSS",
+      "scope": "MULTI_STATE",
+      "covers_country": "CA"
+    }
+  ],
   "_identity_sources_comment": "Identity-correlation services (face recognition, reverse image search, name-based OSINT) ported from the sister project doxray (github.com/HereLiesAz/doxray). All entries ship as MANUAL_LANDING because (a) the face/image services require a photo upload the Registry never carries, and (b) the name-based services (PimEyes, FaceCheck.id, CyberBackgroundChecks, SmartBackgroundChecks, GitHub) bot-block raw HTTP requests — they must be exercised through the user's own browser session. The CyberBackgroundChecks / SmartBackgroundChecks chips use the same /name/{first}-{last} search path that the enrichment flow (util/CyberBackgroundChecks.kt) produces, so the chip and the auto-enricher land on the same page (previously the chip used a /people/ path that did not match). Templates with {first}/{last} slots are filled at chip-render time via SourceUrlBuilder.",
 
   "identity_sources": [
