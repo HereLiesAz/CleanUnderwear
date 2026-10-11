@@ -67,9 +67,9 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
             isLoading = operationState.isRunning,
             helpEnabled = true,
             helpList = mapOf(
-                "registry" to "Your primary surveillance ledger.",
-                "ingest" to "Manual entry for targets that evade automated harvesting.",
-                "harvest" to "Deep scythe across all connected social and system databases.",
+                "registry" to "Your monitored contacts.",
+                "ingest" to "Add a contact that didn't sync automatically.",
+                "harvest" to "Import contacts from your device and connected accounts.",
                 "interrogate" to "Force a real-time check against public rosters."
             )
 
@@ -86,7 +86,7 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                 id = "registry",
                 text = "Registry",
                 route = "targetList",
-                info = "View the complete surveillance list."
+                info = "View all monitored contacts."
             )
 
             azRailHostItem(
@@ -128,7 +128,7 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                 isChecked = showIgnored,
                 toggleOnText = "Hide",
                 toggleOffText = "Archives",
-                info = "Toggle visibility of archived targets."
+                info = "Show or hide archived contacts."
             ) {
                 viewModel.toggleShowIgnored()
             }

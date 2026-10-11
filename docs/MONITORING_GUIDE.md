@@ -1,21 +1,21 @@
-# Technical Guide: The Panopticon Engine
+# Technical Guide: The Monitoring Pipeline
 
-This document details the internal logic of the CleanUnderwear autonomous monitoring pipeline.
+This document details the internal logic of the CleanUnderwear daily records-check pipeline.
 
 ## 1. The Scraping Pipeline
 
-The app uses a tiered scraping strategy to balance speed and stealth:
+The app uses a tiered scraping strategy to balance speed and reliability:
 
 ### `HtmlScraper` (Tier 1)
 - **Method**: Standard OkHttp + Jsoup.
-- **Target**: Static municipal rosters and simple arrest logs.
-- **Stealth**: Disguises the `User-Agent` as a desktop browser.
+- **Sources**: Static municipal rosters and simple arrest logs.
+- **User-Agent**: Sends a desktop browser `User-Agent`.
 - **Use Case**: High-speed, low-overhead scans of primitive government sites.
 
 ### `WebViewScraper` (Tier 2)
 - **Method**: Headless `WebView` with JavaScript injection.
-- **Target**: Sites protected by Cloudflare, Turnstile, or dynamic JS rendering (most funeral homes).
-- **Stealth**: Waits for 5 seconds after `onPageFinished` to allow JS challenges to resolve before extracting the DOM via a JavaScript Interface (`HTMLOUT`).
+- **Sources**: Sites protected by Cloudflare, Turnstile, or dynamic JS rendering (most funeral homes).
+- **Rendering**: Waits for 5 seconds after `onPageFinished` to allow JS challenges to resolve before extracting the DOM via a JavaScript Interface (`HTMLOUT`).
 - **Timeout**: Enforces a 30-second hard timeout to prevent background hangs.
 
 ---
@@ -36,21 +36,21 @@ The system uses `WorkManager` for guaranteed execution:
 
 - **PeriodicWorkRequest**: Fixed 24-hour interval.
 - **Daily 9 AM Trigger**: The initial delay is calculated dynamically to align with the next 9:00 AM window.
-- **Semaphore Concurrency**: The `ScrapeTargetsUseCase` uses a `Semaphore(3)` to limit concurrent network requests, preventing the app from being flagged as a bot by municipal firewalls.
+- **Semaphore Concurrency**: The `ScrapeTargetsUseCase` uses a `Semaphore(3)` to limit concurrent network requests, keeping load on public records sites low.
 
 ---
 
-## 4. Decentralized State Recovery
+## 4. State Recovery from Contact Notes
 
 CleanUnderwear treats the Android `Contacts` database as a persistent data store:
 
-- **Injection**: Every registry update is written to the system contact's `Note` field in a structured format:
+- **Write-back**: Every registry update is written to the system contact's `Note` field in a structured format:
   ```
   [Registry Status: Incarcerated]
   Last Check: 04/29/2026
   Records: https://...
   ```
-- **Recovery**: During the `harvestContacts` phase, the `ContactHarvester` regex-parses these notes. This allows the app to restore its entire monitoring state without a cloud backup or login.
+- **Recovery**: During the `harvestContacts` phase, the `ContactHarvester` regex-parses these notes. This allows the app to restore its entire monitoring state without a backup or login. Notes sync with the contact's account (e.g. Google Contacts).
 
 ---
 
@@ -58,6 +58,6 @@ CleanUnderwear treats the Android `Contacts` database as a persistent data store
 
 The `GitHubCrashReporter` is an UncaughtExceptionHandler that triggers during fatal errors:
 1. Captures the `Throwable` stack trace.
-2. Formats a JSON payload with device details.
-3. Posts it to the GitHub `Issues` API using an OkHttp background request.
+2. Formats a JSON payload with the exception message, stack trace, device model and Android version.
+3. Posts it as a public issue via the GitHub `Issues` API, using a token compiled into release builds.
 4. Allows the default handler to take over (triggering the standard Android ANR/Crash dialog).

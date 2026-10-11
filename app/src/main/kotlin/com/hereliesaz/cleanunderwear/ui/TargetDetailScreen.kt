@@ -40,7 +40,7 @@ fun TargetDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Intelligence Profile: ${target.displayName}") },
+                title = { Text("Contact: ${target.displayName}") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -70,12 +70,12 @@ fun TargetDetailScreen(
 
             HorizontalDivider()
 
-            DetailRow(label = "Intelligence Name", value = target.displayName)
+            DetailRow(label = "Name", value = target.displayName)
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
 
             target.phoneNumber?.let { DetailRow(label = "Contact Number", value = it) }
-            target.email?.let { DetailRow(label = "Intelligence Email", value = it) }
+            target.email?.let { DetailRow(label = "Email", value = it) }
             target.areaCode?.let { DetailRow(label = "Location Reference", value = it) }
             if (!target.residenceInfo.isNullOrBlank()) {
                 DetailRow(label = "Known Home Area", value = target.residenceInfo)
@@ -91,7 +91,7 @@ fun TargetDetailScreen(
             } else {
                 "Never"
             }
-            DetailRow(label = "Last Registry Check", value = dateString)
+            DetailRow(label = "Last Check", value = dateString)
             DetailRow(label = "Found In", value = target.sourceAccount ?: "Unknown")
 
             // Verified evidence URL — only present when the stored URL came
@@ -239,7 +239,7 @@ fun TargetDetailScreen(
                                     // (PR6c). For now just log so the round-
                                     // trip is observable.
                                     DiagnosticLogger.log(
-                                        "Identity mission for ${target.displayName} returned " +
+                                        "Lookup for ${target.displayName} returned " +
                                             (html?.length?.let { "$it chars" } ?: "no payload")
                                     )
                                 }
@@ -267,7 +267,7 @@ fun TargetDetailScreen(
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Text(
-                            text = "The daily vigil has no automated records source for this " +
+                            text = "The daily check has no automated records source for this " +
                                 "contact's area — public records here are operator-launch only. " +
                                 "Use the Manual Research source chips below to check them in your " +
                                 "browser; the automatic scan cannot confirm a change for this person.",

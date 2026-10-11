@@ -42,7 +42,7 @@ fun OnboardingScreen(onComplete: () -> Unit) {
             }
             
             AzButton(
-                text = if (pagerState.currentPage == 3) "Start Vigil" else "Next",
+                text = if (pagerState.currentPage == 3) "Get Started" else "Next",
                 onClick = {
                     if (pagerState.currentPage < 3) {
                         scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
@@ -59,10 +59,10 @@ fun OnboardingScreen(onComplete: () -> Unit) {
 @Composable
 fun OnboardingPage(page: Int) {
     val (title, description) = when (page) {
-        0 -> "The Registry" to "We automatically scythe through your digital sources to build a secure, local registry of the people you care about."
-        1 -> "Daily Vigil" to "Every morning at 9 AM, the app performs a silent scan of municipal rosters and obituary registries to keep you informed."
+        0 -> "Your Contacts" to "We bring in contacts from your phone and the accounts you connect, and fill in missing details, so you can keep up with the people you know."
+        1 -> "Daily Check" to "Every morning at 9 AM, the app looks your contacts up in public arrest, inmate and obituary records and tells you if something changes."
         2 -> "Match Evidence" to "If a status change is detected, we provide you with the exact snippet of text as evidence, allowing you to verify the match manually."
-        3 -> "Absolute Privacy" to "Your surveillance data never leaves your device. No cloud, no tracking, just a localized vigil for your loved ones."
+        3 -> "Your Data" to "Your contact list stays on your device: no account, no cloud. To run lookups, contact names (and sometimes a city or area code) are sent to the public-records and lookup sites being searched."
         else -> "" to ""
     }
 

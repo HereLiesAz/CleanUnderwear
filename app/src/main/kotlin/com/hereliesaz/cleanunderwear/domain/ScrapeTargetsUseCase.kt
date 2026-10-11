@@ -80,7 +80,7 @@ class ScrapeTargetsUseCase @Inject constructor(
             }
         }.awaitAll()
 
-        onProgress(1f, "Daily vigil completed")
+        onProgress(1f, "Daily check completed")
     }
 
     private suspend fun processTarget(

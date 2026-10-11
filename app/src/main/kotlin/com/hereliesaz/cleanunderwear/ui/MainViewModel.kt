@@ -349,7 +349,7 @@ class MainViewModel @Inject constructor(
 
         Log.d("MainViewModel", "Sweeping contacts with sources: $activeSources")
         viewModelScope.launch {
-            _operationState.value = OperationState(isRunning = true, description = "Scything local databases...", progress = 0.1f)
+            _operationState.value = OperationState(isRunning = true, description = "Reading contacts...", progress = 0.1f)
             
             // 1. Ingest raw data from enabled sources
             harvestContactsUseCase(activeSources)
@@ -361,7 +361,7 @@ class MainViewModel @Inject constructor(
             }
 
             // 3. Triage for monitorability (Parallelized)
-            _operationState.value = _operationState.value.copy(description = "Triaging registry for vigil readiness...", progress = 0.7f)
+            _operationState.value = _operationState.value.copy(description = "Preparing contacts for daily checks...", progress = 0.7f)
             triageTargetsUseCase { sub, _ ->
                 _operationState.value = _operationState.value.copy(progress = 0.7f + (sub * 0.3f))
             }
@@ -538,7 +538,7 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             pipelineCoordinator.runExclusive("instagram-harvest") {
                 try {
-                    _operationState.value = OperationState(isRunning = true, description = "Scything Instagram followers...", progress = -1f)
+                    _operationState.value = OperationState(isRunning = true, description = "Importing Instagram followers...", progress = -1f)
                     val followers = instagramHarvester.harvestFollowers()
                     harvestContactsUseCase.processManualTargets(followers)
                 } finally {
@@ -572,7 +572,7 @@ class MainViewModel @Inject constructor(
                     when (workInfo.state) {
                         androidx.work.WorkInfo.State.RUNNING -> {
                             val progress = workInfo.progress.getFloat("progress", -1f)
-                            val description = workInfo.progress.getString("description") ?: "Actively Interrogating Roster Targets..."
+                            val description = workInfo.progress.getString("description") ?: "Checking records..."
                             
                             _operationState.value = OperationState(
                                 isRunning = true, 

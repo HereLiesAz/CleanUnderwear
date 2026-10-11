@@ -101,8 +101,14 @@ class MainActivity : ComponentActivity() {
 
     private fun showPermissionRationale(onConfirm: () -> Unit) {
         android.app.AlertDialog.Builder(this)
-            .setTitle("Privacy & Monitoring Access")
-            .setMessage("To build your personal registry, we need access to your contacts. To alert you of status changes, we need notification access. All data remains private on your device.")
+            .setTitle("Contacts & Notifications")
+            .setMessage(
+                "CleanUnderwear reads your contacts and checks their names against public arrest, " +
+                    "inmate and obituary records. To do this, contact names and locations are sent to " +
+                    "those records sites, and to people-search sites when you look up missing details. " +
+                    "Results are saved to your contacts' notes. Notifications tell you when a status " +
+                    "changes. Your contact list is never uploaded to a server of ours."
+            )
             .setPositiveButton("Grant Access") { _, _ -> onConfirm() }
             .setNegativeButton("Exit") { _, _ -> finish() }
             .setCancelable(false)
