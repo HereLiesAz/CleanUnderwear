@@ -440,7 +440,7 @@ fun TargetDetailScreen(
             }
             if (identitySources.isNotEmpty()) {
                 Text(
-                    text = "Identity Correlation (doxray)",
+                    text = "Verify Identity (rule out false matches)",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
