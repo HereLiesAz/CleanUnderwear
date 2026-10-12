@@ -9,19 +9,14 @@ import com.hereliesaz.cleanunderwear.match.ContactProfile
 import com.hereliesaz.cleanunderwear.match.EventKind
 import com.hereliesaz.cleanunderwear.match.MatchTier
 import com.hereliesaz.cleanunderwear.match.MatchVerifier
-import com.hereliesaz.cleanunderwear.match.RecordExtractor
 import com.hereliesaz.cleanunderwear.match.UsStates
-import com.hereliesaz.cleanunderwear.network.HtmlScraper
 import com.hereliesaz.cleanunderwear.network.IdentityVerifier
 import com.hereliesaz.cleanunderwear.network.NameValidator
-import com.hereliesaz.cleanunderwear.network.NewsFeed
-import com.hereliesaz.cleanunderwear.network.RenderMode
-import com.hereliesaz.cleanunderwear.network.ResultFormat
+import com.hereliesaz.cleanunderwear.network.SourceSearch
 import com.hereliesaz.cleanunderwear.network.Source
 import com.hereliesaz.cleanunderwear.network.SourceCatalog
 import com.hereliesaz.cleanunderwear.network.SourceKind
 import com.hereliesaz.cleanunderwear.network.SourceUrlBuilder
-import com.hereliesaz.cleanunderwear.network.WebViewScraper
 import com.hereliesaz.cleanunderwear.ui.NotificationHelper
 import com.hereliesaz.cleanunderwear.util.DiagnosticLogger
 import com.hereliesaz.cleanunderwear.util.SystemContactSyncer
@@ -49,12 +44,11 @@ import javax.inject.Inject
  */
 class ScrapeTargetsUseCase @Inject constructor(
     private val repository: TargetRepository,
-    private val basicScraper: HtmlScraper,
-    private val stealthScraper: WebViewScraper,
     private val verifier: IdentityVerifier,
     private val sourceCatalog: SourceCatalog,
     private val notifications: NotificationHelper,
-    private val contactSyncer: SystemContactSyncer
+    private val contactSyncer: SystemContactSyncer,
+    private val sourceSearch: SourceSearch
 ) {
     private val semaphore = Semaphore(3)
     private val matchVerifier = MatchVerifier()
@@ -137,8 +131,17 @@ class ScrapeTargetsUseCase @Inject constructor(
             val firstName = nameResult.first
             val lastName = nameResult.last
 
-            val lockupSources = sourceCatalog
-                .lockupSourcesFor(target.areaCode, target.residenceInfo)
+            // Every state the contact is tied to: resolved locale, the phone's
+            // area code, and the state written in their address.
+            val tiedStates = listOfNotNull(
+                sourceCatalog.resolveStateForAreaCode(target.areaCode),
+                stateOf(target.residenceInfo)
+            )
+            val lockupSources = (
+                sourceCatalog.lockupSourcesFor(target.areaCode, target.residenceInfo) +
+                    tiedStates.flatMap { sourceCatalog.stateLockupSources(it) }
+                )
+                .distinctBy { it.id }
                 .filter { it.kind != SourceKind.MANUAL_LANDING }
             val obituarySources = sourceCatalog
                 .obituarySourcesFor(target.areaCode, target.residenceInfo)
@@ -189,13 +192,13 @@ class ScrapeTargetsUseCase @Inject constructor(
                 val evidenceUrl = SourceUrlBuilder.buildEvidenceUrl(source, firstName, lastName)
                 if (evidenceUrl in dismissedKeys) continue
                 emitStep("checking ${source.label}")
-                candidates += candidatesFrom(source, EventKind.CUSTODY, firstName, lastName, corroboration, dismissedKeys)
+                candidates += sourceSearch.search(source, EventKind.CUSTODY, firstName, lastName, corroboration, dismissedKeys)
             }
             for (source in obituarySources) {
                 val evidenceUrl = SourceUrlBuilder.buildEvidenceUrl(source, firstName, lastName)
                 if (evidenceUrl in dismissedKeys) continue
                 emitStep("checking ${source.label}")
-                candidates += candidatesFrom(source, EventKind.DEATH, firstName, lastName, corroboration, dismissedKeys)
+                candidates += sourceSearch.search(source, EventKind.DEATH, firstName, lastName, corroboration, dismissedKeys)
             }
 
             emitStep("verifying ${candidates.size} record${if (candidates.size == 1) "" else "s"}")
@@ -274,51 +277,6 @@ class ScrapeTargetsUseCase @Inject constructor(
         }
     }
 
-    /**
-     * Queries one source and returns every record on it that names the contact.
-     * The BOP locator is parsed structurally (with its own custody and
-     * corroboration gates); every other source is fetched as text and read by
-     * [RecordExtractor].
-     */
-    private suspend fun candidatesFrom(
-        source: Source,
-        kind: EventKind,
-        first: String,
-        last: String,
-        corroboration: IdentityVerifier.Corroboration,
-        dismissedKeys: Set<String>
-    ): List<CandidateRecord> {
-        val fetchUrl = try {
-            SourceUrlBuilder.buildFetchUrl(source, first, last)
-        } catch (e: IllegalArgumentException) {
-            return emptyList()
-        }
-        val evidenceUrl = SourceUrlBuilder.buildEvidenceUrl(source, first, last)
-        val text = when (source.render) {
-            RenderMode.BASIC -> when {
-                source.resultFormat == ResultFormat.NEWS_RSS -> {
-                    // A news feed reports deaths and arrests alike; NewsFeed
-                    // classifies each item, so [kind] is not used here.
-                    val xml = basicScraper.fetchBody(fetchUrl) ?: return emptyList()
-                    return NewsFeed.candidates(xml, first, last, source.id, source.label)
-                }
-                source.resultFormat == ResultFormat.BOP_JSON -> {
-                    val r = basicScraper.scrapeBopInmate(fetchUrl, "$first $last", corroboration, dismissedKeys)
-                    return listOfNotNull(r.record?.copy(evidenceUrl = evidenceUrl))
-                }
-                source.method.uppercase() == "POST" ->
-                    basicScraper.fetchText(fetchUrl, SourceUrlBuilder.buildFormFields(source, first, last))
-                else -> basicScraper.fetchText(fetchUrl)
-            }
-            RenderMode.WEBVIEW -> stealthScraper.scrapeGhostTown(
-                url = fetchUrl,
-                settleMs = source.renderSettleMs,
-                readySelector = source.readySelector
-            )?.text()
-        } ?: return emptyList()
-        return RecordExtractor.extract(text, first, last, kind, source.id, source.label, evidenceUrl)
-    }
-
     /** City from residenceInfo ("City, Region, Zip"); null when it holds only one part. */
     private fun cityOf(residence: String?): String? {
         val parts = residence?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() } ?: return null
@@ -329,4 +287,5 @@ class ScrapeTargetsUseCase @Inject constructor(
     private fun stateOf(residence: String?): String? =
         residence?.split(',')?.map { it.trim() }?.drop(1)
             ?.firstNotNullOfOrNull { UsStates.code(it) ?: UsStates.code(it.split(' ').first()) }
+
 }

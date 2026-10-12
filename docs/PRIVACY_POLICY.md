@@ -19,6 +19,8 @@ CleanUnderwear helps you keep the contacts you already have up to date, and tell
 ## 3. What leaves your device
 To look someone up, the app has to send their details to the site being searched:
 - **Public records** (daily, automatic): a contact's name, and where known a city, ZIP or area code, is sent to public inmate, arrest and obituary sources, including the Federal Bureau of Prisons inmate locator.
+- **State prison searches** (daily, automatic): each contact's name is searched in the public inmate search of the states their address and phone area code belong to.
+- **County jail rosters** (daily, automatic): each contact's name is searched in the online jail rosters of counties in the states their address and phone area code belong to.
 - **News search** (daily, automatic): each contact's name is searched on Google News, together with words such as "obituary" and "arrested".
 - **People-search** (only when you run Resolve): every contact without a known age, and every unverified contact, is looked up on CyberBackgroundChecks by phone number, email, address or name, to learn their age and confirm their details.
 - **Links you open**: profile source chips open search sites (records sites, obituary sites, reverse-image and name-search services) in your browser with the contact's name in the address. Nothing is sent until you tap one.

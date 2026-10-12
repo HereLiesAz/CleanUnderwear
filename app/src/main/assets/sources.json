@@ -680,10 +680,98 @@
   },
 
   "states": {
-    "AL": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "AL": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "al_adoc_inmate",
+          "label": "Alabama DOC Inmate Search",
+          "kind": "QUERY_TEMPLATE",
+          "method": "GET",
+          "url_template": "https://www.doc.alabama.gov/inmate/inmate-search/inmate-search-results/?inmate_search={first}+{last}&jsearch=",
+          "evidence_url_template": "https://www.doc.alabama.gov/inmate/",
+          "render": "BASIC",
+          "result_format": "HTML",
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
     "AK": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "AZ": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "AR": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "AR": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "ar_adc_inmate",
+          "label": "Arkansas DOC Inmate Search",
+          "kind": "QUERY_TEMPLATE",
+          "method": "GET",
+          "url_template": "https://inmate.ark.org/index.php/results?dc_num=&county=0&last_name={last}&first_name={first}&facility=0&sex=B&crime=0&age_type=1&age=&ethnicity=0&disclaimer=1&B1=Search",
+          "evidence_url_template": "https://inmate.ark.org/",
+          "render": "BASIC",
+          "result_format": "HTML_TABLE",
+          "table_columns": {
+            "name": "^Name",
+            "id": "DC",
+            "facility": "Facility",
+            "dob": "Birth"
+          },
+          "scope": "STATE"
+        },
+        {
+          "id": "ar_benton_jail",
+          "label": "Benton County AR (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://benton-so-ar.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://benton-so-ar.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "ar_pulaski_jail",
+          "label": "Pulaski County AR (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://pulaski-so-ar.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://pulaski-so-ar.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
     "CA": {
       "country": "US",
       "lockup_sources": [
@@ -698,8 +786,75 @@
       ],
       "obituary_sources": []
     },
-    "CO": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "CT": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "CO": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "co_cdoc_oss",
+          "label": "Colorado DOC Offender Search",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://www.doc.state.co.us/oss/controller/ctl_ajax.php",
+          "form_fields": {
+            "docno": "",
+            "lnam": "{last}",
+            "fnam": "{first}",
+            "gender": "ALL",
+            "sec": "list_offenders",
+            "search": "true",
+            "start": "0",
+            "order_col": "",
+            "order_dir": ""
+          },
+          "evidence_url_template": "https://www.doc.state.co.us/oss/",
+          "render": "BASIC",
+          "result_format": "HTML_TABLE",
+          "table_columns": {
+            "name": "^Name",
+            "id": "DOC",
+            "status": "FACILITY",
+            "age": "AGE"
+          },
+          "released_pattern": "^PAROLE",
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
+    "CT": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "ct_doc_inmate",
+          "label": "Connecticut DOC Inmate Search",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://www.ctinmateinfo.state.ct.us/resultsupv.asp",
+          "token_page": "https://www.ctinmateinfo.state.ct.us/searchop.asp",
+          "headers": {
+            "Referer": "https://www.ctinmateinfo.state.ct.us/searchop.asp"
+          },
+          "form_fields": {
+            "id_inmt_num": "",
+            "nm_inmt_last": "{last}",
+            "nm_inmt_first": "{first}",
+            "dt_inmt_birth": "",
+            "submit1": "Search All Inmates"
+          },
+          "evidence_url_template": "https://www.ctinmateinfo.state.ct.us/searchop.asp",
+          "render": "BASIC",
+          "result_format": "HTML_TABLE",
+          "table_columns": {
+            "name": "Inmate Name",
+            "id": "Number",
+            "dob": "Birth",
+            "facility": "Facility"
+          },
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
     "DE": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "DC": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "FL": {
@@ -712,15 +867,119 @@
           "url_template": "https://pubapps.fdc.myflorida.com/OffenderSearch/InmateInfoMenu.aspx",
           "render": "WEBVIEW",
           "scope": "STATE"
+        },
+        {
+          "id": "fl_fdc_offender",
+          "label": "Florida DOC Offender Search",
+          "kind": "QUERY_TEMPLATE",
+          "method": "GET",
+          "url_template": "https://pubapps.fdc.myflorida.com/OffenderSearch/list.aspx?Page=List&TypeSearch=AI&DataAction=Filter&dcnumber=&LastName={last}&FirstName={first}&SearchAliases=0&OffenseCategory=&photosonly=0&nophotos=1&matches=20",
+          "evidence_url_template": "https://pubapps.fdc.myflorida.com/OffenderSearch/",
+          "render": "BASIC",
+          "result_format": "HTML_TABLE",
+          "table_columns": {
+            "name": "^Name",
+            "id": "DC Number",
+            "facility": "Facility",
+            "dob": "Birth"
+          },
+          "scope": "STATE"
+        },
+        {
+          "id": "fl_walton_jail",
+          "label": "Walton County FL (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "GET",
+          "url_template": "https://nwscorrections.waltonso.org/NewWorld.InmateInquiry/WaltonCounty?Name={last}&InCustody=True&SubjectNumber=&BookingNumber=&BookingFromDate=&BookingToDate=",
+          "evidence_url_template": "https://nwscorrections.waltonso.org/NewWorld.InmateInquiry/WaltonCounty",
+          "render": "BASIC",
+          "result_format": "HTML_TABLE",
+          "table_columns": {
+            "name": "^Name",
+            "id": "Subject Number",
+            "status": "In Custody"
+          },
+          "custody_pattern": "Yes",
+          "scope": "STATE"
         }
       ],
       "obituary_sources": []
     },
-    "GA": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "GA": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "ga_bartow_jail",
+          "label": "Bartow County GA (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "GET",
+          "url_template": "https://jailroster.bc-cville.org/NewWorld.InmateInquiry/bartow?Name={last}&InCustody=True&SubjectNumber=&BookingNumber=&BookingFromDate=&BookingToDate=",
+          "evidence_url_template": "https://jailroster.bc-cville.org/NewWorld.InmateInquiry/bartow",
+          "render": "BASIC",
+          "result_format": "HTML_TABLE",
+          "table_columns": {
+            "name": "^Name",
+            "id": "Subject Number",
+            "status": "In Custody"
+          },
+          "custody_pattern": "Yes",
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
     "HI": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "ID": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "ID": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "id_idoc_search",
+          "label": "Idaho DOC Resident/Client Search",
+          "kind": "QUERY_TEMPLATE",
+          "method": "GET",
+          "url_template": "https://www.idoc.idaho.gov/content/prisons/resident-client-search/results?last_name={last}&first_name={first}&number=",
+          "evidence_url_template": "https://www.idoc.idaho.gov/content/prisons/resident-client-search",
+          "render": "BASIC",
+          "result_format": "HTML_TABLE",
+          "table_columns": {
+            "id": "IDOC",
+            "last": "Last",
+            "first": "^First",
+            "middle": "Middle",
+            "dob": "Birth",
+            "status": "Status"
+          },
+          "custody_pattern": "In custody",
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
     "IL": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "IN": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "IN": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "in_idoc_locator",
+          "label": "Indiana DOC Offender Locator",
+          "kind": "QUERY_TEMPLATE",
+          "method": "GET",
+          "url_template": "https://offenderlocator.idoc.in.gov/idoc-ofs-1.0.2/ofs?lname={last}&fname={first}&search1.x=10&search1.y=10",
+          "evidence_url_template": "https://offenderlocator.idoc.in.gov/",
+          "render": "BASIC",
+          "result_format": "HTML_TABLE",
+          "table_columns": {
+            "name": "^Name",
+            "id": "DOC",
+            "dob": "Birth",
+            "status": "Facility"
+          },
+          "released_pattern": "Discharg|release|Deceased|Parole|Probation",
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
     "IA": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "KS": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "KY": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
@@ -739,15 +998,126 @@
       "obituary_sources": []
     },
     "ME": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "MD": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "MD": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "md_dpscs_locator",
+          "label": "Maryland DPSCS Incarcerated Individual Locator",
+          "kind": "QUERY_TEMPLATE",
+          "method": "GET",
+          "url_template": "https://dpscs.maryland.gov/IncarceratedIndividualLocator/IncarceratedIndividualLocator?searchType=name&FirstName={first}&LastName={last}",
+          "evidence_url_template": "https://dpscs.maryland.gov/IncarceratedIndividualLocator/",
+          "render": "BASIC",
+          "result_format": "HTML_TABLE",
+          "table_columns": {
+            "name": "Name",
+            "id": "DOC",
+            "dob": "DOB|Birth",
+            "facility": "Facility"
+          },
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
     "MA": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "MI": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "MI": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "mi_monroe_jail",
+          "label": "Monroe County MI (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://monroe-so-mi.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://monroe-so-mi.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
     "MN": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "MS": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "MS": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "ms_doc_inmate",
+          "label": "Mississippi DOC Inmate Search",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://www.ms.gov/mdoc/inmate/Search/Index",
+          "token_page": "https://www.ms.gov/mdoc/inmate/Search/Index",
+          "form_fields": {
+            "SearchCriteria": "name",
+            "LastName": "{last}",
+            "FirstName": "{first}",
+            "MdocId": "",
+            "ClickEvent": "SEARCH >>"
+          },
+          "evidence_url_template": "https://www.ms.gov/mdoc/inmate",
+          "render": "BASIC",
+          "result_format": "HTML_TABLE",
+          "table_columns": {
+            "id": "ID",
+            "last": "Last",
+            "first": "First",
+            "facility": "Location"
+          },
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
     "MO": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "MT": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "NE": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "NV": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "NV": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "nv_doc_offender",
+          "label": "Nevada DOC Offender Search",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://ofdsearch.doc.nv.gov/",
+          "form_fields": {
+            "onumber": "",
+            "fname": "{first}",
+            "lname": "{last}"
+          },
+          "evidence_url_template": "https://ofdsearch.doc.nv.gov/",
+          "render": "BASIC",
+          "result_format": "HTML_TABLE",
+          "table_columns": {
+            "id": "Offender",
+            "first": "First",
+            "middle": "Middle",
+            "last": "Last",
+            "status": "Institution"
+          },
+          "released_pattern": "INACTIVE|PAROLE|PROBATION",
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
     "NH": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "NJ": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "NM": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
@@ -765,9 +1135,223 @@
       ],
       "obituary_sources": []
     },
-    "NC": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "ND": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "OH": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "NC": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "nc_dac_offender",
+          "label": "NC DAC Offender Search",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://webapps.doc.state.nc.us/opi/offendersearch.do?method=list",
+          "form_fields": {
+            "searchLastName": "{last}",
+            "searchFirstName": "{first}",
+            "searchMiddleName": "",
+            "activeFilter": "2",
+            "heightTotalInchesMinimum": "0",
+            "heightTotalInchesMaximum": "0"
+          },
+          "evidence_url_template": "https://webapps.doc.state.nc.us/opi/",
+          "render": "BASIC",
+          "result_format": "HTML_TABLE",
+          "table_columns": {
+            "id": "Offender",
+            "last": "Last",
+            "first": "First",
+            "middle": "Middle",
+            "dob": "Birth",
+            "age": "^Age"
+          },
+          "scope": "STATE"
+        },
+        {
+          "id": "nc_union_jail",
+          "label": "Union County NC (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://sheriff.unioncountync.gov/jqHandler.ashx?op=s",
+          "token_page": "https://sheriff.unioncountync.gov/jailinmates.aspx",
+          "form_fields": {
+            "t": "ii",
+            "_search": "true",
+            "rows": "500",
+            "page": "1",
+            "sidx": "disp_name",
+            "sord": "asc",
+            "filters": "{\"groupOp\":\"AND\",\"rules\":[{\"field\":\"lastname\",\"op\":\"bw\",\"data\":\"{last}\"},{\"field\":\"firstname\",\"op\":\"bw\",\"data\":\"{first}\"}]}"
+          },
+          "evidence_url_template": "https://sheriff.unioncountync.gov/jailinmates.aspx",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "rows",
+            "first": "firstname",
+            "last": "lastname",
+            "middle": "middlename",
+            "age": "age",
+            "dob": "dob",
+            "id": "book_id",
+            "facility": "disp_agency"
+          },
+          "scope": "STATE"
+        },
+        {
+          "id": "nc_cabarrus_jail",
+          "label": "Cabarrus County NC (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://onlineservices.cabarruscounty.us/p2c/jqHandler.ashx?op=s",
+          "token_page": "https://onlineservices.cabarruscounty.us/p2c/jailinmates.aspx",
+          "form_fields": {
+            "t": "ii",
+            "_search": "true",
+            "rows": "500",
+            "page": "1",
+            "sidx": "disp_name",
+            "sord": "asc",
+            "filters": "{\"groupOp\":\"AND\",\"rules\":[{\"field\":\"lastname\",\"op\":\"bw\",\"data\":\"{last}\"},{\"field\":\"firstname\",\"op\":\"bw\",\"data\":\"{first}\"}]}"
+          },
+          "evidence_url_template": "https://onlineservices.cabarruscounty.us/p2c/jailinmates.aspx",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "rows",
+            "first": "firstname",
+            "last": "lastname",
+            "middle": "middlename",
+            "age": "age",
+            "dob": "dob",
+            "id": "book_id",
+            "facility": "disp_agency"
+          },
+          "scope": "STATE"
+        },
+        {
+          "id": "nc_newhanover_jail",
+          "label": "New Hanover County NC (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://p2c.nhcgov.com/p2c/jqHandler.ashx?op=s",
+          "token_page": "https://p2c.nhcgov.com/p2c/jailinmates.aspx",
+          "form_fields": {
+            "t": "ii",
+            "_search": "true",
+            "rows": "500",
+            "page": "1",
+            "sidx": "disp_name",
+            "sord": "asc",
+            "filters": "{\"groupOp\":\"AND\",\"rules\":[{\"field\":\"lastname\",\"op\":\"bw\",\"data\":\"{last}\"},{\"field\":\"firstname\",\"op\":\"bw\",\"data\":\"{first}\"}]}"
+          },
+          "evidence_url_template": "https://p2c.nhcgov.com/p2c/jailinmates.aspx",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "rows",
+            "first": "firstname",
+            "last": "lastname",
+            "middle": "middlename",
+            "age": "age",
+            "dob": "dob",
+            "id": "book_id",
+            "facility": "disp_agency"
+          },
+          "scope": "STATE"
+        },
+        {
+          "id": "nc_iredell_jail",
+          "label": "Iredell County NC (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://p2c.iredellcountync.gov/jqHandler.ashx?op=s",
+          "token_page": "https://p2c.iredellcountync.gov/jailinmates.aspx",
+          "form_fields": {
+            "t": "ii",
+            "_search": "true",
+            "rows": "500",
+            "page": "1",
+            "sidx": "disp_name",
+            "sord": "asc",
+            "filters": "{\"groupOp\":\"AND\",\"rules\":[{\"field\":\"lastname\",\"op\":\"bw\",\"data\":\"{last}\"},{\"field\":\"firstname\",\"op\":\"bw\",\"data\":\"{first}\"}]}"
+          },
+          "evidence_url_template": "https://p2c.iredellcountync.gov/jailinmates.aspx",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "rows",
+            "first": "firstname",
+            "last": "lastname",
+            "middle": "middlename",
+            "age": "age",
+            "dob": "dob",
+            "id": "book_id",
+            "facility": "disp_agency"
+          },
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
+    "ND": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "nd_docr_lookup",
+          "label": "ND DOCR Resident Lookup",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://www.nd.gov/docr/offenderlkup/nameprocessor.asp",
+          "form_fields": {
+            "lastName": "{last}",
+            "Submit": "Submit"
+          },
+          "evidence_url_template": "https://www.nd.gov/docr/offenderlkup/",
+          "render": "BASIC",
+          "result_format": "HTML_TABLE",
+          "table_columns": {
+            "id": "ID",
+            "last": "Last",
+            "first": "First",
+            "middle": "Middle",
+            "dob": "DOB|Birth"
+          },
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
+    "OH": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "oh_odrc_offender",
+          "label": "Ohio DRC Offender Search",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://appgateway.drc.ohio.gov/OffenderSearch/Search/SearchResults",
+          "token_page": "https://appgateway.drc.ohio.gov/OffenderSearch",
+          "form_fields": {
+            "LastName": "{last}",
+            "FirstName": "{first}",
+            "Status": "I",
+            "Sort": "N",
+            "IsAuthenticated": ""
+          },
+          "evidence_url_template": "https://appgateway.drc.ohio.gov/OffenderSearch",
+          "render": "BASIC",
+          "result_format": "HTML_TABLE",
+          "table_columns": {
+            "name": "Full Name",
+            "id": "Number",
+            "dob": "DOB",
+            "status": "Status"
+          },
+          "custody_pattern": "INCARCERATED",
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
     "OK": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "OR": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "PA": {
@@ -775,18 +1359,144 @@
       "lockup_sources": [
         {
           "id": "pa_doc_locator",
-          "label": "Pennsylvania DOC Inmate Locator",
-          "kind": "MANUAL_LANDING",
-          "url_template": "https://inmatelocator.cor.pa.gov/",
-          "render": "WEBVIEW",
+          "label": "PA DOC Inmate Locator",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://captorapi.cor.pa.gov/InmateLocatorAPIV8/api/v1/InmateLocator/SearchResults",
+          "body_template": "{\"id\":\"\",\"firstName\":\"{first}\",\"lastName\":\"{last}\",\"middleName\":\"\",\"paroleNumber\":\"\",\"countylistkey\":\"---\",\"citizenlistkey\":\"---\",\"racelistkey\":\"---\",\"sexlistkey\":\"---\",\"locationlistkey\":\"---\",\"age\":\"\",\"dateofbirth\":null,\"sortBy\":\"1\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://inmatelocator.cor.pa.gov/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "inmates",
+            "first": "inm_firstname",
+            "last": "inm_lastname",
+            "middle": "inm_middlename",
+            "dob": "dob",
+            "id": "inmate_number",
+            "facility": "fac_name"
+          },
           "scope": "STATE"
         }
       ],
       "obituary_sources": []
     },
     "RI": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "SC": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "SD": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "SC": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "sc_scdc_inmate",
+          "label": "SCDC Incarcerated Inmate Search",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://public.doc.state.sc.us/scdc-public/inmateSearch.do?lastName={last}&firstName={first}&scdcId=&sid=&phoneticMatch=",
+          "body_template": "",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://public.doc.state.sc.us/scdc-public/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "",
+            "first": "fname",
+            "last": "lname",
+            "middle": "mname",
+            "age": "age",
+            "id": "scdcId"
+          },
+          "scope": "STATE"
+        },
+        {
+          "id": "sc_cherokee_jail",
+          "label": "Cherokee County SC (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://cherokee-so-sc.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://cherokee-so-sc.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "sc_oconee_jail",
+          "label": "Oconee County SC (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://oconee-so-sc.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://oconee-so-sc.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
+    "SD": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "sd_lincoln_jail",
+          "label": "Lincoln County SD (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://lincoln-so-sd.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://lincoln-so-sd.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
     "TN": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "TX": {
       "country": "US",
@@ -798,6 +1508,33 @@
           "url_template": "https://ivss.tdcj.texas.gov/offender-search-popups/",
           "render": "WEBVIEW",
           "scope": "STATE"
+        },
+        {
+          "id": "tx_tdcj_inmate",
+          "label": "TDCJ Inmate Search",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://inmate.tdcj.texas.gov/InmateSearch/search.action",
+          "form_fields": {
+            "page": "index",
+            "lastName": "{last}",
+            "firstName": "{first}",
+            "tdcj": "",
+            "sid": "",
+            "gender": "ALL",
+            "race": "ALL",
+            "btnSearch": "Search"
+          },
+          "evidence_url_template": "https://inmate.tdcj.texas.gov/InmateSearch/",
+          "render": "BASIC",
+          "result_format": "HTML_TABLE",
+          "table_columns": {
+            "name": "^Name",
+            "id": "TDCJ",
+            "age": "Age",
+            "facility": "Unit"
+          },
+          "scope": "STATE"
         }
       ],
       "obituary_sources": []
@@ -805,10 +1542,65 @@
     "UT": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "VT": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "VA": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "WA": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "WA": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "wa_doc_incarcerated",
+          "label": "Washington DOC Incarcerated Search",
+          "kind": "QUERY_TEMPLATE",
+          "method": "GET",
+          "url_template": "https://doc.wa.gov/records/incarcerated-data-search/incarcerated-search?field_doc_number_value=&field_first_name_value={first}&field_last_name_value={last}",
+          "evidence_url_template": "https://doc.wa.gov/records/incarcerated-data-search/",
+          "render": "BASIC",
+          "result_format": "HTML_TABLE",
+          "table_columns": {
+            "id": "DOC",
+            "name": "^Name",
+            "age": "Age",
+            "facility": "Location"
+          },
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
     "WV": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "WI": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "WY": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "WY": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "wy_doc_locator",
+          "label": "Wyoming DOC Offender Locator",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://wdoc-loc.wyo.gov/",
+          "form_fields": {
+            "offenderID": "",
+            "lastName": "{last}",
+            "firstName": "{first}",
+            "age": "",
+            "genderGroup": "a"
+          },
+          "results_url": "https://wdoc-loc.wyo.gov/Home/getInmateList",
+          "evidence_url_template": "https://wdoc-loc.wyo.gov/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "data",
+            "first": "firstName",
+            "last": "lastName",
+            "age": "age",
+            "status": "groupKind",
+            "id": "offenderID"
+          },
+          "custody_pattern": "^Inmate$",
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
     "PR": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "VI": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "GU": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
