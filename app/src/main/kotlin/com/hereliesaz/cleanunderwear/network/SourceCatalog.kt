@@ -77,6 +77,16 @@ data class Source(
     /** Force HTTP/1.1; some state servers drop HTTP/2 clients. */
     val http1: Boolean = false,
     /**
+     * What a hit on this source reports, overriding the list it sits in. Court
+     * case searches sit with the lockup sources but report ARREST (charged),
+     * not CUSTODY.
+     */
+    val eventKind: com.hereliesaz.cleanunderwear.match.EventKind? = null,
+    /** Regex (case-insensitive) a row's case_type must match, e.g. criminal case types. */
+    val caseTypePattern: String? = null,
+    /** Rows whose "date" field (filing/booking date) is older than this are dropped. */
+    val maxAgeDays: Int? = null,
+    /**
      * A page to GET before the search, for forms that need a per-session token
      * (ASP.NET __VIEWSTATE, CSRF). Its hidden inputs and cookies are sent with
      * the search request; [formFields] override them.
@@ -138,6 +148,9 @@ class SourceCatalog @Inject constructor(
         val table_columns: Map<String, String>? = null,
         val results_url: String? = null,
         val http1: Boolean? = null,
+        val event_kind: String? = null,
+        val case_type_pattern: String? = null,
+        val max_age_days: Int? = null,
         val token_page: String? = null,
         val released_pattern: String? = null,
         val custody_pattern: String? = null,
@@ -433,6 +446,11 @@ class SourceCatalog @Inject constructor(
             tableColumns = table_columns.orEmpty(),
             resultsUrl = results_url,
             http1 = http1 == true,
+            eventKind = event_kind?.let { k ->
+                com.hereliesaz.cleanunderwear.match.EventKind.entries.firstOrNull { it.name.equals(k, ignoreCase = true) }
+            },
+            caseTypePattern = case_type_pattern,
+            maxAgeDays = max_age_days,
             tokenPage = token_page,
             releasedPattern = released_pattern,
             custodyPattern = custody_pattern,

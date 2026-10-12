@@ -29,6 +29,8 @@ class SourceSearch @Inject constructor(
         corroboration: IdentityVerifier.Corroboration,
         dismissedKeys: Set<String>
     ): List<CandidateRecord> {
+        @Suppress("NAME_SHADOWING")
+        val kind = source.eventKind ?: kind
         val fetchUrl = try {
             SourceUrlBuilder.buildFetchUrl(source, first, last)
         } catch (e: IllegalArgumentException) {
