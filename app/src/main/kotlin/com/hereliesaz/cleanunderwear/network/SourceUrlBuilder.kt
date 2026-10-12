@@ -24,6 +24,16 @@ object SourceUrlBuilder {
         return fillSlots(source.evidenceUrlTemplate, first, last)
     }
 
+    /**
+     * Fills a human-facing landing URL with the contact's name for the profile
+     * chips, so a name-queryable site opens ready to search. Blank names leave
+     * the slots unfilled (the caller then skips a still-templated URL).
+     */
+    fun fillLanding(template: String, first: String, last: String): String {
+        if (first.isBlank() || last.isBlank()) return template
+        return fillSlots(template, first, last)
+    }
+
     fun buildFormFields(source: Source, first: String, last: String): Map<String, String> {
         if (source.formFields.isEmpty()) return emptyMap()
         return source.formFields.mapValues { (_, value) -> fillSlots(value, first, last, encode = false) }
