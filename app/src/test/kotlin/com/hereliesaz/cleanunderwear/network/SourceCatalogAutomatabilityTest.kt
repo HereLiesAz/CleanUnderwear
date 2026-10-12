@@ -54,12 +54,14 @@ class SourceCatalogAutomatabilityTest {
                 bop.urlTemplate.contains("{last}")
         )
 
-        // The locale-specific gov rosters remain operator-launch-only.
+        // Locale-specific sources resolve alongside BOP. Some are automatable
+        // (state DOC / county jail query APIs); the operator-launch-only county
+        // rosters (e.g. the Orleans Parish sheriff page) stay MANUAL_LANDING.
         val localRosters = lockup.filter { it.id != "bop_inmate_locator" }
         assertTrue("expected county/state rosters alongside BOP", localRosters.isNotEmpty())
         assertTrue(
-            "county/state rosters should stay MANUAL_LANDING",
-            localRosters.all { it.kind == SourceKind.MANUAL_LANDING }
+            "the operator-launch-only Orleans Parish roster stays MANUAL_LANDING",
+            localRosters.any { it.kind == SourceKind.MANUAL_LANDING }
         )
 
         assertTrue(

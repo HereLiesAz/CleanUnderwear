@@ -1,174 +1,661 @@
 {
   "version": 2,
-  "_comment": "Geographic routing is most-specific-first: county → state → multi-state. Initial coverage covers the top ~15 US metros at the county level; non-metro contacts fall through to state-level. Source kinds: QUERY_TEMPLATE (per-name URL), ROSTER_PAGE (static, used only with strict name match), MANUAL_LANDING (user-only, never automated evidence). When in doubt about a URL pattern, ship as MANUAL_LANDING so the auto scraper never produces false confidence.",
-
+  "_comment": "Geographic routing is most-specific-first: county \u2192 state \u2192 multi-state. Initial coverage covers the top ~15 US metros at the county level; non-metro contacts fall through to state-level. Source kinds: QUERY_TEMPLATE (per-name URL), ROSTER_PAGE (static, used only with strict name match), MANUAL_LANDING (user-only, never automated evidence). When in doubt about a URL pattern, ship as MANUAL_LANDING so the auto scraper never produces false confidence.",
   "area_codes": {
-    "205": "AL", "251": "AL", "256": "AL", "334": "AL", "659": "AL", "938": "AL",
+    "205": "AL",
+    "251": "AL",
+    "256": "AL",
+    "334": "AL",
+    "659": "AL",
+    "938": "AL",
     "907": "AK",
-    "480": "AZ", "520": "AZ", "602": "AZ", "623": "AZ", "928": "AZ",
-    "327": "AR", "479": "AR", "501": "AR", "870": "AR",
-    "209": "CA", "213": "CA", "279": "CA", "310": "CA", "323": "CA", "341": "CA",
-    "350": "CA", "408": "CA", "415": "CA", "424": "CA", "442": "CA", "510": "CA",
-    "530": "CA", "559": "CA", "562": "CA", "619": "CA", "626": "CA", "628": "CA",
-    "650": "CA", "657": "CA", "661": "CA", "669": "CA", "707": "CA", "714": "CA",
-    "747": "CA", "760": "CA", "805": "CA", "818": "CA", "820": "CA", "831": "CA",
-    "837": "CA", "840": "CA", "858": "CA", "909": "CA", "916": "CA", "925": "CA",
-    "949": "CA", "951": "CA",
-    "303": "CO", "719": "CO", "720": "CO", "970": "CO", "983": "CO",
-    "203": "CT", "475": "CT", "860": "CT", "959": "CT",
+    "480": "AZ",
+    "520": "AZ",
+    "602": "AZ",
+    "623": "AZ",
+    "928": "AZ",
+    "327": "AR",
+    "479": "AR",
+    "501": "AR",
+    "870": "AR",
+    "209": "CA",
+    "213": "CA",
+    "279": "CA",
+    "310": "CA",
+    "323": "CA",
+    "341": "CA",
+    "350": "CA",
+    "408": "CA",
+    "415": "CA",
+    "424": "CA",
+    "442": "CA",
+    "510": "CA",
+    "530": "CA",
+    "559": "CA",
+    "562": "CA",
+    "619": "CA",
+    "626": "CA",
+    "628": "CA",
+    "650": "CA",
+    "657": "CA",
+    "661": "CA",
+    "669": "CA",
+    "707": "CA",
+    "714": "CA",
+    "747": "CA",
+    "760": "CA",
+    "805": "CA",
+    "818": "CA",
+    "820": "CA",
+    "831": "CA",
+    "837": "CA",
+    "840": "CA",
+    "858": "CA",
+    "909": "CA",
+    "916": "CA",
+    "925": "CA",
+    "949": "CA",
+    "951": "CA",
+    "303": "CO",
+    "719": "CO",
+    "720": "CO",
+    "970": "CO",
+    "983": "CO",
+    "203": "CT",
+    "475": "CT",
+    "860": "CT",
+    "959": "CT",
     "302": "DE",
-    "202": "DC", "771": "DC",
-    "239": "FL", "305": "FL", "321": "FL", "324": "FL", "352": "FL", "386": "FL",
-    "407": "FL", "448": "FL", "561": "FL", "645": "FL", "656": "FL", "689": "FL",
-    "727": "FL", "754": "FL", "772": "FL", "786": "FL", "813": "FL", "850": "FL",
-    "863": "FL", "904": "FL", "941": "FL", "954": "FL",
-    "229": "GA", "404": "GA", "470": "GA", "478": "GA", "678": "GA", "706": "GA",
-    "762": "GA", "770": "GA", "912": "GA", "943": "GA",
+    "202": "DC",
+    "771": "DC",
+    "239": "FL",
+    "305": "FL",
+    "321": "FL",
+    "324": "FL",
+    "352": "FL",
+    "386": "FL",
+    "407": "FL",
+    "448": "FL",
+    "561": "FL",
+    "645": "FL",
+    "656": "FL",
+    "689": "FL",
+    "727": "FL",
+    "754": "FL",
+    "772": "FL",
+    "786": "FL",
+    "813": "FL",
+    "850": "FL",
+    "863": "FL",
+    "904": "FL",
+    "941": "FL",
+    "954": "FL",
+    "229": "GA",
+    "404": "GA",
+    "470": "GA",
+    "478": "GA",
+    "678": "GA",
+    "706": "GA",
+    "762": "GA",
+    "770": "GA",
+    "912": "GA",
+    "943": "GA",
     "808": "HI",
-    "208": "ID", "986": "ID",
-    "217": "IL", "224": "IL", "309": "IL", "312": "IL", "331": "IL", "447": "IL",
-    "464": "IL", "618": "IL", "630": "IL", "708": "IL", "730": "IL", "773": "IL",
-    "779": "IL", "815": "IL", "847": "IL", "861": "IL", "872": "IL",
-    "219": "IN", "260": "IN", "317": "IN", "463": "IN", "574": "IN", "765": "IN",
-    "812": "IN", "930": "IN",
-    "319": "IA", "515": "IA", "563": "IA", "641": "IA", "712": "IA",
-    "316": "KS", "620": "KS", "785": "KS", "913": "KS", "975": "KS",
-    "270": "KY", "364": "KY", "502": "KY", "606": "KY", "859": "KY",
-    "225": "LA", "318": "LA", "337": "LA", "504": "LA", "985": "LA",
+    "208": "ID",
+    "986": "ID",
+    "217": "IL",
+    "224": "IL",
+    "309": "IL",
+    "312": "IL",
+    "331": "IL",
+    "447": "IL",
+    "464": "IL",
+    "618": "IL",
+    "630": "IL",
+    "708": "IL",
+    "730": "IL",
+    "773": "IL",
+    "779": "IL",
+    "815": "IL",
+    "847": "IL",
+    "861": "IL",
+    "872": "IL",
+    "219": "IN",
+    "260": "IN",
+    "317": "IN",
+    "463": "IN",
+    "574": "IN",
+    "765": "IN",
+    "812": "IN",
+    "930": "IN",
+    "319": "IA",
+    "515": "IA",
+    "563": "IA",
+    "641": "IA",
+    "712": "IA",
+    "316": "KS",
+    "620": "KS",
+    "785": "KS",
+    "913": "KS",
+    "975": "KS",
+    "270": "KY",
+    "364": "KY",
+    "502": "KY",
+    "606": "KY",
+    "859": "KY",
+    "225": "LA",
+    "318": "LA",
+    "337": "LA",
+    "504": "LA",
+    "985": "LA",
     "207": "ME",
-    "227": "MD", "240": "MD", "301": "MD", "410": "MD", "443": "MD", "667": "MD",
-    "339": "MA", "351": "MA", "413": "MA", "508": "MA", "617": "MA", "774": "MA",
-    "781": "MA", "857": "MA", "978": "MA",
-    "231": "MI", "248": "MI", "269": "MI", "313": "MI", "517": "MI", "586": "MI",
-    "616": "MI", "679": "MI", "734": "MI", "810": "MI", "906": "MI", "947": "MI",
+    "227": "MD",
+    "240": "MD",
+    "301": "MD",
+    "410": "MD",
+    "443": "MD",
+    "667": "MD",
+    "339": "MA",
+    "351": "MA",
+    "413": "MA",
+    "508": "MA",
+    "617": "MA",
+    "774": "MA",
+    "781": "MA",
+    "857": "MA",
+    "978": "MA",
+    "231": "MI",
+    "248": "MI",
+    "269": "MI",
+    "313": "MI",
+    "517": "MI",
+    "586": "MI",
+    "616": "MI",
+    "679": "MI",
+    "734": "MI",
+    "810": "MI",
+    "906": "MI",
+    "947": "MI",
     "989": "MI",
-    "218": "MN", "320": "MN", "507": "MN", "612": "MN", "651": "MN", "763": "MN",
-    "924": "MN", "952": "MN",
-    "228": "MS", "471": "MS", "601": "MS", "662": "MS", "769": "MS",
-    "235": "MO", "314": "MO", "417": "MO", "557": "MO", "573": "MO", "636": "MO",
-    "660": "MO", "816": "MO",
+    "218": "MN",
+    "320": "MN",
+    "507": "MN",
+    "612": "MN",
+    "651": "MN",
+    "763": "MN",
+    "924": "MN",
+    "952": "MN",
+    "228": "MS",
+    "471": "MS",
+    "601": "MS",
+    "662": "MS",
+    "769": "MS",
+    "235": "MO",
+    "314": "MO",
+    "417": "MO",
+    "557": "MO",
+    "573": "MO",
+    "636": "MO",
+    "660": "MO",
+    "816": "MO",
     "406": "MT",
-    "308": "NE", "402": "NE", "531": "NE",
-    "702": "NV", "725": "NV", "775": "NV",
+    "308": "NE",
+    "402": "NE",
+    "531": "NE",
+    "702": "NV",
+    "725": "NV",
+    "775": "NV",
     "603": "NH",
-    "201": "NJ", "551": "NJ", "609": "NJ", "640": "NJ", "732": "NJ", "848": "NJ",
-    "856": "NJ", "862": "NJ", "908": "NJ", "973": "NJ",
-    "505": "NM", "575": "NM",
-    "212": "NY", "315": "NY", "329": "NY", "332": "NY", "347": "NY", "363": "NY",
-    "516": "NY", "518": "NY", "585": "NY", "607": "NY", "631": "NY", "646": "NY",
-    "680": "NY", "716": "NY", "718": "NY", "838": "NY", "845": "NY", "914": "NY",
-    "917": "NY", "929": "NY", "934": "NY",
-    "252": "NC", "336": "NC", "472": "NC", "704": "NC", "743": "NC", "828": "NC",
-    "910": "NC", "919": "NC", "980": "NC", "984": "NC",
+    "201": "NJ",
+    "551": "NJ",
+    "609": "NJ",
+    "640": "NJ",
+    "732": "NJ",
+    "848": "NJ",
+    "856": "NJ",
+    "862": "NJ",
+    "908": "NJ",
+    "973": "NJ",
+    "505": "NM",
+    "575": "NM",
+    "212": "NY",
+    "315": "NY",
+    "329": "NY",
+    "332": "NY",
+    "347": "NY",
+    "363": "NY",
+    "516": "NY",
+    "518": "NY",
+    "585": "NY",
+    "607": "NY",
+    "631": "NY",
+    "646": "NY",
+    "680": "NY",
+    "716": "NY",
+    "718": "NY",
+    "838": "NY",
+    "845": "NY",
+    "914": "NY",
+    "917": "NY",
+    "929": "NY",
+    "934": "NY",
+    "252": "NC",
+    "336": "NC",
+    "472": "NC",
+    "704": "NC",
+    "743": "NC",
+    "828": "NC",
+    "910": "NC",
+    "919": "NC",
+    "980": "NC",
+    "984": "NC",
     "701": "ND",
-    "216": "OH", "220": "OH", "234": "OH", "283": "OH", "326": "OH", "330": "OH",
-    "380": "OH", "419": "OH", "436": "OH", "440": "OH", "513": "OH", "567": "OH",
-    "614": "OH", "740": "OH", "937": "OH",
-    "405": "OK", "539": "OK", "572": "OK", "580": "OK", "918": "OK",
-    "458": "OR", "503": "OR", "541": "OR", "971": "OR",
-    "215": "PA", "223": "PA", "267": "PA", "272": "PA", "412": "PA", "445": "PA",
-    "484": "PA", "570": "PA", "582": "PA", "610": "PA", "717": "PA", "724": "PA",
-    "814": "PA", "835": "PA", "878": "PA",
+    "216": "OH",
+    "220": "OH",
+    "234": "OH",
+    "283": "OH",
+    "326": "OH",
+    "330": "OH",
+    "380": "OH",
+    "419": "OH",
+    "436": "OH",
+    "440": "OH",
+    "513": "OH",
+    "567": "OH",
+    "614": "OH",
+    "740": "OH",
+    "937": "OH",
+    "405": "OK",
+    "539": "OK",
+    "572": "OK",
+    "580": "OK",
+    "918": "OK",
+    "458": "OR",
+    "503": "OR",
+    "541": "OR",
+    "971": "OR",
+    "215": "PA",
+    "223": "PA",
+    "267": "PA",
+    "272": "PA",
+    "412": "PA",
+    "445": "PA",
+    "484": "PA",
+    "570": "PA",
+    "582": "PA",
+    "610": "PA",
+    "717": "PA",
+    "724": "PA",
+    "814": "PA",
+    "835": "PA",
+    "878": "PA",
     "401": "RI",
-    "803": "SC", "821": "SC", "839": "SC", "843": "SC", "854": "SC", "864": "SC",
+    "803": "SC",
+    "821": "SC",
+    "839": "SC",
+    "843": "SC",
+    "854": "SC",
+    "864": "SC",
     "605": "SD",
-    "423": "TN", "615": "TN", "629": "TN", "731": "TN", "865": "TN", "901": "TN",
+    "423": "TN",
+    "615": "TN",
+    "629": "TN",
+    "731": "TN",
+    "865": "TN",
+    "901": "TN",
     "931": "TN",
-    "210": "TX", "214": "TX", "254": "TX", "281": "TX", "325": "TX", "346": "TX",
-    "361": "TX", "409": "TX", "430": "TX", "432": "TX", "469": "TX", "512": "TX",
-    "682": "TX", "713": "TX", "726": "TX", "737": "TX", "806": "TX", "817": "TX",
-    "830": "TX", "832": "TX", "903": "TX", "915": "TX", "936": "TX", "940": "TX",
-    "945": "TX", "956": "TX", "972": "TX", "979": "TX",
-    "385": "UT", "435": "UT", "801": "UT", "855": "UT",
+    "210": "TX",
+    "214": "TX",
+    "254": "TX",
+    "281": "TX",
+    "325": "TX",
+    "346": "TX",
+    "361": "TX",
+    "409": "TX",
+    "430": "TX",
+    "432": "TX",
+    "469": "TX",
+    "512": "TX",
+    "682": "TX",
+    "713": "TX",
+    "726": "TX",
+    "737": "TX",
+    "806": "TX",
+    "817": "TX",
+    "830": "TX",
+    "832": "TX",
+    "903": "TX",
+    "915": "TX",
+    "936": "TX",
+    "940": "TX",
+    "945": "TX",
+    "956": "TX",
+    "972": "TX",
+    "979": "TX",
+    "385": "UT",
+    "435": "UT",
+    "801": "UT",
+    "855": "UT",
     "802": "VT",
-    "276": "VA", "434": "VA", "540": "VA", "571": "VA", "686": "VA", "703": "VA",
-    "757": "VA", "804": "VA", "826": "VA", "948": "VA",
-    "206": "WA", "253": "WA", "360": "WA", "425": "WA", "509": "WA", "564": "WA",
-    "304": "WV", "681": "WV",
-    "262": "WI", "274": "WI", "414": "WI", "534": "WI", "608": "WI", "715": "WI",
+    "276": "VA",
+    "434": "VA",
+    "540": "VA",
+    "571": "VA",
+    "686": "VA",
+    "703": "VA",
+    "757": "VA",
+    "804": "VA",
+    "826": "VA",
+    "948": "VA",
+    "206": "WA",
+    "253": "WA",
+    "360": "WA",
+    "425": "WA",
+    "509": "WA",
+    "564": "WA",
+    "304": "WV",
+    "681": "WV",
+    "262": "WI",
+    "274": "WI",
+    "414": "WI",
+    "534": "WI",
+    "608": "WI",
+    "715": "WI",
     "920": "WI",
     "307": "WY",
-    "787": "PR", "939": "PR",
+    "787": "PR",
+    "939": "PR",
     "340": "VI",
     "671": "GU",
     "684": "AS",
     "670": "MP",
-    "403": "AB", "587": "AB", "780": "AB", "825": "AB", "368": "AB",
-    "236": "BC", "250": "BC", "257": "BC", "604": "BC", "672": "BC", "778": "BC",
-    "204": "MB", "431": "MB", "584": "MB",
+    "403": "AB",
+    "587": "AB",
+    "780": "AB",
+    "825": "AB",
+    "368": "AB",
+    "236": "BC",
+    "250": "BC",
+    "257": "BC",
+    "604": "BC",
+    "672": "BC",
+    "778": "BC",
+    "204": "MB",
+    "431": "MB",
+    "584": "MB",
     "506": "NB",
     "709": "NL",
-    "782": "NS", "902": "NS",
-    "226": "ON", "249": "ON", "289": "ON", "343": "ON", "365": "ON", "416": "ON",
-    "437": "ON", "519": "ON", "548": "ON", "613": "ON", "647": "ON", "683": "ON",
-    "705": "ON", "742": "ON", "753": "ON", "807": "ON", "905": "ON", "942": "ON",
-    "263": "QC", "354": "QC", "367": "QC", "418": "QC", "438": "QC", "450": "QC",
-    "468": "QC", "514": "QC", "579": "QC", "581": "QC", "819": "QC", "873": "QC",
-    "306": "SK", "474": "SK", "639": "SK",
+    "782": "NS",
+    "902": "NS",
+    "226": "ON",
+    "249": "ON",
+    "289": "ON",
+    "343": "ON",
+    "365": "ON",
+    "416": "ON",
+    "437": "ON",
+    "519": "ON",
+    "548": "ON",
+    "613": "ON",
+    "647": "ON",
+    "683": "ON",
+    "705": "ON",
+    "742": "ON",
+    "753": "ON",
+    "807": "ON",
+    "905": "ON",
+    "942": "ON",
+    "263": "QC",
+    "354": "QC",
+    "367": "QC",
+    "418": "QC",
+    "438": "QC",
+    "450": "QC",
+    "468": "QC",
+    "514": "QC",
+    "579": "QC",
+    "581": "QC",
+    "819": "QC",
+    "873": "QC",
+    "306": "SK",
+    "474": "SK",
+    "639": "SK",
     "867": "YT"
   },
-
   "area_code_metros": {
-    "212": { "primary_county": "New York County, NY", "primary_city": "New York" },
-    "332": { "primary_county": "New York County, NY", "primary_city": "New York" },
-    "646": { "primary_county": "New York County, NY", "primary_city": "New York" },
-    "917": { "primary_county": "New York County, NY", "primary_city": "New York" },
-    "718": { "primary_county": "Kings County, NY", "primary_city": "Brooklyn" },
-    "347": { "primary_county": "Kings County, NY", "primary_city": "Brooklyn" },
-    "929": { "primary_county": "Kings County, NY", "primary_city": "Brooklyn" },
-    "213": { "primary_county": "Los Angeles County, CA", "primary_city": "Los Angeles" },
-    "323": { "primary_county": "Los Angeles County, CA", "primary_city": "Los Angeles" },
-    "310": { "primary_county": "Los Angeles County, CA", "primary_city": "Los Angeles" },
-    "424": { "primary_county": "Los Angeles County, CA", "primary_city": "Los Angeles" },
-    "818": { "primary_county": "Los Angeles County, CA", "primary_city": "Los Angeles" },
-    "747": { "primary_county": "Los Angeles County, CA", "primary_city": "Los Angeles" },
-    "626": { "primary_county": "Los Angeles County, CA", "primary_city": "Pasadena" },
-    "562": { "primary_county": "Los Angeles County, CA", "primary_city": "Long Beach" },
-    "312": { "primary_county": "Cook County, IL", "primary_city": "Chicago" },
-    "773": { "primary_county": "Cook County, IL", "primary_city": "Chicago" },
-    "872": { "primary_county": "Cook County, IL", "primary_city": "Chicago" },
-    "713": { "primary_county": "Harris County, TX", "primary_city": "Houston" },
-    "281": { "primary_county": "Harris County, TX", "primary_city": "Houston" },
-    "832": { "primary_county": "Harris County, TX", "primary_city": "Houston" },
-    "346": { "primary_county": "Harris County, TX", "primary_city": "Houston" },
-    "480": { "primary_county": "Maricopa County, AZ", "primary_city": "Mesa" },
-    "602": { "primary_county": "Maricopa County, AZ", "primary_city": "Phoenix" },
-    "623": { "primary_county": "Maricopa County, AZ", "primary_city": "Glendale" },
-    "215": { "primary_county": "Philadelphia County, PA", "primary_city": "Philadelphia" },
-    "267": { "primary_county": "Philadelphia County, PA", "primary_city": "Philadelphia" },
-    "445": { "primary_county": "Philadelphia County, PA", "primary_city": "Philadelphia" },
-    "210": { "primary_county": "Bexar County, TX", "primary_city": "San Antonio" },
-    "726": { "primary_county": "Bexar County, TX", "primary_city": "San Antonio" },
-    "619": { "primary_county": "San Diego County, CA", "primary_city": "San Diego" },
-    "858": { "primary_county": "San Diego County, CA", "primary_city": "San Diego" },
-    "214": { "primary_county": "Dallas County, TX", "primary_city": "Dallas" },
-    "469": { "primary_county": "Dallas County, TX", "primary_city": "Dallas" },
-    "972": { "primary_county": "Dallas County, TX", "primary_city": "Dallas" },
-    "945": { "primary_county": "Dallas County, TX", "primary_city": "Dallas" },
-    "512": { "primary_county": "Travis County, TX", "primary_city": "Austin" },
-    "737": { "primary_county": "Travis County, TX", "primary_city": "Austin" },
-    "504": { "primary_county": "Orleans Parish, LA", "primary_city": "New Orleans" },
-    "415": { "primary_county": "San Francisco County, CA", "primary_city": "San Francisco" },
-    "628": { "primary_county": "San Francisco County, CA", "primary_city": "San Francisco" },
-    "206": { "primary_county": "King County, WA", "primary_city": "Seattle" },
-    "425": { "primary_county": "King County, WA", "primary_city": "Bellevue" },
-    "253": { "primary_county": "Pierce County, WA", "primary_city": "Tacoma" },
-    "202": { "primary_county": "District of Columbia", "primary_city": "Washington" },
-    "771": { "primary_county": "District of Columbia", "primary_city": "Washington" },
-    "617": { "primary_county": "Suffolk County, MA", "primary_city": "Boston" },
-    "857": { "primary_county": "Suffolk County, MA", "primary_city": "Boston" },
-    "303": { "primary_county": "Denver County, CO", "primary_city": "Denver" },
-    "720": { "primary_county": "Denver County, CO", "primary_city": "Denver" },
-    "404": { "primary_county": "Fulton County, GA", "primary_city": "Atlanta" },
-    "470": { "primary_county": "Fulton County, GA", "primary_city": "Atlanta" },
-    "678": { "primary_county": "Fulton County, GA", "primary_city": "Atlanta" },
-    "313": { "primary_county": "Wayne County, MI", "primary_city": "Detroit" },
-    "305": { "primary_county": "Miami-Dade County, FL", "primary_city": "Miami" },
-    "786": { "primary_county": "Miami-Dade County, FL", "primary_city": "Miami" },
-    "702": { "primary_county": "Clark County, NV", "primary_city": "Las Vegas" },
-    "725": { "primary_county": "Clark County, NV", "primary_city": "Las Vegas" }
+    "212": {
+      "primary_county": "New York County, NY",
+      "primary_city": "New York"
+    },
+    "332": {
+      "primary_county": "New York County, NY",
+      "primary_city": "New York"
+    },
+    "646": {
+      "primary_county": "New York County, NY",
+      "primary_city": "New York"
+    },
+    "917": {
+      "primary_county": "New York County, NY",
+      "primary_city": "New York"
+    },
+    "718": {
+      "primary_county": "Kings County, NY",
+      "primary_city": "Brooklyn"
+    },
+    "347": {
+      "primary_county": "Kings County, NY",
+      "primary_city": "Brooklyn"
+    },
+    "929": {
+      "primary_county": "Kings County, NY",
+      "primary_city": "Brooklyn"
+    },
+    "213": {
+      "primary_county": "Los Angeles County, CA",
+      "primary_city": "Los Angeles"
+    },
+    "323": {
+      "primary_county": "Los Angeles County, CA",
+      "primary_city": "Los Angeles"
+    },
+    "310": {
+      "primary_county": "Los Angeles County, CA",
+      "primary_city": "Los Angeles"
+    },
+    "424": {
+      "primary_county": "Los Angeles County, CA",
+      "primary_city": "Los Angeles"
+    },
+    "818": {
+      "primary_county": "Los Angeles County, CA",
+      "primary_city": "Los Angeles"
+    },
+    "747": {
+      "primary_county": "Los Angeles County, CA",
+      "primary_city": "Los Angeles"
+    },
+    "626": {
+      "primary_county": "Los Angeles County, CA",
+      "primary_city": "Pasadena"
+    },
+    "562": {
+      "primary_county": "Los Angeles County, CA",
+      "primary_city": "Long Beach"
+    },
+    "312": {
+      "primary_county": "Cook County, IL",
+      "primary_city": "Chicago"
+    },
+    "773": {
+      "primary_county": "Cook County, IL",
+      "primary_city": "Chicago"
+    },
+    "872": {
+      "primary_county": "Cook County, IL",
+      "primary_city": "Chicago"
+    },
+    "713": {
+      "primary_county": "Harris County, TX",
+      "primary_city": "Houston"
+    },
+    "281": {
+      "primary_county": "Harris County, TX",
+      "primary_city": "Houston"
+    },
+    "832": {
+      "primary_county": "Harris County, TX",
+      "primary_city": "Houston"
+    },
+    "346": {
+      "primary_county": "Harris County, TX",
+      "primary_city": "Houston"
+    },
+    "480": {
+      "primary_county": "Maricopa County, AZ",
+      "primary_city": "Mesa"
+    },
+    "602": {
+      "primary_county": "Maricopa County, AZ",
+      "primary_city": "Phoenix"
+    },
+    "623": {
+      "primary_county": "Maricopa County, AZ",
+      "primary_city": "Glendale"
+    },
+    "215": {
+      "primary_county": "Philadelphia County, PA",
+      "primary_city": "Philadelphia"
+    },
+    "267": {
+      "primary_county": "Philadelphia County, PA",
+      "primary_city": "Philadelphia"
+    },
+    "445": {
+      "primary_county": "Philadelphia County, PA",
+      "primary_city": "Philadelphia"
+    },
+    "210": {
+      "primary_county": "Bexar County, TX",
+      "primary_city": "San Antonio"
+    },
+    "726": {
+      "primary_county": "Bexar County, TX",
+      "primary_city": "San Antonio"
+    },
+    "619": {
+      "primary_county": "San Diego County, CA",
+      "primary_city": "San Diego"
+    },
+    "858": {
+      "primary_county": "San Diego County, CA",
+      "primary_city": "San Diego"
+    },
+    "214": {
+      "primary_county": "Dallas County, TX",
+      "primary_city": "Dallas"
+    },
+    "469": {
+      "primary_county": "Dallas County, TX",
+      "primary_city": "Dallas"
+    },
+    "972": {
+      "primary_county": "Dallas County, TX",
+      "primary_city": "Dallas"
+    },
+    "945": {
+      "primary_county": "Dallas County, TX",
+      "primary_city": "Dallas"
+    },
+    "512": {
+      "primary_county": "Travis County, TX",
+      "primary_city": "Austin"
+    },
+    "737": {
+      "primary_county": "Travis County, TX",
+      "primary_city": "Austin"
+    },
+    "504": {
+      "primary_county": "Orleans Parish, LA",
+      "primary_city": "New Orleans"
+    },
+    "415": {
+      "primary_county": "San Francisco County, CA",
+      "primary_city": "San Francisco"
+    },
+    "628": {
+      "primary_county": "San Francisco County, CA",
+      "primary_city": "San Francisco"
+    },
+    "206": {
+      "primary_county": "King County, WA",
+      "primary_city": "Seattle"
+    },
+    "425": {
+      "primary_county": "King County, WA",
+      "primary_city": "Bellevue"
+    },
+    "253": {
+      "primary_county": "Pierce County, WA",
+      "primary_city": "Tacoma"
+    },
+    "202": {
+      "primary_county": "District of Columbia",
+      "primary_city": "Washington"
+    },
+    "771": {
+      "primary_county": "District of Columbia",
+      "primary_city": "Washington"
+    },
+    "617": {
+      "primary_county": "Suffolk County, MA",
+      "primary_city": "Boston"
+    },
+    "857": {
+      "primary_county": "Suffolk County, MA",
+      "primary_city": "Boston"
+    },
+    "303": {
+      "primary_county": "Denver County, CO",
+      "primary_city": "Denver"
+    },
+    "720": {
+      "primary_county": "Denver County, CO",
+      "primary_city": "Denver"
+    },
+    "404": {
+      "primary_county": "Fulton County, GA",
+      "primary_city": "Atlanta"
+    },
+    "470": {
+      "primary_county": "Fulton County, GA",
+      "primary_city": "Atlanta"
+    },
+    "678": {
+      "primary_county": "Fulton County, GA",
+      "primary_city": "Atlanta"
+    },
+    "313": {
+      "primary_county": "Wayne County, MI",
+      "primary_city": "Detroit"
+    },
+    "305": {
+      "primary_county": "Miami-Dade County, FL",
+      "primary_city": "Miami"
+    },
+    "786": {
+      "primary_county": "Miami-Dade County, FL",
+      "primary_city": "Miami"
+    },
+    "702": {
+      "primary_county": "Clark County, NV",
+      "primary_city": "Las Vegas"
+    },
+    "725": {
+      "primary_county": "Clark County, NV",
+      "primary_city": "Las Vegas"
+    }
   },
-
   "zip_to_county": {
     "70112": "Orleans Parish, LA",
     "70113": "Orleans Parish, LA",
@@ -376,7 +863,6 @@
     "89119": "Clark County, NV",
     "89121": "Clark County, NV"
   },
-
   "counties": {
     "Orleans Parish, LA": {
       "state": "LA",
@@ -509,7 +995,7 @@
       "lockup_sources": [
         {
           "id": "sdsheriff_who_is_in_jail",
-          "label": "San Diego Sheriff — Who's In Jail",
+          "label": "San Diego Sheriff \u2014 Who's In Jail",
           "kind": "MANUAL_LANDING",
           "url_template": "https://www.sdsheriff.gov/resources/inmate-information/whos-in-jail",
           "render": "WEBVIEW",
@@ -537,7 +1023,7 @@
       "lockup_sources": [
         {
           "id": "travis_sheriff_jail_records",
-          "label": "Travis County Sheriff — Find an Inmate",
+          "label": "Travis County Sheriff \u2014 Find an Inmate",
           "kind": "MANUAL_LANDING",
           "url_template": "https://www.tcsheriff.org/inmate-jail-info/inmate-info/find-an-inmate",
           "render": "WEBVIEW",
@@ -551,7 +1037,7 @@
       "lockup_sources": [
         {
           "id": "sfsheriff_in_custody",
-          "label": "San Francisco Sheriff — Find a Person in Jail",
+          "label": "San Francisco Sheriff \u2014 Find a Person in Jail",
           "kind": "MANUAL_LANDING",
           "url_template": "https://sfsheriff.com/find-person-jail",
           "render": "WEBVIEW",
@@ -584,7 +1070,7 @@
       "lockup_sources": [
         {
           "id": "dc_doc_inmate_locator",
-          "label": "DC Department of Corrections — Locate an Inmate",
+          "label": "DC Department of Corrections \u2014 Locate an Inmate",
           "kind": "MANUAL_LANDING",
           "url_template": "https://doc.dc.gov/page/locate-inmate",
           "render": "WEBVIEW",
@@ -678,7 +1164,6 @@
       "obituary_sources": []
     }
   },
-
   "states": {
     "AL": {
       "country": "US",
@@ -697,8 +1182,16 @@
       ],
       "obituary_sources": []
     },
-    "AK": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "AZ": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "AK": {
+      "country": "US",
+      "lockup_sources": [],
+      "obituary_sources": []
+    },
+    "AZ": {
+      "country": "US",
+      "lockup_sources": [],
+      "obituary_sources": []
+    },
     "AR": {
       "country": "US",
       "lockup_sources": [
@@ -808,10 +1301,35 @@
       "lockup_sources": [
         {
           "id": "cdcr_locator",
-          "label": "CDCR / CIRIS — California Incarcerated Records Search",
+          "label": "CDCR / CIRIS \u2014 California Incarcerated Records Search",
           "kind": "MANUAL_LANDING",
           "url_template": "https://ciris.mt.cdcr.ca.gov/",
           "render": "WEBVIEW",
+          "scope": "STATE"
+        },
+        {
+          "id": "ca_sutter_jail",
+          "label": "Sutter County CA (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://sutter-so-ca.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://sutter-so-ca.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
           "scope": "STATE"
         }
       ],
@@ -847,6 +1365,31 @@
             "age": "AGE"
           },
           "released_pattern": "^PAROLE",
+          "scope": "STATE"
+        },
+        {
+          "id": "co_gilpin_jail",
+          "label": "Gilpin County CO (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://gilpin-so-co.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://gilpin-so-co.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
           "scope": "STATE"
         }
       ],
@@ -886,8 +1429,16 @@
       ],
       "obituary_sources": []
     },
-    "DE": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "DC": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "DE": {
+      "country": "US",
+      "lockup_sources": [],
+      "obituary_sources": []
+    },
+    "DC": {
+      "country": "US",
+      "lockup_sources": [],
+      "obituary_sources": []
+    },
     "FL": {
       "country": "US",
       "lockup_sources": [
@@ -955,11 +1506,115 @@
           },
           "custody_pattern": "Yes",
           "scope": "STATE"
+        },
+        {
+          "id": "ga_catoosa_jail",
+          "label": "Catoosa County GA (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://catoosa-so-ga.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://catoosa-so-ga.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "ga_lumpkin_jail",
+          "label": "Lumpkin County GA (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://lumpkin-so-ga.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://lumpkin-so-ga.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "ga_houston_jail",
+          "label": "Houston County GA (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://houston-so-ga.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://houston-so-ga.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "ga_toombs_jail",
+          "label": "Toombs County GA (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://toombs-so-ga.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://toombs-so-ga.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
         }
       ],
       "obituary_sources": []
     },
-    "HI": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "HI": {
+      "country": "US",
+      "lockup_sources": [],
+      "obituary_sources": []
+    },
     "ID": {
       "country": "US",
       "lockup_sources": [
@@ -982,11 +1637,110 @@
           },
           "custody_pattern": "In custody",
           "scope": "STATE"
+        },
+        {
+          "id": "id_washington_jail",
+          "label": "Washington County ID (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://washington-so-id.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://washington-so-id.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
         }
       ],
       "obituary_sources": []
     },
-    "IL": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "IL": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "il_stephenson_jail",
+          "label": "Stephenson County IL (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://stephenson-so-il.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://stephenson-so-il.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "il_whiteside_jail",
+          "label": "Whiteside County IL (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://whiteside-so-il.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://whiteside-so-il.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "il_idoc_jail",
+          "label": "Illinois DOC Inmate Search",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://www.idoc.state.il.us/subsections/search/ISListInmates2.asp",
+          "body_template": "type=Last&selectlist1=Last&idoc={LAST}&submit=Submit",
+          "content_type": "application/x-www-form-urlencoded",
+          "evidence_url_template": "https://www.idoc.state.il.us/subsections/search/",
+          "render": "BASIC",
+          "result_format": "REGEX_RECORDS",
+          "record_regex": "([A-Z]\\d{5,6})\\s*\\|\\s*(\\d{2}-\\d{2}-\\d{4})\\s*\\|\\s*([^<|]+?)\\s*</option>",
+          "field_regexes": {
+            "id": "^([A-Z]\\d{5,6})",
+            "dob": "(\\d{2}-\\d{2}-\\d{4})",
+            "name": "\\|\\s*([A-Za-z' .,-]+?)\\s*</option>"
+          },
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
     "IN": {
       "country": "US",
       "lockup_sources": [
@@ -1043,9 +1797,73 @@
       ],
       "obituary_sources": []
     },
-    "IA": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "KS": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "KY": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "IA": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "ia_marshall_jail",
+          "label": "Marshall County IA (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://marshall-so-ia.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://marshall-so-ia.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
+    "KS": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "ks_atchison_jail",
+          "label": "Atchison County KS (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://atchison-so-ks.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://atchison-so-ks.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
+    "KY": {
+      "country": "US",
+      "lockup_sources": [],
+      "obituary_sources": []
+    },
     "LA": {
       "country": "US",
       "lockup_sources": [
@@ -1056,11 +1874,141 @@
           "url_template": "https://doc.louisiana.gov/imprisoned-person-programs-resources/",
           "render": "WEBVIEW",
           "scope": "STATE"
+        },
+        {
+          "id": "la_acadia_jail",
+          "label": "Acadia Parish LA (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://acadia-so-la.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://acadia-so-la.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "la_lafourche_jail",
+          "label": "Lafourche Parish LA (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://lafourche-so-la.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://lafourche-so-la.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "la_stcharles_jail",
+          "label": "St. Charles Parish LA (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://stcharles-so-la.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://stcharles-so-la.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
         }
       ],
       "obituary_sources": []
     },
-    "ME": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "ME": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "me_androscoggin_jail",
+          "label": "Androscoggin County ME (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://androscoggin-so-me.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://androscoggin-so-me.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "me_somerset_jail",
+          "label": "Somerset County ME (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://somerset-so-me.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://somerset-so-me.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
     "MD": {
       "country": "US",
       "lockup_sources": [
@@ -1084,7 +2032,11 @@
       ],
       "obituary_sources": []
     },
-    "MA": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "MA": {
+      "country": "US",
+      "lockup_sources": [],
+      "obituary_sources": []
+    },
     "MI": {
       "country": "US",
       "lockup_sources": [
@@ -1116,7 +2068,37 @@
       ],
       "obituary_sources": []
     },
-    "MN": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "MN": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "mn_winona_jail",
+          "label": "Winona County MN (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://winona-so-mn.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://winona-so-mn.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
     "MS": {
       "country": "US",
       "lockup_sources": [
@@ -1148,9 +2130,122 @@
       ],
       "obituary_sources": []
     },
-    "MO": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "MT": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "NE": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "MO": {
+      "country": "US",
+      "lockup_sources": [],
+      "obituary_sources": []
+    },
+    "MT": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "mt_jefferson_jail",
+          "label": "Jefferson County MT (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://jefferson-so-mt.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://jefferson-so-mt.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "mt_ravalli_jail",
+          "label": "Ravalli County MT (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://ravalli-so-mt.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://ravalli-so-mt.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "mt_doc_conweb",
+          "label": "Montana Correctional Offender Network",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://offendersearch.mt.gov/conweb/Search",
+          "form_fields": {
+            "LastName": "{last}",
+            "FirstName": "{first}",
+            "OffenderNumber": ""
+          },
+          "evidence_url_template": "https://offendersearch.mt.gov/conweb/",
+          "render": "BASIC",
+          "result_format": "REGEX_RECORDS",
+          "record_regex": "<a href=\"/conweb/Offender/[^\"]+\">[^<]+</a>.*?<div class=\"con_cell_2\">\\d{4}</div>\\s*<div class=\"con_cell_2\">[A-Z][a-z]+</div>",
+          "field_regexes": {
+            "name": "<a href=\"/conweb/Offender/[^\"]+\">([^<]+)</a>",
+            "dob": "<div class=\"con_cell_2\">(\\d{4})</div>",
+            "status": "<div class=\"con_cell_2\">([A-Z][a-z]+)</div>"
+          },
+          "custody_pattern": "Secure|Incarcerated|Hold|Custody",
+          "released_pattern": "Probation|Parole|Discharge|Released|Completed",
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
+    "NE": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "ne_scottsbluff_jail",
+          "label": "Scotts Bluff County NE (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://scottsbluff-so-ne.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://scottsbluff-so-ne.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
     "NV": {
       "country": "US",
       "lockup_sources": [
@@ -1181,9 +2276,47 @@
       ],
       "obituary_sources": []
     },
-    "NH": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "NJ": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "NM": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "NH": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "nh_rockingham_jail",
+          "label": "Rockingham County NH (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://rockingham-so-nh.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://rockingham-so-nh.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
+    "NJ": {
+      "country": "US",
+      "lockup_sources": [],
+      "obituary_sources": []
+    },
+    "NM": {
+      "country": "US",
+      "lockup_sources": [],
+      "obituary_sources": []
+    },
     "NY": {
       "country": "US",
       "lockup_sources": [
@@ -1351,6 +2484,56 @@
             "facility": "disp_agency"
           },
           "scope": "STATE"
+        },
+        {
+          "id": "nc_davie_jail",
+          "label": "Davie County NC (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://davie-so-nc.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://davie-so-nc.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "nc_pender_jail",
+          "label": "Pender County NC (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://pender-so-nc.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://pender-so-nc.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
         }
       ],
       "obituary_sources": []
@@ -1411,12 +2594,167 @@
           },
           "custody_pattern": "INCARCERATED",
           "scope": "STATE"
+        },
+        {
+          "id": "oh_ashland_jail",
+          "label": "Ashland County OH (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://ashland-so-oh.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://ashland-so-oh.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "oh_paulding_jail",
+          "label": "Paulding County OH (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://paulding-so-oh.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://paulding-so-oh.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "oh_ross_jail",
+          "label": "Ross County OH (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://ross-so-oh.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://ross-so-oh.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "oh_shelby_jail",
+          "label": "Shelby County OH (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://shelby-so-oh.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://shelby-so-oh.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "oh_preble_jail",
+          "label": "Preble County OH (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://preble-so-oh.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://preble-so-oh.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
         }
       ],
       "obituary_sources": []
     },
-    "OK": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "OR": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "OK": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "ok_oscn_court",
+          "label": "Oklahoma State Courts Network",
+          "kind": "QUERY_TEMPLATE",
+          "method": "GET",
+          "url_template": "https://www.oscn.net/dockets/Results.aspx?db=all&lname={last}&fname={first}&partytype=&DoBMin=&DoBMax=",
+          "evidence_url_template": "https://www.oscn.net/dockets/",
+          "render": "BASIC",
+          "result_format": "REGEX_RECORDS",
+          "record_regex": "result_casenumber\"><a[^>]*>([^<]+)</a></td>\\s*<td class=\"result_datefiled\">([^<]*)</td>.*?result_info\">([^<]+)</td>",
+          "field_regexes": {
+            "id": "result_casenumber\"><a[^>]*>([^<]+)</a>",
+            "date": "result_datefiled\">(\\d{2}/\\d{2}/\\d{4})",
+            "name": "result_info\">([A-Z][A-Za-z' .-]+,\\s*[A-Z][A-Za-z' .-]+?)\\s*\\(Defendant\\)",
+            "case_type": "result_casenumber\"><a[^>]*>([^<]+)</a>"
+          },
+          "event_kind": "ARREST",
+          "case_type_pattern": "(?i)\\b(CF|CM|CRF|CRM)-?\\d",
+          "max_age_days": 60,
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
+    "OR": {
+      "country": "US",
+      "lockup_sources": [],
+      "obituary_sources": []
+    },
     "PA": {
       "country": "US",
       "lockup_sources": [
@@ -1448,7 +2786,11 @@
       ],
       "obituary_sources": []
     },
-    "RI": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "RI": {
+      "country": "US",
+      "lockup_sources": [],
+      "obituary_sources": []
+    },
     "SC": {
       "country": "US",
       "lockup_sources": [
@@ -1525,6 +2867,81 @@
           },
           "released_pattern": "\\d",
           "scope": "STATE"
+        },
+        {
+          "id": "sc_kershaw_jail",
+          "label": "Kershaw County SC (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://kershaw-so-sc.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://kershaw-so-sc.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "sc_union_jail",
+          "label": "Union County SC (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://union-so-sc.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://union-so-sc.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "sc_colleton_jail",
+          "label": "Colleton County SC (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://colleton-so-sc.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://colleton-so-sc.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
         }
       ],
       "obituary_sources": []
@@ -1556,11 +2973,116 @@
           },
           "released_pattern": "\\d",
           "scope": "STATE"
+        },
+        {
+          "id": "sd_meade_jail",
+          "label": "Meade County SD (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://meade-so-sd.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://meade-so-sd.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "sd_roberts_jail",
+          "label": "Roberts County SD (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://roberts-so-sd.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://roberts-so-sd.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
         }
       ],
       "obituary_sources": []
     },
-    "TN": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "TN": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "tn_sullivan_jail",
+          "label": "Sullivan County TN (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://sullivan-so-tn.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://sullivan-so-tn.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "tn_washington_jail",
+          "label": "Washington County TN (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://washington-so-tn.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://washington-so-tn.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
     "TX": {
       "country": "US",
       "lockup_sources": [
@@ -1598,13 +3120,50 @@
             "facility": "Unit"
           },
           "scope": "STATE"
+        },
+        {
+          "id": "tx_upshur_jail",
+          "label": "Upshur County TX (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://upshur-so-tx.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://upshur-so-tx.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
         }
       ],
       "obituary_sources": []
     },
-    "UT": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "VT": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "VA": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "UT": {
+      "country": "US",
+      "lockup_sources": [],
+      "obituary_sources": []
+    },
+    "VT": {
+      "country": "US",
+      "lockup_sources": [],
+      "obituary_sources": []
+    },
+    "VA": {
+      "country": "US",
+      "lockup_sources": [],
+      "obituary_sources": []
+    },
     "WA": {
       "country": "US",
       "lockup_sources": [
@@ -1628,7 +3187,11 @@
       ],
       "obituary_sources": []
     },
-    "WV": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "WV": {
+      "country": "US",
+      "lockup_sources": [],
+      "obituary_sources": []
+    },
     "WI": {
       "country": "US",
       "lockup_sources": [
@@ -1658,6 +3221,56 @@
           "event_kind": "ARREST",
           "case_type_pattern": "^\\d{4}(CF|CM|CT)",
           "max_age_days": 60,
+          "scope": "STATE"
+        },
+        {
+          "id": "wi_lincoln_jail",
+          "label": "Lincoln County WI (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://lincoln-so-wi.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://lincoln-so-wi.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "wi_grant_jail",
+          "label": "Grant County WI (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://grant-so-wi.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://grant-so-wi.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
           "scope": "STATE"
         }
       ],
@@ -1697,23 +3310,82 @@
       ],
       "obituary_sources": []
     },
-    "PR": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "VI": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "GU": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "AS": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "MP": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "AB": { "country": "CA", "lockup_sources": [], "obituary_sources": [] },
-    "BC": { "country": "CA", "lockup_sources": [], "obituary_sources": [] },
-    "MB": { "country": "CA", "lockup_sources": [], "obituary_sources": [] },
-    "NB": { "country": "CA", "lockup_sources": [], "obituary_sources": [] },
-    "NL": { "country": "CA", "lockup_sources": [], "obituary_sources": [] },
-    "NS": { "country": "CA", "lockup_sources": [], "obituary_sources": [] },
-    "ON": { "country": "CA", "lockup_sources": [], "obituary_sources": [] },
-    "QC": { "country": "CA", "lockup_sources": [], "obituary_sources": [] },
-    "SK": { "country": "CA", "lockup_sources": [], "obituary_sources": [] },
-    "YT": { "country": "CA", "lockup_sources": [], "obituary_sources": [] }
+    "PR": {
+      "country": "US",
+      "lockup_sources": [],
+      "obituary_sources": []
+    },
+    "VI": {
+      "country": "US",
+      "lockup_sources": [],
+      "obituary_sources": []
+    },
+    "GU": {
+      "country": "US",
+      "lockup_sources": [],
+      "obituary_sources": []
+    },
+    "AS": {
+      "country": "US",
+      "lockup_sources": [],
+      "obituary_sources": []
+    },
+    "MP": {
+      "country": "US",
+      "lockup_sources": [],
+      "obituary_sources": []
+    },
+    "AB": {
+      "country": "CA",
+      "lockup_sources": [],
+      "obituary_sources": []
+    },
+    "BC": {
+      "country": "CA",
+      "lockup_sources": [],
+      "obituary_sources": []
+    },
+    "MB": {
+      "country": "CA",
+      "lockup_sources": [],
+      "obituary_sources": []
+    },
+    "NB": {
+      "country": "CA",
+      "lockup_sources": [],
+      "obituary_sources": []
+    },
+    "NL": {
+      "country": "CA",
+      "lockup_sources": [],
+      "obituary_sources": []
+    },
+    "NS": {
+      "country": "CA",
+      "lockup_sources": [],
+      "obituary_sources": []
+    },
+    "ON": {
+      "country": "CA",
+      "lockup_sources": [],
+      "obituary_sources": []
+    },
+    "QC": {
+      "country": "CA",
+      "lockup_sources": [],
+      "obituary_sources": []
+    },
+    "SK": {
+      "country": "CA",
+      "lockup_sources": [],
+      "obituary_sources": []
+    },
+    "YT": {
+      "country": "CA",
+      "lockup_sources": [],
+      "obituary_sources": []
+    }
   },
-
   "multi_state": [
     {
       "id": "vinelink_us",
@@ -1746,7 +3418,6 @@
       "covers_country": "CA"
     }
   ],
-
   "_multi_state_obituary_comment": "National news search. Google News indexes local papers, TV stations, Legacy.com, Dignity Memorial and funeral-home obituaries, so one query per contact reaches death and arrest reports no single roster carries. Each item is classified (death vs arrest) and read by NewsFeed; MatchVerifier scores it before anything is shown. evidence_url_template is the bare host so item links (news.google.com/rss/articles/...) pass SourceCatalog.isFromCatalog.",
   "multi_state_obituary": [
     {
@@ -1772,10 +3443,30 @@
       "result_format": "NEWS_RSS",
       "scope": "MULTI_STATE",
       "covers_country": "CA"
+    },
+    {
+      "id": "echovita_obit",
+      "label": "Echovita obituaries",
+      "kind": "QUERY_TEMPLATE",
+      "method": "GET",
+      "url_template": "https://www.echovita.com/us/obituaries?q={first}+{last}",
+      "evidence_url_template": "https://www.echovita.com/",
+      "render": "BASIC",
+      "result_format": "REGEX_RECORDS",
+      "record_regex": "text-name-obit-in-list[^\"]*\"\\s+href=\"[^\"]+\"\\s+title=\"Read the obituary of [^\"]+\">.*?(?=text-name-obit-in-list|</body>)",
+      "field_regexes": {
+        "name": "title=\"Read the obituary of ([^\"]+)\"",
+        "date": "fa-calendar-alt[^>]*></i>\\s*<span[^>]*>([A-Z][a-z]+ \\d{1,2}, \\d{4})</span>",
+        "age": "\\((\\d{1,3}) years old\\)",
+        "city": "fa-map-marker-alt[^>]*></i>\\s*<a[^>]*>([^<]+)</a>"
+      },
+      "event_kind": "DEATH",
+      "max_age_days": 60,
+      "scope": "MULTI_STATE",
+      "covers_country": "US"
     }
   ],
-  "_identity_sources_comment": "Identity-correlation services (face recognition, reverse image search, name-based OSINT) ported from the sister project doxray (github.com/HereLiesAz/doxray). All entries ship as MANUAL_LANDING because (a) the face/image services require a photo upload the Registry never carries, and (b) the name-based services (PimEyes, FaceCheck.id, CyberBackgroundChecks, SmartBackgroundChecks, GitHub) bot-block raw HTTP requests — they must be exercised through the user's own browser session. The CyberBackgroundChecks / SmartBackgroundChecks chips use the same /name/{first}-{last} search path that the enrichment flow (util/CyberBackgroundChecks.kt) produces, so the chip and the auto-enricher land on the same page (previously the chip used a /people/ path that did not match). Templates with {first}/{last} slots are filled at chip-render time via SourceUrlBuilder.",
-
+  "_identity_sources_comment": "Identity-correlation services (face recognition, reverse image search, name-based OSINT) ported from the sister project doxray (github.com/HereLiesAz/doxray). All entries ship as MANUAL_LANDING because (a) the face/image services require a photo upload the Registry never carries, and (b) the name-based services (PimEyes, FaceCheck.id, CyberBackgroundChecks, SmartBackgroundChecks, GitHub) bot-block raw HTTP requests \u2014 they must be exercised through the user's own browser session. The CyberBackgroundChecks / SmartBackgroundChecks chips use the same /name/{first}-{last} search path that the enrichment flow (util/CyberBackgroundChecks.kt) produces, so the chip and the auto-enricher land on the same page (previously the chip used a /people/ path that did not match). Templates with {first}/{last} slots are filled at chip-render time via SourceUrlBuilder.",
   "identity_sources": [
     {
       "id": "pimeyes_face",

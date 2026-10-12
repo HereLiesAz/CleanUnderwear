@@ -128,4 +128,21 @@ class StructuredRecordsTest {
         assertEquals(java.time.LocalDate.of(2026, 9, 3), StructuredRecords.parseDate("2026-09-03"))
         assertEquals(java.time.LocalDate.of(2026, 9, 3), StructuredRecords.parseDate("Filed Sep. 3, 2026"))
     }
+
+    @Test
+    fun `regex records split and field-match a non-table page`() {
+        val html = """
+            <select><option>A1234  |  10-31-1987  |  SMITH, AARON</option>
+            <option>B5678  |  01-02-1990  |  SMITH, JOHN</option>
+            <option>C9012  |  05-05-1980  |  JONES, MARY</option></select>
+        """
+        val s = source(emptyMap()).copy(
+            resultFormat = ResultFormat.REGEX_RECORDS,
+            recordRegex = "([A-Z]\\d{3,6})\\s*\\|\\s*(\\d{2}-\\d{2}-\\d{4})\\s*\\|\\s*([^<|]+?)</option>",
+            fieldRegexes = mapOf("id" to "^([A-Z]\\d{3,6})", "dob" to "(\\d{2}-\\d{2}-\\d{4})", "name" to "\\|\\s*([A-Za-z, ]+?)</option>")
+        )
+        val r = StructuredRecords.fromRegex(html, s, "John", "Smith", EventKind.CUSTODY, "u").single()
+        assertEquals("xx_doc:B5678", r.recordKey)
+        assertEquals(1990, r.birthYear)
+    }
 }
