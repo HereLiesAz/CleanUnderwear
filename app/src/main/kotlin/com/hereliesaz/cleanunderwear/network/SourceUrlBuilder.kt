@@ -35,13 +35,19 @@ object SourceUrlBuilder {
         val json = source.contentType?.contains("json", ignoreCase = true) == true
         fun esc(s: String) = if (json) s.replace("\\", "\\\\").replace("\"", "\\\"") else URLEncoder.encode(s, "UTF-8")
         return template.replace("{first}", esc(first)).replace("{last}", esc(last))
+            .replace("{FIRST}", esc(first.uppercase())).replace("{LAST}", esc(last.uppercase()))
     }
 
     private fun fillSlots(template: String, first: String, last: String, encode: Boolean = true): String {
         val firstSlot = if (encode) URLEncoder.encode(first, "UTF-8") else first
         val lastSlot = if (encode) URLEncoder.encode(last, "UTF-8") else last
+        // {FIRST}/{LAST}: uppercase, for searches that require it.
+        val upperFirst = if (encode) URLEncoder.encode(first.uppercase(), "UTF-8") else first.uppercase()
+        val upperLast = if (encode) URLEncoder.encode(last.uppercase(), "UTF-8") else last.uppercase()
         return template
             .replace("{first}", firstSlot)
             .replace("{last}", lastSlot)
+            .replace("{FIRST}", upperFirst)
+            .replace("{LAST}", upperLast)
     }
 }

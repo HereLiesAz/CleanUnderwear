@@ -768,6 +768,37 @@
           },
           "released_pattern": "\\d",
           "scope": "STATE"
+        },
+        {
+          "id": "ar_opad_court",
+          "label": "Search ARCourts",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://caseinfo.arcourts.gov/opad/api/participants/search",
+          "body_template": "{\"participantSearchRequest\":{\"searchCriteria\":{\"filterBy\":[[{\"fieldName\":\"FirstName\",\"operator\":\"EQUALS\",\"fieldValue\":\"{FIRST}\"},{\"fieldName\":\"LastName\",\"operator\":\"STARTS_WITH\",\"fieldValue\":\"{LAST}\"}]],\"paging\":{\"pageNumber\":1,\"pageSize\":50},\"sortBy\":[{\"fieldName\":\"caseFilingDate\",\"direction\":\"DESCENDING\"}]}}}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://caseinfo.arcourts.gov/opad/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "items",
+            "first": "firstName",
+            "last": "lastName",
+            "middle": "middleName",
+            "id": "caseId",
+            "case_type": "caseType",
+            "date": "caseFilingDate",
+            "status": "partyType",
+            "facility": "countyName"
+          },
+          "custody_pattern": "^DEFENDANT$",
+          "event_kind": "ARREST",
+          "case_type_pattern": "FELONY|MISDEMEANOR|CRIMINAL",
+          "max_age_days": 60,
+          "scope": "STATE"
         }
       ],
       "obituary_sources": []
@@ -975,6 +1006,38 @@
             "status": "Facility"
           },
           "released_pattern": "Discharg|release|Deceased|Parole|Probation",
+          "scope": "STATE"
+        },
+        {
+          "id": "in_mycase_court",
+          "label": "Indiana MyCase",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://public.courts.in.gov/mycase/Search/SearchCases",
+          "token_page": "https://public.courts.in.gov/mycase/",
+          "body_template": "{\"Mode\":\"ByParty\",\"Last\":\"{last}\",\"First\":\"{first}\",\"Categories\":[\"CR\"],\"Skip\":0,\"Take\":50,\"Sort\":\"FileDate DESC\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json",
+            "X-Requested-With": "XMLHttpRequest",
+            "Referer": "https://public.courts.in.gov/mycase/"
+          },
+          "evidence_url_template": "https://public.courts.in.gov/mycase/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "Results",
+            "name": "Style",
+            "id": "CaseNumber",
+            "case_type": "CaseType",
+            "date": "FileDate",
+            "charges": "Charges",
+            "facility": "Court"
+          },
+          "name_pattern": "\\bv\\.?\\s+(.+)$",
+          "event_kind": "ARREST",
+          "case_type_pattern": "^(F|M|CM|FA|FB|FC|FD|F[1-6]|MR|MC|CF)\\b",
+          "max_age_days": 60,
           "scope": "STATE"
         }
       ],
@@ -1566,7 +1629,40 @@
       "obituary_sources": []
     },
     "WV": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "WI": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "WI": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "wi_wcca_court",
+          "label": "Wisconsin Circuit Court Access",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://wcca.wicourts.gov/jsonPost/advancedCaseSearch",
+          "body_template": "{\"includeMissingDob\":true,\"includeMissingMiddleName\":true,\"attyType\":\"partyAtty\",\"lastName\":\"{last}\",\"firstName\":\"{first}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://wcca.wicourts.gov/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "result.cases",
+            "name": "partyName",
+            "dob": "dob",
+            "id": "caseNo",
+            "case_type": "caseNo",
+            "date": "filingDate",
+            "facility": "countyName"
+          },
+          "event_kind": "ARREST",
+          "case_type_pattern": "^\\d{4}(CF|CM|CT)",
+          "max_age_days": 60,
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
     "WY": {
       "country": "US",
       "lockup_sources": [

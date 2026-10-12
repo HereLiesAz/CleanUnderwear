@@ -100,4 +100,32 @@ class StructuredRecordsTest {
         val r = StructuredRecords.fromJson(body, source(f, released = "\\d"), "John", "Smith", EventKind.CUSTODY, "u").single()
         assertEquals(1980, r.birthYear)
     }
+
+    @Test
+    fun `court rows keep only recent criminal cases`() {
+        StructuredRecords.today = { java.time.LocalDate.of(2026, 10, 12) }
+        val html = """
+            <table><tr><th>Party Name</th><th>Case Number</th><th>Case Type</th><th>Filed</th></tr>
+            <tr><td>SMITH, JOHN A</td><td>CR-1</td><td>Criminal Felony</td><td>09/30/2026</td></tr>
+            <tr><td>SMITH, JOHN</td><td>CV-2</td><td>Civil</td><td>09/30/2026</td></tr>
+            <tr><td>SMITH, JOHN</td><td>CR-3</td><td>Criminal Misdemeanor</td><td>01/15/2019</td></tr></table>
+        """
+        val s = source(emptyMap()).copy(
+            resultFormat = ResultFormat.HTML_TABLE,
+            eventKind = EventKind.ARREST,
+            caseTypePattern = "criminal",
+            maxAgeDays = 365,
+            tableColumns = mapOf("name" to "Party", "id" to "Case Number", "case_type" to "Case Type", "date" to "Filed")
+        )
+        val r = StructuredRecords.fromTable(html, s, "John", "Smith", EventKind.ARREST, "u").single()
+        assertEquals("xx_doc:CR-1", r.recordKey)
+        StructuredRecords.today = { java.time.LocalDate.now() }
+    }
+
+    @Test
+    fun `date formats`() {
+        assertEquals(java.time.LocalDate.of(2026, 9, 3), StructuredRecords.parseDate("9/3/2026 12:00:00 AM"))
+        assertEquals(java.time.LocalDate.of(2026, 9, 3), StructuredRecords.parseDate("2026-09-03"))
+        assertEquals(java.time.LocalDate.of(2026, 9, 3), StructuredRecords.parseDate("Filed Sep. 3, 2026"))
+    }
 }

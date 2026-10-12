@@ -77,11 +77,29 @@ data class Source(
     /** Force HTTP/1.1; some state servers drop HTTP/2 clients. */
     val http1: Boolean = false,
     /**
+     * What a hit on this source reports, overriding the list it sits in. Court
+     * case searches sit with the lockup sources but report ARREST (charged),
+     * not CUSTODY.
+     */
+    val eventKind: com.hereliesaz.cleanunderwear.match.EventKind? = null,
+    /** Regex whose group 1 extracts the person's name from the "name" field (e.g. "State v. (JOHN SMITH)"). */
+    val namePattern: String? = null,
+    /** The "name" field is "LAST FIRST MIDDLE" with no comma. */
+    val nameLastFirst: Boolean = false,
+    /** Regex (case-insensitive) a row's case_type must match, e.g. criminal case types. */
+    val caseTypePattern: String? = null,
+    /** Rows whose "date" field (filing/booking date) is older than this are dropped. */
+    val maxAgeDays: Int? = null,
+    /**
      * A page to GET before the search, for forms that need a per-session token
      * (ASP.NET __VIEWSTATE, CSRF). Its hidden inputs and cookies are sent with
      * the search request; [formFields] override them.
      */
     val tokenPage: String? = null,
+    /** Form posted after [tokenPage] (a disclaimer "I accept"); the token is read from its reply. */
+    val tokenForm: Map<String, String> = emptyMap(),
+    /** Where [tokenForm] is posted; defaults to [tokenPage]. */
+    val tokenPostUrl: String? = null,
     /** Regex (case-insensitive) on a record's text or status marking a person no longer held. */
     val releasedPattern: String? = null,
     /**
@@ -138,7 +156,14 @@ class SourceCatalog @Inject constructor(
         val table_columns: Map<String, String>? = null,
         val results_url: String? = null,
         val http1: Boolean? = null,
+        val event_kind: String? = null,
+        val case_type_pattern: String? = null,
+        val name_pattern: String? = null,
+        val name_last_first: Boolean? = null,
+        val max_age_days: Int? = null,
         val token_page: String? = null,
+        val token_form: Map<String, String>? = null,
+        val token_post_url: String? = null,
         val released_pattern: String? = null,
         val custody_pattern: String? = null,
         val headers: Map<String, String>? = null,
@@ -433,7 +458,16 @@ class SourceCatalog @Inject constructor(
             tableColumns = table_columns.orEmpty(),
             resultsUrl = results_url,
             http1 = http1 == true,
+            eventKind = event_kind?.let { k ->
+                com.hereliesaz.cleanunderwear.match.EventKind.entries.firstOrNull { it.name.equals(k, ignoreCase = true) }
+            },
+            caseTypePattern = case_type_pattern,
+            namePattern = name_pattern,
+            nameLastFirst = name_last_first == true,
+            maxAgeDays = max_age_days,
             tokenPage = token_page,
+            tokenForm = token_form.orEmpty(),
+            tokenPostUrl = token_post_url,
             releasedPattern = released_pattern,
             custodyPattern = custody_pattern,
             headers = headers.orEmpty(),

@@ -96,7 +96,10 @@ object StructuredRecords {
         evidenceUrl: String
     ): CandidateRecord? {
         val row = rawRow.mapValues { it.value?.trim()?.takeIf { v -> v.isNotEmpty() } }
-        val parsed = row["name"]?.let(::splitName)
+        val rawName = row["name"]?.let { n ->
+            source.namePattern?.let { p -> Regex(p, RegexOption.IGNORE_CASE).find(n)?.groupValues?.getOrNull(1) } ?: n
+        }
+        val parsed = rawName?.let { splitName(it, source.nameLastFirst) }
         val recFirst = row["first"] ?: parsed?.first ?: return null
         val recLast = row["last"] ?: parsed?.third ?: return null
         val recMiddle = row["middle"] ?: parsed?.second
@@ -113,6 +116,15 @@ object StructuredRecords {
             if (statusText == null || !Regex(p, RegexOption.IGNORE_CASE).containsMatchIn(statusText)) return null
         }
 
+        source.caseTypePattern?.let { p ->
+            val type = row["case_type"] ?: return null
+            if (!Regex(p, RegexOption.IGNORE_CASE).containsMatchIn(type)) return null
+        }
+        source.maxAgeDays?.let { days ->
+            val date = row["date"]?.let(::parseDate) ?: return null
+            if (date.isBefore(today().minusDays(days.toLong()))) return null
+        }
+
         val id = row["id"]
         val age = row["age"]?.let { Regex("\\d{1,3}").find(it)?.value?.toIntOrNull() }?.takeIf { it in 1..120 }
         val birthYear = row["dob"]?.let { Regex("(19|20)\\d{2}").find(it)?.value?.toIntOrNull() }
@@ -120,6 +132,9 @@ object StructuredRecords {
             listOfNotNull(recFirst, recMiddle, recLast).joinToString(" "),
             age?.let { "age $it" },
             row["dob"]?.let { "DOB $it" },
+            row["case_type"],
+            row["date"]?.let { "filed $it" },
+            row["charges"],
             row["status"],
             row["facility"],
             id?.let { "#$it" }
@@ -141,11 +156,30 @@ object StructuredRecords {
         )
     }
 
+    /** Overridable clock for tests. */
+    internal var today: () -> java.time.LocalDate = { java.time.LocalDate.now() }
+
+    private val DATE_FORMATS = listOf("M/d/yyyy", "MM/dd/yyyy", "yyyy-MM-dd", "M-d-yyyy", "MM-dd-yyyy", "MMM d, yyyy", "MMMM d, yyyy")
+        .map { java.time.format.DateTimeFormatter.ofPattern(it, java.util.Locale.US) }
+
+    /** First date in [s] in any common US format; time parts and trailing text ignored. */
+    internal fun parseDate(s: String): java.time.LocalDate? {
+        val token = Regex("\\d{4}-\\d{1,2}-\\d{1,2}|\\d{1,2}[/-]\\d{1,2}[/-]\\d{4}|[A-Z][a-z]+\\.? \\d{1,2}, \\d{4}")
+            .find(s)?.value?.replace(".", "") ?: return null
+        return DATE_FORMATS.firstNotNullOfOrNull { f ->
+            try {
+                java.time.LocalDate.parse(token, f)
+            } catch (e: java.time.format.DateTimeParseException) {
+                null
+            }
+        }
+    }
+
     /**
      * Splits a combined name into (first, middle, last): "LAST, FIRST MIDDLE"
      * when it has a comma, otherwise "First [Middle] Last".
      */
-    internal fun splitName(name: String): Triple<String, String?, String>? {
+    internal fun splitName(name: String, lastFirst: Boolean = false): Triple<String, String?, String>? {
         if (name.contains(',')) {
             val lastPart = name.substringBefore(',').trim()
             val rest = name.substringAfter(',').trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
@@ -154,6 +188,7 @@ object StructuredRecords {
         }
         val tokens = name.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
         if (tokens.size < 2) return null
+        if (lastFirst) return Triple(tokens[1], tokens.getOrNull(2), tokens[0])
         return Triple(tokens.first(), tokens.getOrNull(1)?.takeIf { tokens.size > 2 }, tokens.last())
     }
 
