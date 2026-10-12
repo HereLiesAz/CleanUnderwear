@@ -49,6 +49,33 @@ object StructuredRecords {
         }
     }
 
+    /**
+     * Reads records from pages that aren't tables or JSON, via regexes in
+     * [Source.recordRegex] (splits the page into one match per record) and
+     * [Source.fieldRegexes] (field key → regex whose last group is the value,
+     * matched within each record block). Same filtering and [CandidateRecord]
+     * shape as the other parsers.
+     */
+    fun fromRegex(
+        html: String,
+        source: Source,
+        first: String,
+        last: String,
+        kind: EventKind,
+        evidenceUrl: String
+    ): List<CandidateRecord> {
+        val recordRe = source.recordRegex?.let { Regex(it, setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)) }
+            ?: return emptyList()
+        val fieldRes = source.fieldRegexes.mapValues { (_, p) -> Regex(p, setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)) }
+        return recordRe.findAll(html).mapNotNull { m ->
+            val block = m.value
+            val row = fieldRes.mapValues { (_, re) ->
+                re.find(block)?.groupValues?.lastOrNull()?.let { Jsoup.parse(it).text().trim() }
+            }
+            build(row, Jsoup.parse(block).text(), source, first, last, kind, evidenceUrl)
+        }.toList()
+    }
+
     fun fromTable(
         html: String,
         source: Source,

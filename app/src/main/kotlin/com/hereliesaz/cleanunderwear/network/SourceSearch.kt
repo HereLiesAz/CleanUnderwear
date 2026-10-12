@@ -61,6 +61,8 @@ class SourceSearch @Inject constructor(
                             return StructuredRecords.fromJson(body, source, first, last, kind, evidenceUrl)
                         ResultFormat.HTML_TABLE ->
                             return StructuredRecords.fromTable(body, source, first, last, kind, evidenceUrl)
+                        ResultFormat.REGEX_RECORDS ->
+                            return StructuredRecords.fromRegex(body, source, first, last, kind, evidenceUrl)
                         else -> Unit
                     }
                     org.jsoup.Jsoup.parse(body).text()

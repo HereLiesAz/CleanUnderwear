@@ -32,8 +32,10 @@ enum class RenderMode { BASIC, WEBVIEW }
  *    [Source.jsonFields] and read by [StructuredRecords].
  *  - [HTML_TABLE]: a results table; columns are mapped by header text via
  *    [Source.tableColumns] and read by [StructuredRecords].
+ *  - [REGEX_RECORDS]: a non-table/non-JSON page; [Source.recordRegex] splits
+ *    it into records and [Source.fieldRegexes] pull each field.
  */
-enum class ResultFormat { HTML, BOP_JSON, NEWS_RSS, JSON_RECORDS, HTML_TABLE }
+enum class ResultFormat { HTML, BOP_JSON, NEWS_RSS, JSON_RECORDS, HTML_TABLE, REGEX_RECORDS }
 
 enum class SourceScope { COUNTY, STATE, AREA_CODE, MULTI_STATE }
 
@@ -69,6 +71,10 @@ data class Source(
      * combined name ("LAST, FIRST MIDDLE" or "First Middle Last").
      */
     val tableColumns: Map<String, String> = emptyMap(),
+    /** For [ResultFormat.REGEX_RECORDS]: splits the page into one match per record. */
+    val recordRegex: String? = null,
+    /** For [ResultFormat.REGEX_RECORDS]: field key → regex whose last group is the value. */
+    val fieldRegexes: Map<String, String> = emptyMap(),
     /**
      * A URL to GET, with the search's cookies, after the search request, for
      * sites that store the search in the session and serve results separately.
@@ -154,6 +160,8 @@ class SourceCatalog @Inject constructor(
         val covers_country: String? = null,
         val json_fields: Map<String, String>? = null,
         val table_columns: Map<String, String>? = null,
+        val record_regex: String? = null,
+        val field_regexes: Map<String, String>? = null,
         val results_url: String? = null,
         val http1: Boolean? = null,
         val event_kind: String? = null,
@@ -456,6 +464,8 @@ class SourceCatalog @Inject constructor(
             coversCountry = covers_country,
             jsonFields = json_fields.orEmpty(),
             tableColumns = table_columns.orEmpty(),
+            recordRegex = record_regex,
+            fieldRegexes = field_regexes.orEmpty(),
             resultsUrl = results_url,
             http1 = http1 == true,
             eventKind = event_kind?.let { k ->
@@ -495,6 +505,7 @@ class SourceCatalog @Inject constructor(
         "NEWS_RSS" -> ResultFormat.NEWS_RSS
         "JSON_RECORDS" -> ResultFormat.JSON_RECORDS
         "HTML_TABLE" -> ResultFormat.HTML_TABLE
+        "REGEX_RECORDS" -> ResultFormat.REGEX_RECORDS
         else -> null
     }
 
