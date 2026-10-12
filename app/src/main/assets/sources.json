@@ -1182,16 +1182,8 @@
       ],
       "obituary_sources": []
     },
-    "AK": {
-      "country": "US",
-      "lockup_sources": [],
-      "obituary_sources": []
-    },
-    "AZ": {
-      "country": "US",
-      "lockup_sources": [],
-      "obituary_sources": []
-    },
+    "AK": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "AZ": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "AR": {
       "country": "US",
       "lockup_sources": [
@@ -1301,7 +1293,7 @@
       "lockup_sources": [
         {
           "id": "cdcr_locator",
-          "label": "CDCR / CIRIS \u2014 California Incarcerated Records Search",
+          "label": "CDCR / CIRIS — California Incarcerated Records Search",
           "kind": "MANUAL_LANDING",
           "url_template": "https://ciris.mt.cdcr.ca.gov/",
           "render": "WEBVIEW",
@@ -1429,16 +1421,8 @@
       ],
       "obituary_sources": []
     },
-    "DE": {
-      "country": "US",
-      "lockup_sources": [],
-      "obituary_sources": []
-    },
-    "DC": {
-      "country": "US",
-      "lockup_sources": [],
-      "obituary_sources": []
-    },
+    "DE": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "DC": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "FL": {
       "country": "US",
       "lockup_sources": [
@@ -1610,11 +1594,7 @@
       ],
       "obituary_sources": []
     },
-    "HI": {
-      "country": "US",
-      "lockup_sources": [],
-      "obituary_sources": []
-    },
+    "HI": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "ID": {
       "country": "US",
       "lockup_sources": [
@@ -1859,11 +1839,7 @@
       ],
       "obituary_sources": []
     },
-    "KY": {
-      "country": "US",
-      "lockup_sources": [],
-      "obituary_sources": []
-    },
+    "KY": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "LA": {
       "country": "US",
       "lockup_sources": [
@@ -2005,6 +1981,30 @@
           },
           "released_pattern": "\\d",
           "scope": "STATE"
+        },
+        {
+          "id": "me_doc",
+          "label": "Maine DOC (state prison)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "content_type": "application/x-www-form-urlencoded",
+          "token_page": "https://apps1.web.maine.gov/cgi-bin/online/correctionssearch/search.pl",
+          "url_template": "https://apps1.web.maine.gov/cgi-bin/online/correctionssearch/search.pl",
+          "body_template": "mdoc_number=&first_name={FIRST}&middle_name=&last_name={LAST}&gender=&age_from=&age_to=&weight_from=&weight_to=&feet_from=&inches_from=&feet_to=&inches_to=&eyecolor=&haircolor=&race=&mark=&status=Incarcerated&location=&mejis_index=&submit=Search",
+          "headers": {
+            "Referer": "https://apps1.web.maine.gov/cgi-bin/online/correctionssearch/search.pl"
+          },
+          "evidence_url_template": "https://apps1.web.maine.gov/cgi-bin/online/correctionssearch/search.pl",
+          "render": "BASIC",
+          "result_format": "HTML_TABLE",
+          "table_columns": {
+            "id": "MDOC",
+            "name": "^Name",
+            "status": "Status",
+            "dob": "Birth"
+          },
+          "released_pattern": "In Community",
+          "scope": "STATE"
         }
       ],
       "obituary_sources": []
@@ -2032,11 +2032,7 @@
       ],
       "obituary_sources": []
     },
-    "MA": {
-      "country": "US",
-      "lockup_sources": [],
-      "obituary_sources": []
-    },
+    "MA": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "MI": {
       "country": "US",
       "lockup_sources": [
@@ -2130,11 +2126,7 @@
       ],
       "obituary_sources": []
     },
-    "MO": {
-      "country": "US",
-      "lockup_sources": [],
-      "obituary_sources": []
-    },
+    "MO": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "MT": {
       "country": "US",
       "lockup_sources": [
@@ -2307,16 +2299,8 @@
       ],
       "obituary_sources": []
     },
-    "NJ": {
-      "country": "US",
-      "lockup_sources": [],
-      "obituary_sources": []
-    },
-    "NM": {
-      "country": "US",
-      "lockup_sources": [],
-      "obituary_sources": []
-    },
+    "NJ": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "NM": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "NY": {
       "country": "US",
       "lockup_sources": [
@@ -2750,11 +2734,7 @@
       ],
       "obituary_sources": []
     },
-    "OR": {
-      "country": "US",
-      "lockup_sources": [],
-      "obituary_sources": []
-    },
+    "OR": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "PA": {
       "country": "US",
       "lockup_sources": [
@@ -2786,11 +2766,7 @@
       ],
       "obituary_sources": []
     },
-    "RI": {
-      "country": "US",
-      "lockup_sources": [],
-      "obituary_sources": []
-    },
+    "RI": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "SC": {
       "country": "US",
       "lockup_sources": [
@@ -3149,21 +3125,9 @@
       ],
       "obituary_sources": []
     },
-    "UT": {
-      "country": "US",
-      "lockup_sources": [],
-      "obituary_sources": []
-    },
-    "VT": {
-      "country": "US",
-      "lockup_sources": [],
-      "obituary_sources": []
-    },
-    "VA": {
-      "country": "US",
-      "lockup_sources": [],
-      "obituary_sources": []
-    },
+    "UT": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "VT": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "VA": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "WA": {
       "country": "US",
       "lockup_sources": [
@@ -3187,11 +3151,7 @@
       ],
       "obituary_sources": []
     },
-    "WV": {
-      "country": "US",
-      "lockup_sources": [],
-      "obituary_sources": []
-    },
+    "WV": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "WI": {
       "country": "US",
       "lockup_sources": [
@@ -3310,81 +3270,21 @@
       ],
       "obituary_sources": []
     },
-    "PR": {
-      "country": "US",
-      "lockup_sources": [],
-      "obituary_sources": []
-    },
-    "VI": {
-      "country": "US",
-      "lockup_sources": [],
-      "obituary_sources": []
-    },
-    "GU": {
-      "country": "US",
-      "lockup_sources": [],
-      "obituary_sources": []
-    },
-    "AS": {
-      "country": "US",
-      "lockup_sources": [],
-      "obituary_sources": []
-    },
-    "MP": {
-      "country": "US",
-      "lockup_sources": [],
-      "obituary_sources": []
-    },
-    "AB": {
-      "country": "CA",
-      "lockup_sources": [],
-      "obituary_sources": []
-    },
-    "BC": {
-      "country": "CA",
-      "lockup_sources": [],
-      "obituary_sources": []
-    },
-    "MB": {
-      "country": "CA",
-      "lockup_sources": [],
-      "obituary_sources": []
-    },
-    "NB": {
-      "country": "CA",
-      "lockup_sources": [],
-      "obituary_sources": []
-    },
-    "NL": {
-      "country": "CA",
-      "lockup_sources": [],
-      "obituary_sources": []
-    },
-    "NS": {
-      "country": "CA",
-      "lockup_sources": [],
-      "obituary_sources": []
-    },
-    "ON": {
-      "country": "CA",
-      "lockup_sources": [],
-      "obituary_sources": []
-    },
-    "QC": {
-      "country": "CA",
-      "lockup_sources": [],
-      "obituary_sources": []
-    },
-    "SK": {
-      "country": "CA",
-      "lockup_sources": [],
-      "obituary_sources": []
-    },
-    "YT": {
-      "country": "CA",
-      "lockup_sources": [],
-      "obituary_sources": []
-    }
+    "PR": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "VI": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "GU": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "AS": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "MP": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "AB": { "country": "CA", "lockup_sources": [], "obituary_sources": [] },
+    "BC": { "country": "CA", "lockup_sources": [], "obituary_sources": [] },
+    "MB": { "country": "CA", "lockup_sources": [], "obituary_sources": [] },
+    "NB": { "country": "CA", "lockup_sources": [], "obituary_sources": [] },
+    "NL": { "country": "CA", "lockup_sources": [], "obituary_sources": [] },
+    "NS": { "country": "CA", "lockup_sources": [], "obituary_sources": [] },
+    "ON": { "country": "CA", "lockup_sources": [], "obituary_sources": [] },
+    "QC": { "country": "CA", "lockup_sources": [], "obituary_sources": [] },
+    "SK": { "country": "CA", "lockup_sources": [], "obituary_sources": [] },
+    "YT": { "country": "CA", "lockup_sources": [], "obituary_sources": [] }
   },
   "multi_state": [
     {
