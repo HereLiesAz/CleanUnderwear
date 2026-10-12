@@ -813,6 +813,31 @@
           "url_template": "https://ciris.mt.cdcr.ca.gov/",
           "render": "WEBVIEW",
           "scope": "STATE"
+        },
+        {
+          "id": "ca_sutter_jail",
+          "label": "Sutter County CA (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://sutter-so-ca.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://sutter-so-ca.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
         }
       ],
       "obituary_sources": []
@@ -847,6 +872,31 @@
             "age": "AGE"
           },
           "released_pattern": "^PAROLE",
+          "scope": "STATE"
+        },
+        {
+          "id": "co_gilpin_jail",
+          "label": "Gilpin County CO (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://gilpin-so-co.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://gilpin-so-co.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
           "scope": "STATE"
         }
       ],
@@ -955,6 +1005,106 @@
           },
           "custody_pattern": "Yes",
           "scope": "STATE"
+        },
+        {
+          "id": "ga_catoosa_jail",
+          "label": "Catoosa County GA (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://catoosa-so-ga.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://catoosa-so-ga.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "ga_lumpkin_jail",
+          "label": "Lumpkin County GA (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://lumpkin-so-ga.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://lumpkin-so-ga.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "ga_houston_jail",
+          "label": "Houston County GA (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://houston-so-ga.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://houston-so-ga.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "ga_toombs_jail",
+          "label": "Toombs County GA (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://toombs-so-ga.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://toombs-so-ga.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
         }
       ],
       "obituary_sources": []
@@ -982,11 +1132,91 @@
           },
           "custody_pattern": "In custody",
           "scope": "STATE"
+        },
+        {
+          "id": "id_washington_jail",
+          "label": "Washington County ID (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://washington-so-id.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://washington-so-id.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
         }
       ],
       "obituary_sources": []
     },
-    "IL": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "IL": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "il_stephenson_jail",
+          "label": "Stephenson County IL (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://stephenson-so-il.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://stephenson-so-il.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "il_whiteside_jail",
+          "label": "Whiteside County IL (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://whiteside-so-il.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://whiteside-so-il.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
     "IN": {
       "country": "US",
       "lockup_sources": [
@@ -1043,8 +1273,68 @@
       ],
       "obituary_sources": []
     },
-    "IA": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "KS": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "IA": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "ia_marshall_jail",
+          "label": "Marshall County IA (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://marshall-so-ia.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://marshall-so-ia.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
+    "KS": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "ks_atchison_jail",
+          "label": "Atchison County KS (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://atchison-so-ks.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://atchison-so-ks.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
     "KY": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "LA": {
       "country": "US",
@@ -1056,11 +1346,141 @@
           "url_template": "https://doc.louisiana.gov/imprisoned-person-programs-resources/",
           "render": "WEBVIEW",
           "scope": "STATE"
+        },
+        {
+          "id": "la_acadia_jail",
+          "label": "Acadia Parish LA (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://acadia-so-la.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://acadia-so-la.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "la_lafourche_jail",
+          "label": "Lafourche Parish LA (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://lafourche-so-la.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://lafourche-so-la.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "la_stcharles_jail",
+          "label": "St. Charles Parish LA (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://stcharles-so-la.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://stcharles-so-la.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
         }
       ],
       "obituary_sources": []
     },
-    "ME": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "ME": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "me_androscoggin_jail",
+          "label": "Androscoggin County ME (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://androscoggin-so-me.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://androscoggin-so-me.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "me_somerset_jail",
+          "label": "Somerset County ME (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://somerset-so-me.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://somerset-so-me.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
     "MD": {
       "country": "US",
       "lockup_sources": [
@@ -1116,7 +1536,37 @@
       ],
       "obituary_sources": []
     },
-    "MN": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "MN": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "mn_winona_jail",
+          "label": "Winona County MN (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://winona-so-mn.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://winona-so-mn.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
     "MS": {
       "country": "US",
       "lockup_sources": [
@@ -1149,8 +1599,93 @@
       "obituary_sources": []
     },
     "MO": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "MT": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
-    "NE": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "MT": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "mt_jefferson_jail",
+          "label": "Jefferson County MT (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://jefferson-so-mt.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://jefferson-so-mt.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "mt_ravalli_jail",
+          "label": "Ravalli County MT (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://ravalli-so-mt.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://ravalli-so-mt.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
+    "NE": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "ne_scottsbluff_jail",
+          "label": "Scotts Bluff County NE (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://scottsbluff-so-ne.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://scottsbluff-so-ne.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
     "NV": {
       "country": "US",
       "lockup_sources": [
@@ -1181,7 +1716,37 @@
       ],
       "obituary_sources": []
     },
-    "NH": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "NH": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "nh_rockingham_jail",
+          "label": "Rockingham County NH (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://rockingham-so-nh.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://rockingham-so-nh.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
     "NJ": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "NM": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
     "NY": {
@@ -1351,6 +1916,56 @@
             "facility": "disp_agency"
           },
           "scope": "STATE"
+        },
+        {
+          "id": "nc_davie_jail",
+          "label": "Davie County NC (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://davie-so-nc.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://davie-so-nc.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "nc_pender_jail",
+          "label": "Pender County NC (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://pender-so-nc.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://pender-so-nc.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
         }
       ],
       "obituary_sources": []
@@ -1410,6 +2025,131 @@
             "status": "Status"
           },
           "custody_pattern": "INCARCERATED",
+          "scope": "STATE"
+        },
+        {
+          "id": "oh_ashland_jail",
+          "label": "Ashland County OH (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://ashland-so-oh.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://ashland-so-oh.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "oh_paulding_jail",
+          "label": "Paulding County OH (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://paulding-so-oh.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://paulding-so-oh.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "oh_ross_jail",
+          "label": "Ross County OH (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://ross-so-oh.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://ross-so-oh.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "oh_shelby_jail",
+          "label": "Shelby County OH (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://shelby-so-oh.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://shelby-so-oh.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "oh_preble_jail",
+          "label": "Preble County OH (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://preble-so-oh.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://preble-so-oh.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
           "scope": "STATE"
         }
       ],
@@ -1525,6 +2265,81 @@
           },
           "released_pattern": "\\d",
           "scope": "STATE"
+        },
+        {
+          "id": "sc_kershaw_jail",
+          "label": "Kershaw County SC (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://kershaw-so-sc.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://kershaw-so-sc.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "sc_union_jail",
+          "label": "Union County SC (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://union-so-sc.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://union-so-sc.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "sc_colleton_jail",
+          "label": "Colleton County SC (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://colleton-so-sc.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://colleton-so-sc.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
         }
       ],
       "obituary_sources": []
@@ -1556,11 +2371,116 @@
           },
           "released_pattern": "\\d",
           "scope": "STATE"
+        },
+        {
+          "id": "sd_meade_jail",
+          "label": "Meade County SD (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://meade-so-sd.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://meade-so-sd.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "sd_roberts_jail",
+          "label": "Roberts County SD (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://roberts-so-sd.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://roberts-so-sd.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
         }
       ],
       "obituary_sources": []
     },
-    "TN": { "country": "US", "lockup_sources": [], "obituary_sources": [] },
+    "TN": {
+      "country": "US",
+      "lockup_sources": [
+        {
+          "id": "tn_sullivan_jail",
+          "label": "Sullivan County TN (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://sullivan-so-tn.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://sullivan-so-tn.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "tn_washington_jail",
+          "label": "Washington County TN (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://washington-so-tn.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://washington-so-tn.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        }
+      ],
+      "obituary_sources": []
+    },
     "TX": {
       "country": "US",
       "lockup_sources": [
@@ -1597,6 +2517,31 @@
             "age": "Age",
             "facility": "Unit"
           },
+          "scope": "STATE"
+        },
+        {
+          "id": "tx_upshur_jail",
+          "label": "Upshur County TX (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://upshur-so-tx.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://upshur-so-tx.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
           "scope": "STATE"
         }
       ],
@@ -1658,6 +2603,56 @@
           "event_kind": "ARREST",
           "case_type_pattern": "^\\d{4}(CF|CM|CT)",
           "max_age_days": 60,
+          "scope": "STATE"
+        },
+        {
+          "id": "wi_lincoln_jail",
+          "label": "Lincoln County WI (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://lincoln-so-wi.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://lincoln-so-wi.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
+          "scope": "STATE"
+        },
+        {
+          "id": "wi_grant_jail",
+          "label": "Grant County WI (jail)",
+          "kind": "QUERY_TEMPLATE",
+          "method": "POST",
+          "url_template": "https://grant-so-wi.zuercherportal.com/api/portal/inmates/load",
+          "body_template": "{\"held_for_agency\":\"any\",\"in_custody\":\"\",\"paging\":{\"count\":200,\"start\":0},\"sorting\":{\"sort_by_column_tag\":\"name\",\"sort_descending\":false},\"name\":\"{last}\"}",
+          "content_type": "application/json",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "evidence_url_template": "https://grant-so-wi.zuercherportal.com/",
+          "render": "BASIC",
+          "result_format": "JSON_RECORDS",
+          "json_fields": {
+            "records": "records",
+            "name": "name",
+            "age": "dob",
+            "dob": "dob",
+            "status": "release_date",
+            "id": "arrest_date"
+          },
+          "released_pattern": "\\d",
           "scope": "STATE"
         }
       ],
