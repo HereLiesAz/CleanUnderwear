@@ -3464,6 +3464,27 @@
       "max_age_days": 60,
       "scope": "MULTI_STATE",
       "covers_country": "US"
+    },
+    {
+      "id": "obitsarchive_obit",
+      "label": "ObitsArchive obituaries",
+      "kind": "QUERY_TEMPLATE",
+      "method": "GET",
+      "url_template": "https://www.obitsarchive.com/obituaries?lname={LAST}&fname={FIRST}&sort=dsc",
+      "evidence_url_template": "https://www.obitsarchive.com/",
+      "render": "BASIC",
+      "result_format": "REGEX_RECORDS",
+      "record_regex": "title=\"Title:[\\s\\S]*?views-field-date\">\\s*<span class=\"field-content\">[^<]+",
+      "field_regexes": {
+        "name": "title=\"Title:\\s*([^\"]+)\"",
+        "date": "views-field-date\">\\s*<span class=\"field-content\">([^<]+)",
+        "city": "views-field-text-3\">\\s*<span class=\"field-content\">[^(]*\\(([^,)]+)",
+        "state": "views-field-text-3\">\\s*<span class=\"field-content\">[^(]*\\(?[^,)]*,?\\s*([A-Z]{2})\\)"
+      },
+      "event_kind": "DEATH",
+      "max_age_days": 60,
+      "covers_country": "US",
+      "scope": "MULTI_STATE"
     }
   ],
   "_identity_sources_comment": "Identity-correlation services (face recognition, reverse image search, name-based OSINT) ported from the sister project doxray (github.com/HereLiesAz/doxray). All entries ship as MANUAL_LANDING because (a) the face/image services require a photo upload the Registry never carries, and (b) the name-based services (PimEyes, FaceCheck.id, CyberBackgroundChecks, SmartBackgroundChecks, GitHub) bot-block raw HTTP requests \u2014 they must be exercised through the user's own browser session. The CyberBackgroundChecks / SmartBackgroundChecks chips use the same /name/{first}-{last} search path that the enrichment flow (util/CyberBackgroundChecks.kt) produces, so the chip and the auto-enricher land on the same page (previously the chip used a /people/ path that did not match). Templates with {first}/{last} slots are filled at chip-render time via SourceUrlBuilder.",
