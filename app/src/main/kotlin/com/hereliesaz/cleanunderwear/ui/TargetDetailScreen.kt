@@ -434,14 +434,20 @@ fun TargetDetailScreen(
                 // the operator never lands on a raw API/JSON response. Sources
                 // whose landing URL still carries unfilled {first}/{last} slots
                 // are skipped here — they have no operator-friendly page.
+                val (chipFirst, chipLast) = splitDisplayName(target.displayName)
                 val lockupChips = sourceCatalog
-                    .lockupSourcesFor(target.areaCode, target.residenceInfo)
-                lockupChips.forEach { source ->
-                    val landing = if (source.kind == SourceKind.MANUAL_LANDING) {
+                    .lockupSourcesFor(target.areaCode, target.residenceInfo) +
+                    sourceCatalog.obituarySourcesFor(target.areaCode, target.residenceInfo)
+                lockupChips.distinctBy { it.id }.forEach { source ->
+                    val template = if (source.kind == SourceKind.MANUAL_LANDING) {
                         source.urlTemplate
                     } else {
                         source.evidenceUrlTemplate
                     }
+                    // Pre-fill the contact's name so a name-queryable gated site
+                    // (court portal, VINELink) opens ready to search. Skip any
+                    // URL still carrying unfilled slots after that.
+                    val landing = SourceUrlBuilder.fillLanding(template, chipFirst, chipLast)
                     if (!landing.contains("{")) {
                         AssistChip(
                             onClick = {
