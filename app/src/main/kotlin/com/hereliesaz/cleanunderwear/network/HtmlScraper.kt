@@ -108,9 +108,21 @@ class HtmlScraper @Inject constructor(
             }.build()
             val fields = LinkedHashMap<String, String>()
             source.tokenPage?.let { page ->
-                val tokenResponse = client.newCall(
+                var tokenResponse = client.newCall(
                     Request.Builder().url(sanitize(page)).header("User-Agent", DESKTOP_UA).build()
                 ).execute()
+                // Sites behind a disclaimer: accept it, and read the token from
+                // the page the acceptance returns.
+                if (source.tokenForm.isNotEmpty()) {
+                    tokenResponse.close()
+                    tokenResponse = client.newCall(
+                        Request.Builder().url(sanitize(source.tokenPostUrl ?: page))
+                            .header("User-Agent", DESKTOP_UA)
+                            .header("Referer", sanitize(page))
+                            .post(FormBody.Builder().apply { source.tokenForm.forEach { (k, v) -> add(k, v) } }.build())
+                            .build()
+                    ).execute()
+                }
                 val doc = Jsoup.parse(tokenResponse.body.string())
                 doc.select("input[type=hidden][name]").forEach { fields[it.attr("name")] = it.attr("value") }
             }

@@ -96,7 +96,10 @@ object StructuredRecords {
         evidenceUrl: String
     ): CandidateRecord? {
         val row = rawRow.mapValues { it.value?.trim()?.takeIf { v -> v.isNotEmpty() } }
-        val parsed = row["name"]?.let(::splitName)
+        val rawName = row["name"]?.let { n ->
+            source.namePattern?.let { p -> Regex(p, RegexOption.IGNORE_CASE).find(n)?.groupValues?.getOrNull(1) } ?: n
+        }
+        val parsed = rawName?.let { splitName(it, source.nameLastFirst) }
         val recFirst = row["first"] ?: parsed?.first ?: return null
         val recLast = row["last"] ?: parsed?.third ?: return null
         val recMiddle = row["middle"] ?: parsed?.second
@@ -176,7 +179,7 @@ object StructuredRecords {
      * Splits a combined name into (first, middle, last): "LAST, FIRST MIDDLE"
      * when it has a comma, otherwise "First [Middle] Last".
      */
-    internal fun splitName(name: String): Triple<String, String?, String>? {
+    internal fun splitName(name: String, lastFirst: Boolean = false): Triple<String, String?, String>? {
         if (name.contains(',')) {
             val lastPart = name.substringBefore(',').trim()
             val rest = name.substringAfter(',').trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
@@ -185,6 +188,7 @@ object StructuredRecords {
         }
         val tokens = name.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
         if (tokens.size < 2) return null
+        if (lastFirst) return Triple(tokens[1], tokens.getOrNull(2), tokens[0])
         return Triple(tokens.first(), tokens.getOrNull(1)?.takeIf { tokens.size > 2 }, tokens.last())
     }
 
