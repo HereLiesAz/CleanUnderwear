@@ -103,9 +103,15 @@ object StructuredRecords {
         if (!recFirst.substringBefore(' ').equals(first, ignoreCase = true)) return null
         if (recLast.split(' ', '-').none { it.equals(last, ignoreCase = true) }) return null
 
-        val statusText = row["status"] ?: rowText
-        source.releasedPattern?.let { if (Regex(it, RegexOption.IGNORE_CASE).containsMatchIn(statusText)) return null }
-        source.custodyPattern?.let { if (!Regex(it, RegexOption.IGNORE_CASE).containsMatchIn(statusText)) return null }
+        // With a status field configured, only it decides (an empty release date
+        // means still held); without one, the whole row's text does.
+        val statusText = if (rawRow.containsKey("status")) row["status"] else rowText
+        source.releasedPattern?.let { p ->
+            if (statusText != null && Regex(p, RegexOption.IGNORE_CASE).containsMatchIn(statusText)) return null
+        }
+        source.custodyPattern?.let { p ->
+            if (statusText == null || !Regex(p, RegexOption.IGNORE_CASE).containsMatchIn(statusText)) return null
+        }
 
         val id = row["id"]
         val age = row["age"]?.let { Regex("\\d{1,3}").find(it)?.value?.toIntOrNull() }?.takeIf { it in 1..120 }

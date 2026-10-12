@@ -91,4 +91,13 @@ class StructuredRecordsTest {
         assertEquals(1991, r.birthYear)
         assertEquals("xx_doc:111194", r.recordKey)
     }
+
+    @Test
+    fun `empty release date means held, not a fallback to the row text`() {
+        val f = mapOf("records" to "records", "name" to "name", "status" to "release_date", "dob" to "dob")
+        val body = """{"records":[{"name":"SMITH, JOHN LEE","dob":"1980-01-29","release_date":null},
+            {"name":"SMITH, JOHN","dob":"1970-01-01","release_date":"2026-01-02"}]}"""
+        val r = StructuredRecords.fromJson(body, source(f, released = "\\d"), "John", "Smith", EventKind.CUSTODY, "u").single()
+        assertEquals(1980, r.birthYear)
+    }
 }
