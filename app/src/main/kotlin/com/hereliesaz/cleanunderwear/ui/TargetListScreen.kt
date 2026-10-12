@@ -39,6 +39,7 @@ fun TargetListScreen(
     val targets = viewModel.targets.collectAsLazyPagingItems()
     val operationState by viewModel.operationState.collectAsState()
     val sortOrder by viewModel.sortOrder.collectAsState()
+    val searchQuery by viewModel.searchQuery.collectAsState()
     val showIgnored by viewModel.showIgnored.collectAsState()
     val showDiagnosticLog by viewModel.showDiagnosticLog.collectAsState()
     val diagnosticLogs by viewModel.diagnosticLogs.collectAsState()
@@ -159,8 +160,7 @@ fun TargetListScreen(
     }
     Column(modifier = Modifier.fillMaxSize()) {
         // Diagnostic log lives at the very top of the registry view so it sits
-        // above the progress bar and the list. Toggled via the rail's
-        // "Log" menu — search bar lives behind the rail's "Search" item now.
+        // above the progress bar and the list. Toggled via the rail's "Log" menu.
         if (showDiagnosticLog) {
             DiagnosticLogView(diagnosticLogs)
         }
@@ -180,16 +180,18 @@ fun TargetListScreen(
             )
         }
 
-        Row(
+        // Always-on search, above the filter chips. Live-filters the registry
+        // as you type via searchQuery; no button, no overlay.
+        AzTextBox(
+            value = searchQuery,
+            onValueChange = { viewModel.setSearchQuery(it) },
+            hint = "Search Registry...",
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-
-        }
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            historyContext = "registry_search",
+            onSubmit = { viewModel.setSearchQuery(it) }
+        )
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -219,11 +221,50 @@ fun TargetListScreen(
         }
 
         if (targets.itemCount == 0 && targets.loadState.refresh is LoadState.NotLoading) {
+            // Two different empty states: a search/filter that matched nothing,
+            // versus a registry with nothing in it yet. The latter is where a
+            // new user lands right after onboarding, so it says what to do next.
+            val filtering = searchQuery.isNotBlank() || listOf(
+                googleFilter, metaFilter, appleFilter, deviceFilter,
+                namelessFilter, emailOnlyFilter, hasEmailFilter,
+                hasAddressFilter, pendingEnrichmentFilter
+            ).any { it != null }
+
             Box(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
+                modifier = Modifier.weight(1f).fillMaxWidth().padding(32.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("No contacts yet.")
+                if (filtering) {
+                    Text(
+                        "No contacts match.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            "Start by importing your contacts.",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            "Harvest pulls in the people on your phone and your connected accounts. You can also add someone by hand.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                        AzButton(
+                            text = "Harvest Contacts",
+                            onClick = { viewModel.sweepContacts() },
+                            shape = AzButtonShape.RECTANGLE
+                        )
+                        TextButton(onClick = { viewModel.setShowManualEntryDialog(true) }) {
+                            Text("Add one manually")
+                        }
+                    }
+                }
             }
         } else {
             LazyColumn(

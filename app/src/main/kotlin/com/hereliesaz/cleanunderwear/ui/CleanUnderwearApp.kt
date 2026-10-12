@@ -35,8 +35,6 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
     val diagnosticLogs by viewModel.diagnosticLogs.collectAsState()
     val showIgnored by viewModel.showIgnored.collectAsState()
     val sortOrder by viewModel.sortOrder.collectAsState()
-    val searchQuery by viewModel.searchQuery.collectAsState()
-    var isSearchOverlayVisible by remember { mutableStateOf(false) }
 
     // The active/selected rail item stands out from the inactive items. White
     // reads well on the dark rail (the default theme); in light theme it would
@@ -76,12 +74,9 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
         )
 
         if (isOnboardingCompleted) {
-            azRailItem(
-                id = "search",
-                text = "Search",
-                onClick = { isSearchOverlayVisible = !isSearchOverlayVisible }
-            )
-
+            // Rail order follows the user's journey top-down: see the list,
+            // fill and process it (Operations), arrange it (Sort), hide the
+            // noise (Archives), then configure (Settings).
             azRailItem(
                 id = "registry",
                 text = "Registry",
@@ -94,19 +89,20 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                 text = "Operations"
             )
 
-            azRailSubItem(
-                id = "ingest",
-                hostId = "intelligence_ops",
-                text = "Entry",
-                shape = AzButtonShape.NONE,
-                onClick = { viewModel.setShowManualEntryDialog(true) }
-            )
+            // Harvest leads: importing your contacts is the first thing to do.
             azRailSubItem(
                 id = "harvest",
                 hostId = "intelligence_ops",
                 text = "Harvest",
                 shape = AzButtonShape.NONE,
                 onClick = { viewModel.sweepContacts() }
+            )
+            azRailSubItem(
+                id = "ingest",
+                hostId = "intelligence_ops",
+                text = "Entry",
+                shape = AzButtonShape.NONE,
+                onClick = { viewModel.setShowManualEntryDialog(true) }
             )
             azRailSubItem(
                 id = "update",
@@ -122,16 +118,6 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                 shape = AzButtonShape.NONE,
                 onClick = { viewModel.resolveUnverifiedBatch() }
             )
-
-            azRailToggle(
-                id = "archives",
-                isChecked = showIgnored,
-                toggleOnText = "Hide",
-                toggleOffText = "Archives",
-                info = "Show or hide archived contacts."
-            ) {
-                viewModel.toggleShowIgnored()
-            }
 
             azRailHostItem(
                 id = "sort_host",
@@ -159,6 +145,16 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                 onClick = { viewModel.setSortOrder(MainViewModel.SortOrder.DATE) }
             )
 
+            azRailToggle(
+                id = "archives",
+                isChecked = showIgnored,
+                toggleOnText = "Hide",
+                toggleOffText = "Archives",
+                info = "Show or hide archived contacts."
+            ) {
+                viewModel.toggleShowIgnored()
+            }
+
             azDivider()
 
             azRailItem(
@@ -177,32 +173,6 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
         }
 
 
-
-        if (isSearchOverlayVisible) {
-            onscreen(Alignment.TopCenter) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
-                    tonalElevation = 8.dp,
-                    shadowElevation = 4.dp
-                ) {
-                    AzTextBox(
-                        value = searchQuery,
-                        onValueChange = { viewModel.setSearchQuery(it) },
-                        hint = "Search Registry...",
-                        modifier = Modifier.padding(8.dp),
-                        historyContext = "registry_search",
-                        onSubmit = { 
-                            viewModel.setSearchQuery(it)
-                            isSearchOverlayVisible = false
-                        }
-                    )
-                }
-            }
-        }
 
         onscreen {
             // Mission overlay: when a BrowserMission is active, the visible
