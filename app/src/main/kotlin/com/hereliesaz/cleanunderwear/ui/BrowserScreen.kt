@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceError
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -35,6 +36,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -105,18 +107,36 @@ fun BrowserScreen(
         }
     }
 
-    // Drive each mission transition: load the next URL, reset per-page state.
-    // The first mission is also loaded here (the factory below no longer races
-    // ahead of this effect).
-    LaunchedEffect(currentIndex) {
+    // Wait for AndroidView to provide the WebView: launching on just the
+    // mission index can silently skip the initial URL when the view is null.
+    LaunchedEffect(currentIndex, webView) {
+        val activeView = webView ?: return@LaunchedEffect
         pageReady = false
         automationRan = false
         paused = false
         pageLoadCount = 0
-        webView?.stopLoading()
-        webView?.loadUrl(mission.initialUrl)
+        activeView.stopLoading()
+        activeView.loadUrl(mission.initialUrl)
         DiagnosticLogger.log("BrowserScreen: loading mission ${currentIndex + 1}/${missions.size}: ${mission.initialUrl}")
     }
+
+    // The JavaScript bridge was constructed with AndroidView's initial
+    // mission. Always dispatch to the latest Compose callback instead, and
+    // ignore callbacks from pages whose extraction is no longer underway.
+    val onHtmlExtracted by rememberUpdatedState<(String?) -> Unit>(
+        newValue = { html ->
+            if (pageReady && automationRan && !paused) {
+                val safe = html.orEmpty()
+                if (isBlocked(safe)) {
+                    DiagnosticLogger.log("BrowserScreen: mission ${currentIndex + 1} blocked, pausing for user")
+                    paused = true
+                } else {
+                    onMissionResult(mission, MissionOutcome.Extracted(safe))
+                    advance()
+                }
+            }
+        }
+    )
 
     // Once the page reports ready, give the SPA a moment to render results,
     // then auto-evaluate the extraction script. Browse-only missions
@@ -138,10 +158,9 @@ fun BrowserScreen(
         }
     }
 
-    // Watchdog: if a mission gets stuck (page never finishes loading, or the
-    // extraction script silently fails to post back), don't hang the queue
-    // forever. After 30s, report the mission as Blocked and advance.
-    // Pausing for a captcha resets the clock — the user is in control then.
+    // Watchdog: never leave the screen darkened indefinitely if a page
+    // fails to finish loading or an extraction never calls back. At 30s,
+    // unmask the browser and let the user retry, skip, or abort.
     // Browse-only missions are exempt: there's no extraction to time out.
     LaunchedEffect(currentIndex, paused) {
         if (!mission.autoExtract) return@LaunchedEffect
@@ -149,11 +168,10 @@ fun BrowserScreen(
         delay(30_000L)
         if (!paused) {
             DiagnosticLogger.log(
-                "BrowserScreen: mission ${currentIndex + 1} timed out (pageReady=$pageReady, automationRan=$automationRan); skipping",
+                "BrowserScreen: mission ${currentIndex + 1} timed out (pageReady=$pageReady, automationRan=$automationRan); pausing",
                 DiagnosticLogger.LogEntry.LogLevel.WARN
             )
-            onMissionResult(mission, MissionOutcome.Blocked)
-            advance()
+            paused = true
         }
     }
 
@@ -206,7 +224,8 @@ fun BrowserScreen(
                     val cookies = CookieManager.getInstance()
                     cookies.setAcceptCookie(true)
 
-                    val view = WebView(context).apply {
+                    val view = WebView(context)
+                    view.apply {
                         cookies.setAcceptThirdPartyCookies(this, true)
 
                         settings.apply {
@@ -219,19 +238,35 @@ fun BrowserScreen(
 
                         addJavascriptInterface(
                             HtmlDumpInterface { html ->
-                                val safe = html.orEmpty()
-                                if (isBlocked(safe)) {
-                                    DiagnosticLogger.log("BrowserScreen: mission ${currentIndex + 1} blocked, pausing for user")
-                                    paused = true
-                                } else {
-                                    onMissionResult(mission, MissionOutcome.Extracted(safe))
-                                    advance()
+                                // JavascriptInterface callbacks run off the UI
+                                // thread. Never mutate Compose state or parse
+                                // scraped HTML directly on that thread.
+                                view.post {
+                                    if (webView === view) onHtmlExtracted(html)
                                 }
                             },
                             "HTMLOUT"
                         )
 
                         webViewClient = object : WebViewClient() {
+                            override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                                pageReady = false
+                            }
+
+                            override fun onReceivedError(
+                                view: WebView?,
+                                request: WebResourceRequest?,
+                                error: WebResourceError?
+                            ) {
+                                if (request?.isForMainFrame == true) {
+                                    DiagnosticLogger.log(
+                                        "BrowserScreen: navigation error at ${request.url}: ${error?.description}",
+                                        DiagnosticLogger.LogEntry.LogLevel.WARN
+                                    )
+                                    paused = true
+                                }
+                            }
+
                             override fun shouldInterceptRequest(
                                 view: WebView?,
                                 request: WebResourceRequest?
