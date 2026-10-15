@@ -181,17 +181,22 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
             val activeBatch by viewModel.activeMissionBatch.collectAsState()
             val batch = activeBatch
             if (batch != null) {
-                BrowserScreen(
-                    missions = batch.missions,
-                    onMissionResult = { mission, outcome ->
-                        if (outcome is MissionOutcome.Extracted) {
-                            batch.onMissionExtracted(mission, outcome.html)
-                        }
-                    },
-                    onAllComplete = { viewModel.completeMissionBatch() },
-                    onCancel = { viewModel.cancelMissionBatch() },
-                    isBlocked = batch.isBlocked,
-                )
+                // A Resolve run creates a new batch for every contact. A keyed
+                // subtree prevents the old WebView/index/bridge from leaking
+                // into the next contact's missions.
+                key(batch) {
+                    BrowserScreen(
+                        missions = batch.missions,
+                        onMissionResult = { mission, outcome ->
+                            if (outcome is MissionOutcome.Extracted) {
+                                batch.onMissionExtracted(mission, outcome.html)
+                            }
+                        },
+                        onAllComplete = { viewModel.completeMissionBatch() },
+                        onCancel = { viewModel.cancelMissionBatch() },
+                        isBlocked = batch.isBlocked,
+                    )
+                }
                 return@onscreen
             }
 
