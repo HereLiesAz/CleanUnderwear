@@ -23,6 +23,8 @@ import com.hereliesaz.cleanunderwear.domain.HarvestContactsUseCase
 import com.hereliesaz.cleanunderwear.domain.PipelineCoordinator
 import com.hereliesaz.cleanunderwear.domain.TriageTargetsUseCase
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.hereliesaz.cleanunderwear.worker.ScrapingWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import androidx.paging.Pager
@@ -447,9 +449,11 @@ class MainViewModel @Inject constructor(
                         progress = index.toFloat() / total
                     )
 
-                    val collected = mutableListOf<Pair<BrowserMission, com.hereliesaz.cleanunderwear.network.CyberBackgroundChecksEnricher.Findings>>()
+                    // WebView callbacks run on the UI thread. Keep them cheap:
+                    // Jsoup parsing can stall the entire browser on large pages.
+                    val extracted = mutableListOf<Pair<BrowserMission, String>>()
                     val outcome = launchMissionsAndAwait(missions) { mission, html ->
-                        cbcEnricher.parseFindings(html)?.let { collected.add(mission to it) }
+                        extracted.add(mission to html)
                     }
 
                     if (outcome == BatchOutcome.UserCancelled) {
@@ -458,6 +462,12 @@ class MainViewModel @Inject constructor(
                         // without their attention.
                         _operationState.value = OperationState(isRunning = false)
                         return@runExclusive
+                    }
+
+                    val collected = withContext(Dispatchers.Default) {
+                        extracted.mapNotNull { (mission, html) ->
+                            cbcEnricher.parseFindings(html)?.let { mission to it }
+                        }
                     }
 
                     // Verify-before-merge: only promote the contact when the CBC

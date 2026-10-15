@@ -43,6 +43,19 @@ When creating new UI components in Compose, we follow these guidelines:
 *   **Images**: For remote images, we use [Coil](https://coil-kt.github.io/coil/), which integrates smoothly with Compose via the `AsyncImage` composable.
 *   **Vector Drawables**: All local graphical assets (like the app launcher icon) are stored as Vector Drawables to ensure they scale perfectly across different screen densities.
 
+## AzNavRail selection colors
+
+The navigation rail uses AzNavRail **11.57** and distinguishes navigation state from touch emphasis:
+
+- **Active destination**: `MaterialTheme.colorScheme.primary` — NeonCyan (`#00E5FF`) in dark mode, CircuitBlue (`#00838F`) in light mode.
+- **Highlighted/focused item**: `MaterialTheme.colorScheme.tertiary` — IntelligenceGold (`#FFB300`) in both modes. Used for the library's `focusColor` (pressed or last-tapped action) and `secondaryColor` (app-driven highlight).
+
+This retains the library's destination/focus distinction rather than coloring all selected-looking items identically.
+
+## Launcher icon
+
+The manifest uses `@drawable/ic_launcher_foreground` directly for both `icon` and `roundIcon`. Android adaptive icons require an opaque backdrop (transparent backgrounds render as opaque on some launchers), so the foreground-only vector is deliberately used instead of the layered `mipmap/ic_launcher` assets. The existing black-and-white icon artwork is unchanged.
+
 ## Accessibility
 
 Design isn't just about how it looks, but how it works for everyone.

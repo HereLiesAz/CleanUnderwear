@@ -125,13 +125,19 @@ private val DRILL_TO_FIRST_RESULT_SCRIPT = """
   var hasList = document.querySelector(
     '.person-card, .result-card, .search-result, [data-result-card]'
   );
-  if (hasList && firstLink && firstLink.href) {
-    // On a results list: drill into the first result. The navigation triggers
-    // another page-finish, on which this script runs again and dumps the detail.
+  // A detail page may also contain a result card. Allow only one drill per
+  // lookup, so related-person links cannot turn extraction into a loop.
+  var drillKey = 'cleanunderwear-cbc-drill';
+  var drilled = false;
+  try { drilled = sessionStorage.getItem(drillKey) === '1'; } catch (_) {}
+  if (hasList && firstLink && firstLink.href &&
+      firstLink.href !== window.location.href && !drilled) {
+    try { sessionStorage.setItem(drillKey, '1'); } catch (_) {}
     window.location.href = firstLink.href;
     return;
   }
-  // Detail page (or no results): hand the DOM back for parsing.
+  try { sessionStorage.removeItem(drillKey); } catch (_) {}
+  // Detail page, already drilled, or no results: hand the DOM to the parser.
   window.HTMLOUT.dump(document.documentElement.outerHTML);
 })();
 """.trimIndent()
