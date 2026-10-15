@@ -7,7 +7,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
@@ -30,17 +29,15 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     
     val operationState by viewModel.operationState.collectAsState()
-    val isDarkTheme by viewModel.isDarkTheme.collectAsState()
     val showDiagnosticLog by viewModel.showDiagnosticLog.collectAsState()
     val diagnosticLogs by viewModel.diagnosticLogs.collectAsState()
     val showIgnored by viewModel.showIgnored.collectAsState()
     val sortOrder by viewModel.sortOrder.collectAsState()
 
-    // The active/selected rail item stands out from the inactive items. White
-    // reads well on the dark rail (the default theme); in light theme it would
-    // be invisible, so fall back to the primary color there.
-    val activeColor = if (isDarkTheme) Color.White else MaterialTheme.colorScheme.primary
-    val surfaceColor = MaterialTheme.colorScheme.surface
+    // Active marks the current destination; gold highlights touch focus and
+    // app-driven secondary state. The active tint adapts to light/dark themes.
+    val activeColor = MaterialTheme.colorScheme.primary
+    val highlightedColor = MaterialTheme.colorScheme.tertiary
     val backgroundColor = MaterialTheme.colorScheme.background
 
     AzHostActivityLayout(
@@ -57,6 +54,8 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
         
         azTheme(
             activeColor = activeColor,
+            focusColor = highlightedColor,
+            secondaryColor = highlightedColor,
             translucentBackground = backgroundColor.copy(alpha = 0.90f),
             defaultShape = AzButtonShape.RECTANGLE
         )
