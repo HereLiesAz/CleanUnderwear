@@ -52,6 +52,10 @@ The navigation rail uses AzNavRail **11.57** and distinguishes navigation state 
 
 This retains the library's destination/focus distinction rather than coloring all selected-looking items identically.
 
+## Launcher icon
+
+The manifest uses `@drawable/ic_launcher_foreground` directly for both `icon` and `roundIcon`. Android adaptive icons require an opaque backdrop (transparent backgrounds render as opaque on some launchers), so the foreground-only vector is deliberately used instead of the layered `mipmap/ic_launcher` assets. The existing black-and-white icon artwork is unchanged.
+
 ## Accessibility
 
 Design isn't just about how it looks, but how it works for everyone.
