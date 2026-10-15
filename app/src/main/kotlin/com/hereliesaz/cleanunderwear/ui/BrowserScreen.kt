@@ -3,6 +3,8 @@ package com.hereliesaz.cleanunderwear.ui
 import android.annotation.SuppressLint
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.background
@@ -44,6 +46,7 @@ import com.hereliesaz.aznavrail.model.AzButtonShape
 import com.hereliesaz.cleanunderwear.domain.BrowserMission
 import com.hereliesaz.cleanunderwear.util.DiagnosticLogger
 import kotlinx.coroutines.delay
+import java.io.ByteArrayInputStream
 
 /**
  * Outcome of running one mission's extraction script. The screen reports this
@@ -229,7 +232,40 @@ fun BrowserScreen(
                         )
 
                         webViewClient = object : WebViewClient() {
+                            override fun shouldInterceptRequest(
+                                view: WebView?,
+                                request: WebResourceRequest?
+                            ): WebResourceResponse? {
+                                if (request == null || request.isForMainFrame) return null
+                                val scheme = request.url.scheme
+                                if (scheme != "http" && scheme != "https") return null
+                                if (!BrowserAdBlocker.blocks(request.url.host)) return null
+
+                                // An empty response suppresses the ad resource without
+                                // redirecting or altering the mission's main document.
+                                return WebResourceResponse(
+                                    "text/plain",
+                                    "UTF-8",
+                                    ByteArrayInputStream(ByteArray(0))
+                                )
+                            }
+
                             override fun onPageFinished(view: WebView?, url: String?) {
+                                // Remove blank ad slots as well as blocking ad traffic.
+                                // Conservative selectors avoid hiding page content,
+                                // contact details, authentication or CAPTCHA controls.
+                                view?.evaluateJavascript(
+                                    """
+                                    (function() {
+                                      if (document.getElementById('cu-ad-filter')) return;
+                                      var style = document.createElement('style');
+                                      style.id = 'cu-ad-filter';
+                                      style.textContent = 'ins.adsbygoogle, .adsbygoogle, [data-ad-client], [id^="div-gpt-ad"], [id^="google_ads_"], iframe[src*="doubleclick.net"], iframe[src*="googlesyndication.com"], [id^="taboola-"], .OUTBRAIN { display: none !important; }';
+                                      (document.head || document.documentElement).appendChild(style);
+                                    })();
+                                    """.trimIndent(),
+                                    null
+                                )
                                 pageReady = true
                                 // Each navigation bumps the counter so drill-in
                                 // missions re-trigger extraction on the new page.
