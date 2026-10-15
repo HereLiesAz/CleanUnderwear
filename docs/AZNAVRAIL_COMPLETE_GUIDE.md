@@ -90,7 +90,9 @@ Controls visual style defaults.
 ```kotlin
 azTheme(
     defaultShape = AzButtonShape.RECTANGLE, // Default shape for all items
-    activeColor = MaterialTheme.colorScheme.primary, // Color for active state
+    activeColor = MaterialTheme.colorScheme.primary, // Current route: cyan (dark) / blue (light)
+    focusColor = MaterialTheme.colorScheme.tertiary, // Pressed or last-tapped item: gold
+    secondaryColor = MaterialTheme.colorScheme.tertiary, // App-driven highlight: gold
     translucentBackground = Color.Black.copy(alpha = 0.5f) // Set the background color for menus/overlays!
 )
 ```
