@@ -92,6 +92,7 @@ fun BrowserScreen(
     var pageReady by remember { mutableStateOf(false) }
     var automationRan by remember { mutableStateOf(false) }
     var paused by remember { mutableStateOf(false) }
+    var mainFrameFailed by remember { mutableStateOf(false) }
     // Increments on every page-finish. Drill-in missions (CBC) re-run their
     // extraction script on each navigation, keyed off this counter.
     var pageLoadCount by remember { mutableIntStateOf(0) }
@@ -114,6 +115,7 @@ fun BrowserScreen(
         pageReady = false
         automationRan = false
         paused = false
+        mainFrameFailed = false
         pageLoadCount = 0
         activeView.stopLoading()
         activeView.loadUrl(mission.initialUrl)
@@ -251,6 +253,7 @@ fun BrowserScreen(
                         webViewClient = object : WebViewClient() {
                             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                                 pageReady = false
+                                mainFrameFailed = false
                             }
 
                             override fun onReceivedError(
@@ -259,6 +262,7 @@ fun BrowserScreen(
                                 error: WebResourceError?
                             ) {
                                 if (request?.isForMainFrame == true) {
+                                    mainFrameFailed = true
                                     DiagnosticLogger.log(
                                         "BrowserScreen: navigation error at ${request.url}: ${error?.description}",
                                         DiagnosticLogger.LogEntry.LogLevel.WARN
@@ -358,7 +362,7 @@ fun BrowserScreen(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
-                        "This page looks like a captcha or block. Solve it in the browser, then continue.",
+                        "This page may be blocked, have failed to load, or timed out. Solve any CAPTCHA, retry, skip, or abort.",
                         color = MaterialTheme.colorScheme.primary
                     )
                     Row(
@@ -370,8 +374,13 @@ fun BrowserScreen(
                             onClick = {
                                 automationRan = false
                                 paused = false
-                                // Reuse the existing pageReady=true to trigger
-                                // the auto-extraction LaunchedEffect.
+                                if (mainFrameFailed || !pageReady) {
+                                    // The failed/unfinished document cannot be
+                                    // extracted; request a fresh navigation.
+                                    webView?.reload()
+                                }
+                                // A ready page re-triggers extraction when
+                                // paused switches back to false.
                             },
                             modifier = Modifier.weight(1f),
                             shape = AzButtonShape.RECTANGLE
