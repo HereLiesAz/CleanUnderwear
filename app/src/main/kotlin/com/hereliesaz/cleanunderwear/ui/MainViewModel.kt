@@ -136,6 +136,8 @@ class MainViewModel @Inject constructor(
      * fires once after the last mission resolves (extracted or skipped).
      */
     data class ActiveMissionBatch(
+        val id: Long,
+        val retainBrowserForResolve: Boolean,
         val missions: List<com.hereliesaz.cleanunderwear.domain.BrowserMission>,
         val onMissionExtracted: (com.hereliesaz.cleanunderwear.domain.BrowserMission, String) -> Unit,
         val onAllComplete: () -> Unit,
@@ -143,6 +145,8 @@ class MainViewModel @Inject constructor(
         val isBlocked: (String) -> Boolean,
     )
 
+    private var missionBatchSequence = 0L
+    private var resolveCancellationRequested = false
     private val _activeMissionBatch = MutableStateFlow<ActiveMissionBatch?>(null)
     val activeMissionBatch: StateFlow<ActiveMissionBatch?> = _activeMissionBatch
 
@@ -157,8 +161,11 @@ class MainViewModel @Inject constructor(
         onAllComplete: () -> Unit = {},
         onCancel: () -> Unit = {},
         isBlocked: (String) -> Boolean = { false },
+        retainBrowserForResolve: Boolean = false,
     ) {
         _activeMissionBatch.value = ActiveMissionBatch(
+            id = ++missionBatchSequence,
+            retainBrowserForResolve = retainBrowserForResolve,
             missions = missions,
             onMissionExtracted = onMissionExtracted,
             onAllComplete = onAllComplete,
@@ -188,14 +195,17 @@ class MainViewModel @Inject constructor(
 
     /** Called by the UI when the mission queue finishes naturally. */
     fun completeMissionBatch() {
-        val active = _activeMissionBatch.value
-        _activeMissionBatch.value = null
-        active?.onAllComplete?.invoke()
+        val active = _activeMissionBatch.value ?: return
+        // The Resolve coroutine starts the next contact after parsing this one.
+        // Keep the browser mounted during that gap; only replace its mission data.
+        if (!active.retainBrowserForResolve) _activeMissionBatch.value = null
+        active.onAllComplete.invoke()
     }
 
     /** Called by the UI when the user backs out of the queue. */
     fun cancelMissionBatch() {
         val active = _activeMissionBatch.value
+        if (active?.retainBrowserForResolve == true) resolveCancellationRequested = true
         _activeMissionBatch.value = null
         active?.onCancel?.invoke()
     }
@@ -409,6 +419,8 @@ class MainViewModel @Inject constructor(
     fun resolveUnverifiedBatch() {
         viewModelScope.launch {
             pipelineCoordinator.runExclusive("user-enrichment") {
+                resolveCancellationRequested = false
+                try {
                 val ids = repository
                     .getTargetWorkInfoPaged(limit = 5000, offset = 0)
                     .filter { it.status != TargetStatus.IGNORED }
@@ -433,6 +445,7 @@ class MainViewModel @Inject constructor(
                 )
 
                 for ((index, lite) in unverified.withIndex()) {
+                    if (resolveCancellationRequested) return@runExclusive
                     val target = repository.getTargetById(lite.id) ?: continue
                     val missions = cbcEnricher.pickAllMissions(target)
                     if (missions.isEmpty()) {
@@ -456,7 +469,7 @@ class MainViewModel @Inject constructor(
                         extracted.add(mission to html)
                     }
 
-                    if (outcome == BatchOutcome.UserCancelled) {
+                    if (outcome == BatchOutcome.UserCancelled || resolveCancellationRequested) {
                         // User backed out mid-target — stop the whole batch
                         // rather than barrel through every UNVERIFIED contact
                         // without their attention.
@@ -469,6 +482,7 @@ class MainViewModel @Inject constructor(
                             cbcEnricher.parseFindings(html)?.let { mission to it }
                         }
                     }
+                    if (resolveCancellationRequested) return@runExclusive
 
                     // Verify-before-merge: only promote the contact when the CBC
                     // card is corroborated as the *same person*. An unverified or
@@ -507,6 +521,17 @@ class MainViewModel @Inject constructor(
                     isRunning = false,
                     description = "Enriched $total contact${if (total == 1) "" else "s"}."
                 )
+                } finally {
+                    // Do not destroy the shared browser between contacts, only
+                    // when the complete Resolve run finishes or is cancelled.
+                    if (_activeMissionBatch.value?.retainBrowserForResolve == true) {
+                        _activeMissionBatch.value = null
+                    }
+                    resolveCancellationRequested = false
+                    if (_operationState.value.isRunning) {
+                        _operationState.value = OperationState(isRunning = false)
+                    }
+                }
             }
         }
     }
@@ -542,6 +567,7 @@ class MainViewModel @Inject constructor(
             onAllComplete = { deferred.complete(BatchOutcome.Completed) },
             onCancel = { deferred.complete(BatchOutcome.UserCancelled) },
             isBlocked = cbcEnricher::looksLikeBlock,
+            retainBrowserForResolve = true,
         )
         return deferred.await()
     }

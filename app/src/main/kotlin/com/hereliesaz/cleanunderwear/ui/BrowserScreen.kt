@@ -69,13 +69,15 @@ sealed class MissionOutcome {
  * ([isBlocked] returns true), the screen pauses and surfaces a
  * "Solve & continue / Skip / Abort" overlay so the user can recover.
  *
- * Cookies persist across mission transitions because the WebView is reused —
- * only `loadUrl` changes between missions.
+ * Cookies persist across missions and Resolve contacts because the WebView is
+ * reused. [batchId] resets the extraction state without rebuilding the browser.
+ * Delayed JavaScript results carry unique tags so they cannot cross lookups.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
 @Composable
 fun BrowserScreen(
+    batchId: Long,
     missions: List<BrowserMission>,
     onMissionResult: (BrowserMission, MissionOutcome) -> Unit,
     onAllComplete: () -> Unit,
@@ -88,7 +90,9 @@ fun BrowserScreen(
         return
     }
 
-    var currentIndex by remember { mutableIntStateOf(0) }
+    var currentIndex by remember(batchId) { mutableIntStateOf(0) }
+    var batchComplete by remember { mutableStateOf(false) }
+    val extractionGate = remember { BrowserExtractionGate() }
     var pageReady by remember { mutableStateOf(false) }
     var automationRan by remember { mutableStateOf(false) }
     var paused by remember { mutableStateOf(false) }
@@ -100,8 +104,20 @@ fun BrowserScreen(
 
     val mission = missions[currentIndex]
 
+    fun cancel() {
+        batchComplete = true
+        extractionGate.finish()
+        webView?.stopLoading()
+        onCancel()
+    }
+
     fun advance() {
+        if (batchComplete) return
+        extractionGate.invalidate()
         if (currentIndex + 1 >= missions.size) {
+            batchComplete = true
+            extractionGate.finish()
+            webView?.stopLoading()
             onAllComplete()
         } else {
             currentIndex += 1
@@ -110,8 +126,10 @@ fun BrowserScreen(
 
     // Wait for AndroidView to provide the WebView: launching on just the
     // mission index can silently skip the initial URL when the view is null.
-    LaunchedEffect(currentIndex, webView) {
+    LaunchedEffect(batchId, currentIndex, webView) {
         val activeView = webView ?: return@LaunchedEffect
+        extractionGate.reset()
+        batchComplete = false
         pageReady = false
         automationRan = false
         paused = false
@@ -125,9 +143,9 @@ fun BrowserScreen(
     // The JavaScript bridge was constructed with AndroidView's initial
     // mission. Always dispatch to the latest Compose callback instead, and
     // ignore callbacks from pages whose extraction is no longer underway.
-    val onHtmlExtracted by rememberUpdatedState<(String?) -> Unit>(
-        newValue = { html ->
-            if (pageReady && automationRan && !paused) {
+    val onHtmlExtracted by rememberUpdatedState<(String?, String?) -> Unit>(
+        newValue = { token, html ->
+            if (!batchComplete && pageReady && automationRan && !paused && extractionGate.accept(token)) {
                 val safe = html.orEmpty()
                 if (isBlocked(safe)) {
                     DiagnosticLogger.log("BrowserScreen: mission ${currentIndex + 1} blocked, pausing for user")
@@ -149,14 +167,20 @@ fun BrowserScreen(
     // navigation: the script walks the results list into the first result's
     // detail page, dumping only once it arrives. Non-drill missions still
     // extract exactly once (the automationRan guard).
-    LaunchedEffect(currentIndex, pageLoadCount, paused) {
-        if (!mission.autoExtract) return@LaunchedEffect
+    LaunchedEffect(batchId, currentIndex, pageLoadCount, paused) {
+        if (!mission.autoExtract || batchComplete) return@LaunchedEffect
         if (paused || !pageReady) return@LaunchedEffect
         if (!mission.drillToFirstResult && automationRan) return@LaunchedEffect
         delay(1200L)
-        if (!paused) {
+        if (!paused && !batchComplete && pageReady) {
+            val token = extractionGate.beginExtraction() ?: return@LaunchedEffect
+            val script = extractionGate.tagScript(
+                mission.extractionScript,
+                token,
+                "$batchId-$currentIndex"
+            )
             automationRan = true
-            webView?.evaluateJavascript(mission.extractionScript, null)
+            webView?.evaluateJavascript(script, null)
         }
     }
 
@@ -164,11 +188,11 @@ fun BrowserScreen(
     // fails to finish loading or an extraction never calls back. At 30s,
     // unmask the browser and let the user retry, skip, or abort.
     // Browse-only missions are exempt: there's no extraction to time out.
-    LaunchedEffect(currentIndex, paused) {
-        if (!mission.autoExtract) return@LaunchedEffect
+    LaunchedEffect(batchId, currentIndex, paused) {
+        if (!mission.autoExtract || batchComplete) return@LaunchedEffect
         if (paused) return@LaunchedEffect
         delay(30_000L)
-        if (!paused) {
+        if (!paused && !batchComplete) {
             DiagnosticLogger.log(
                 "BrowserScreen: mission ${currentIndex + 1} timed out (pageReady=$pageReady, automationRan=$automationRan); pausing",
                 DiagnosticLogger.LogEntry.LogLevel.WARN
@@ -179,6 +203,7 @@ fun BrowserScreen(
 
     DisposableEffect(Unit) {
         onDispose {
+            extractionGate.finish()
             CookieManager.getInstance().flush()
             webView?.let {
                 try {
@@ -197,7 +222,7 @@ fun BrowserScreen(
             TopAppBar(
                 title = { Text("${mission.label} (${currentIndex + 1}/${missions.size})") },
                 navigationIcon = {
-                    IconButton(onClick = onCancel) {
+                    IconButton(onClick = ::cancel) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Cancel")
                     }
                 },
@@ -239,12 +264,12 @@ fun BrowserScreen(
                         }
 
                         addJavascriptInterface(
-                            HtmlDumpInterface { html ->
+                            HtmlDumpInterface { token, html ->
                                 // JavascriptInterface callbacks run off the UI
                                 // thread. Never mutate Compose state or parse
                                 // scraped HTML directly on that thread.
                                 view.post {
-                                    if (webView === view) onHtmlExtracted(html)
+                                    if (webView === view) onHtmlExtracted(token, html)
                                 }
                             },
                             "HTMLOUT"
@@ -252,6 +277,8 @@ fun BrowserScreen(
 
                         webViewClient = object : WebViewClient() {
                             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                                if (batchComplete) return
+                                extractionGate.invalidate()
                                 pageReady = false
                                 mainFrameFailed = false
                             }
@@ -290,6 +317,7 @@ fun BrowserScreen(
                             }
 
                             override fun onPageFinished(view: WebView?, url: String?) {
+                                if (batchComplete) return
                                 // Remove blank ad slots as well as blocking ad traffic.
                                 // Conservative selectors avoid hiding page content,
                                 // contact details, authentication or CAPTCHA controls.
@@ -372,6 +400,7 @@ fun BrowserScreen(
                         AzButton(
                             text = "Retry extraction",
                             onClick = {
+                                extractionGate.invalidate()
                                 automationRan = false
                                 paused = false
                                 if (mainFrameFailed || !pageReady) {
@@ -397,7 +426,7 @@ fun BrowserScreen(
                         )
                         AzButton(
                             text = "Abort",
-                            onClick = onCancel,
+                            onClick = ::cancel,
                             modifier = Modifier.weight(1f),
                             shape = AzButtonShape.RECTANGLE
                         )
@@ -413,9 +442,9 @@ fun BrowserScreen(
     }
 }
 
-private class HtmlDumpInterface(private val onResult: (String?) -> Unit) {
+private class HtmlDumpInterface(private val onResult: (String?, String?) -> Unit) {
     @JavascriptInterface
-    fun dump(html: String?) {
-        onResult(html)
+    fun dumpTagged(token: String?, html: String?) {
+        onResult(token, html)
     }
 }

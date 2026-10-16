@@ -18,6 +18,13 @@ The app uses a tiered scraping strategy to balance speed and reliability:
 - **Rendering**: Waits for 5 seconds after `onPageFinished` to allow JS challenges to resolve before extracting the DOM via a JavaScript Interface (`HTMLOUT`).
 - **Timeout**: Enforces a 30-second hard timeout to prevent background hangs.
 
+### Visible Resolve browser (user-initiated)
+
+- **Lifetime**: `MainViewModel.completeMissionBatch()` retains the active batch between contacts while Resolve parses results. `CleanUnderwearApp` therefore keeps the same `BrowserScreen` and WebView mounted until Resolve completes or is cancelled. The ordinary one-off browser flows are not retained.
+- **Lookup isolation**: Each batch has a monotonic id. `BrowserScreen` resets mission/page state on id changes and `BrowserExtractionGate` tags every JavaScript extraction. Stale, duplicate, cancelled and previous-page callbacks are discarded.
+- **CBC drill state**: The one-result-navigation marker in `sessionStorage` is scoped to the batch and mission, so an interrupted lookup cannot suppress drilling for another contact.
+- **Session**: Browser cookies, authentication, CAPTCHA handling, advertising filters and the visible pause/retry/skip/abort controls remain available throughout a run. Destruction happens on completion or cancellation.
+
 ---
 
 ## 2. Identity Verification & Evidence
