@@ -482,6 +482,7 @@ class MainViewModel @Inject constructor(
                             cbcEnricher.parseFindings(html)?.let { mission to it }
                         }
                     }
+                    if (resolveCancellationRequested) return@runExclusive
 
                     // Verify-before-merge: only promote the contact when the CBC
                     // card is corroborated as the *same person*. An unverified or
