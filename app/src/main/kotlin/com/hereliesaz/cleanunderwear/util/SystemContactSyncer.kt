@@ -80,15 +80,10 @@ class SystemContactSyncer @Inject constructor(@ApplicationContext private val co
         val ops = ArrayList<ContentProviderOperation>()
 
         if (existingNoteRowId != null) {
-            ops.add(
-                ContentProviderOperation.newUpdate(ContactsContract.Data.CONTENT_URI)
-                    .withSelection(
-                        "${ContactsContract.Data._ID} = ?",
-                        arrayOf(existingNoteRowId)
-                    )
-                    .withValue(ContactsContract.CommonDataKinds.Note.NOTE, note)
-                    .build()
-            )
+            // A contact's existing Notes belong to the user (and may sync to Google).
+            // Never replace them with generated data.
+            Log.i("ContactSyncer", "Existing contact note preserved for contact $contactId")
+            return
         } else {
             val rawContactId = findRawContactId(resolver, contactId) ?: run {
                 Log.w("ContactSyncer", "No raw contact for contact $contactId; cannot insert note")
