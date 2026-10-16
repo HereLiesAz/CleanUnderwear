@@ -91,7 +91,7 @@ fun BrowserScreen(
     }
 
     var currentIndex by remember(batchId) { mutableIntStateOf(0) }
-    var batchComplete by remember(batchId) { mutableStateOf(false) }
+    var batchComplete by remember { mutableStateOf(false) }
     val extractionGate = remember { BrowserExtractionGate() }
     var pageReady by remember { mutableStateOf(false) }
     var automationRan by remember { mutableStateOf(false) }
@@ -122,6 +122,7 @@ fun BrowserScreen(
     LaunchedEffect(batchId, currentIndex, webView) {
         val activeView = webView ?: return@LaunchedEffect
         extractionGate.reset()
+        batchComplete = false
         pageReady = false
         automationRan = false
         paused = false
