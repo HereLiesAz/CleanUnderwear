@@ -104,6 +104,13 @@ fun BrowserScreen(
 
     val mission = missions[currentIndex]
 
+    fun cancel() {
+        batchComplete = true
+        extractionGate.finish()
+        webView?.stopLoading()
+        onCancel()
+    }
+
     fun advance() {
         if (batchComplete) return
         extractionGate.invalidate()
@@ -215,7 +222,7 @@ fun BrowserScreen(
             TopAppBar(
                 title = { Text("${mission.label} (${currentIndex + 1}/${missions.size})") },
                 navigationIcon = {
-                    IconButton(onClick = onCancel) {
+                    IconButton(onClick = ::cancel) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Cancel")
                     }
                 },
@@ -419,7 +426,7 @@ fun BrowserScreen(
                         )
                         AzButton(
                             text = "Abort",
-                            onClick = onCancel,
+                            onClick = ::cancel,
                             modifier = Modifier.weight(1f),
                             shape = AzButtonShape.RECTANGLE
                         )
