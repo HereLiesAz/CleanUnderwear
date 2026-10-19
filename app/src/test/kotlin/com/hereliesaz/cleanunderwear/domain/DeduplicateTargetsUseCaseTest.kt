@@ -1,6 +1,9 @@
 package com.hereliesaz.cleanunderwear.domain
 
 import androidx.paging.PagingSource
+import com.hereliesaz.cleanunderwear.data.MergeLedger
+import com.hereliesaz.cleanunderwear.data.MergeRecord
+import com.hereliesaz.cleanunderwear.data.MergeSignature
 import com.hereliesaz.cleanunderwear.data.MonitorabilityState
 import com.hereliesaz.cleanunderwear.data.Target
 import com.hereliesaz.cleanunderwear.data.TargetLite
@@ -11,6 +14,7 @@ import com.hereliesaz.cleanunderwear.data.TargetWorkInfo
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DeduplicateTargetsUseCaseTest {
@@ -67,6 +71,14 @@ class DeduplicateTargetsUseCaseTest {
         override suspend fun insertTarget(target: Target) = throw NotImplementedError()
         override suspend fun insertTargets(targets: List<Target>) = throw NotImplementedError()
         override suspend fun wipeSlateClean() = throw NotImplementedError()
+    }
+
+    private class FakeLedger(val vetoes: Set<String> = emptySet()) : MergeLedger {
+        val records = mutableListOf<MergeRecord>()
+        val reassigned = mutableListOf<Pair<Int, Int>>()
+        override suspend fun record(entry: MergeRecord) { records += entry }
+        override suspend fun vetoedPairs(): Set<String> = vetoes
+        override suspend fun reassignSurvivor(oldId: Int, newId: Int) { reassigned += oldId to newId }
     }
 
     @Test
@@ -182,5 +194,53 @@ class DeduplicateTargetsUseCaseTest {
 
         assertEquals(2, merged)
         assertEquals(1, repo.store.size)
+    }
+
+    @Test
+    fun mergeOfDistinctRows_isRecordedWithItsEvidence() = runTest {
+        val repo = FakeRepository(
+            listOf(
+                Target(id = 1, displayName = "John Smith", phoneNumber = "555-123-4567"),
+                Target(id = 2, displayName = "John Smith", phoneNumber = "555-123-4567", email = "j@x.com")
+            )
+        )
+        val ledger = FakeLedger()
+
+        val merged = DeduplicateTargetsUseCase(repo, ledger = ledger).invoke()
+
+        assertEquals(1, merged)
+        val record = ledger.records.single()
+        assertEquals("DEDUP", record.origin)
+        assertTrue(record.contributions.contains("phone|AGREE"))
+        assertTrue(record.probability >= 0.95)
+        // Whichever row won, the ledger holds the other one in full and what it changed on the winner.
+        assertTrue(record.absorbedJson.contains("John Smith"))
+        assertEquals(record.survivorId, repo.store.single().id)
+    }
+
+    @Test
+    fun mergeIntoExactCopy_isNotRecorded() = runTest {
+        val repo = FakeRepository(
+            listOf(
+                Target(id = 1, displayName = "John Smith", phoneNumber = "555-123-4567"),
+                Target(id = 2, displayName = "John Smith", phoneNumber = "(555) 123-4567")
+            )
+        )
+        val ledger = FakeLedger()
+
+        assertEquals(1, DeduplicateTargetsUseCase(repo, ledger = ledger).invoke())
+        assertTrue(ledger.records.isEmpty())
+    }
+
+    @Test
+    fun pairTheUserSplit_isNeverMergedAgain() = runTest {
+        val a = Target(id = 1, displayName = "John Smith", phoneNumber = "555-123-4567")
+        val b = Target(id = 2, displayName = "John Smith", phoneNumber = "555-123-4567", email = "j@x.com")
+        val repo = FakeRepository(listOf(a, b))
+        val ledger = FakeLedger(vetoes = setOf(MergeSignature.vetoKey(MergeSignature.of(a), MergeSignature.of(b))))
+
+        assertEquals(0, DeduplicateTargetsUseCase(repo, ledger = ledger).invoke())
+        assertEquals(2, repo.store.size)
+        assertTrue(ledger.records.isEmpty())
     }
 }

@@ -9,11 +9,13 @@ CleanUnderwear helps you keep the contacts you already have up to date, and tell
 
 ## 1. What the app reads
 - **Your device contacts** (`READ_CONTACTS`): names, phone numbers, email addresses, postal addresses, account type and the Notes field.
+- **Your call log and text messages** (`READ_CALL_LOG`, `READ_SMS`, optional): only if you allow it from the Review screen. The app reads the phone number and date of each call and text, and keeps only how many there were and the first and last date for each number, in memory, while it works out which numbers are stale or wrongly merged. It does not read message text, call durations or contact names from them, does not store the log, and never sends it anywhere.
 - **Accounts you choose to import from**: if you start an import from Settings, the app opens Facebook, WhatsApp Web, Instagram or Google Contacts in an in-app browser, using your own session, and reads the names in your friends, chats, followers or contacts list. Nothing is imported unless you start it.
 
 ## 2. What is stored, and where
 - The app keeps its list of contacts (the Registry), their status, the records links and the matching text it found in a database on your device. It is not encrypted beyond Android's own app sandbox.
 - When a contact's status changes, the app writes the status, record links and check date into that contact's **Notes** field (`WRITE_CONTACTS`). Contact notes sync with whatever account the contact belongs to, such as Google Contacts.
+- When contacts are merged as duplicates, the app keeps a copy of the merged-away entry (and the score that justified the merge) in the same database, so a wrong merge can be reviewed and undone. Splitting a merge or archiving the contact does not delete that copy; uninstalling the app does.
 - There is no CleanUnderwear server and no user account.
 
 ## 3. What leaves your device

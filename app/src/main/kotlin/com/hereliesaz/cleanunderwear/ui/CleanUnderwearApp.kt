@@ -66,6 +66,7 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
             helpList = mapOf(
                 "registry" to "Your monitored contacts.",
                 "ingest" to "Add a contact that didn't sync automatically.",
+                "review" to "Find contacts that were merged wrongly or have an out-of-date number.",
                 "harvest" to "Import contacts from your device and connected accounts.",
                 "interrogate" to "Force a real-time check against public rosters."
             )
@@ -81,6 +82,13 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                 text = "Registry",
                 route = "targetList",
                 info = "View all monitored contacts."
+            )
+
+            azRailItem(
+                id = "review",
+                text = "Review",
+                route = "review",
+                info = "Check for bad merges and stale numbers."
             )
 
             azRailHostItem(
@@ -215,6 +223,12 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                         onTargetClick = { targetId ->
                             navController.navigate("targetDetail/$targetId")
                         }
+                    )
+                }
+                composable("review") {
+                    ReviewScreen(
+                        viewModel = viewModel,
+                        onNavigateBack = { navController.popBackStack() }
                     )
                 }
                 composable("settings") {

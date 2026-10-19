@@ -49,12 +49,19 @@ Apple iCloud has no first-party web surface that survives bot detection on Andro
   - Another source counts as corroboration only when its record agrees on a fact beyond the name (birth year or city), so two obituaries for two different people with the same name never vouch for each other.
   - Nothing is set to Incarcerated or Deceased without your confirmation, and a status you confirmed is never overwritten by a later check.
 
-### 3. Decentralized Persistence (Note Injection)
+### 3. Correction Step (Review)
+The **Review** screen lists contacts the app suspects are wrong, and shows the case on both sides so you can decide:
+- **Bad merges**: every dedup merge that could be wrong is recorded in a merge ledger (the absorbed row, what it changed, and the matcher's verdict). A merge is suspect when two different numbers ended up on one contact, the surnames disagreed, only one field backed it, or it barely cleared the bar. **Split them** restores the absorbed contact and puts back what the merge overwrote; the pair is never merged again. Merges made before the ledger existed were not recorded and cannot be reviewed.
+- **Stale numbers**: a number is suspect when nothing has been called or texted in 18+ months, when the same number sits on a contact with a different surname (recycled), when a lookup found no one at it, or when a number merged into the contact has been in contact more recently.
+- **Call and text history** (optional `READ_CALL_LOG` / `READ_SMS`, asked for on this screen only): two numbers on one contact that were both in use over the same stretch argue for two people; numbers whose traffic is strictly one after the other argue for one person who changed numbers, and the older number is the stale one. Only counts and first/last dates are read, in memory, for the scan.
+- **Why it might be fine**: every card also lists the evidence for the contact (same email, names agree, sequential history, a household line, short history window), so a verdict is never just a score.
+
+### 4. Decentralized Persistence (Note Injection)
 The app uses your phone's native address book as its "external memory":
 - **Write-Back**: Status changes are injected directly into the system contact's "Notes" field.
 - **Seamless Recovery**: Upon re-installation or device migration, the app scans your contact notes to automatically reconstruct your Registry state (Status, URLs, and Timestamps).
 
-### 4. Contact Profile
+### 5. Contact Profile
 - **Status Badges**: Visual indicators for `Monitoring`, `Checking`, `Incarcerated`, `Deceased`, and `Archived`.
 - **Evidence Card**: View the exact match snippet found during a scan.
 - **Registry Actions**: Long-press any individual to Archive, Resume Monitoring, or view original verification sites.

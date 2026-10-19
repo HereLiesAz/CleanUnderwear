@@ -2,6 +2,11 @@ package com.hereliesaz.cleanunderwear.di
 
 import android.content.Context
 import com.hereliesaz.cleanunderwear.data.CleanUnderwearDatabase
+import com.hereliesaz.cleanunderwear.data.CommsHistory
+import com.hereliesaz.cleanunderwear.data.DeviceCommsHistory
+import com.hereliesaz.cleanunderwear.data.MergeLedger
+import com.hereliesaz.cleanunderwear.data.MergeLedgerDao
+import com.hereliesaz.cleanunderwear.data.RoomMergeLedger
 import com.hereliesaz.cleanunderwear.data.OfflineTargetRepository
 import com.hereliesaz.cleanunderwear.data.TargetDao
 import com.hereliesaz.cleanunderwear.data.TargetRepository
@@ -31,6 +36,19 @@ object AppModule {
     fun provideTargetDao(database: CleanUnderwearDatabase): TargetDao {
         return database.targetDao()
     }
+
+    @Provides
+    fun provideMergeLedgerDao(database: CleanUnderwearDatabase): MergeLedgerDao {
+        return database.mergeLedgerDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideMergeLedger(dao: MergeLedgerDao): MergeLedger = RoomMergeLedger(dao)
+
+    @Provides
+    @Singleton
+    fun provideCommsHistory(history: DeviceCommsHistory): CommsHistory = history
 
     @Provides
     @Singleton

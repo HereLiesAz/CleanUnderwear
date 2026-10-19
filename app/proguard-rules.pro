@@ -30,6 +30,9 @@
 -keep class com.hereliesaz.cleanunderwear.data.TargetSourceInfo { *; }
 -keep enum com.hereliesaz.cleanunderwear.data.TargetStatus { *; }
 -keep enum com.hereliesaz.cleanunderwear.data.MonitorabilityState { *; }
+-keep class com.hereliesaz.cleanunderwear.data.MergeSummary { *; }
+-keep class com.hereliesaz.cleanunderwear.data.MergeVeto { *; }
+-keep enum com.hereliesaz.cleanunderwear.data.MergeState { *; }
 
 # ---------------------------------------------------------------------------
 # Hilt / Dagger

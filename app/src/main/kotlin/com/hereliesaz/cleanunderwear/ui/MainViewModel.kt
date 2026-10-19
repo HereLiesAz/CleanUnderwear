@@ -21,6 +21,9 @@ import com.hereliesaz.cleanunderwear.domain.BrowserMission
 import com.hereliesaz.cleanunderwear.domain.DeduplicateTargetsUseCase
 import com.hereliesaz.cleanunderwear.domain.HarvestContactsUseCase
 import com.hereliesaz.cleanunderwear.domain.PipelineCoordinator
+import com.hereliesaz.cleanunderwear.domain.SuspectCase
+import com.hereliesaz.cleanunderwear.domain.SuspectReport
+import com.hereliesaz.cleanunderwear.domain.SuspectReview
 import com.hereliesaz.cleanunderwear.domain.TriageTargetsUseCase
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -60,7 +63,8 @@ class MainViewModel @Inject constructor(
     private val researchAgent: com.hereliesaz.cleanunderwear.network.OnDeviceResearchAgent,
     val sourceCatalog: com.hereliesaz.cleanunderwear.network.SourceCatalog,
     private val cbcEnricher: com.hereliesaz.cleanunderwear.network.CyberBackgroundChecksEnricher,
-    private val pipelineCoordinator: PipelineCoordinator
+    private val pipelineCoordinator: PipelineCoordinator,
+    private val suspectReview: SuspectReview
 ) : AndroidViewModel(application) {
 
     enum class SortOrder { NAME, STATUS, DATE }
@@ -248,6 +252,52 @@ class MainViewModel @Inject constructor(
             }
         ).flow
     }.cachedIn(viewModelScope)
+
+    /** The correction step's queue: null until the first scan finishes. */
+    data class ReviewState(val loading: Boolean = false, val report: SuspectReport? = null)
+
+    private val _reviewState = MutableStateFlow(ReviewState())
+    val reviewState: StateFlow<ReviewState> = _reviewState
+
+    /** Re-scan for bad merges and stale numbers. Read-only; changes nothing. */
+    fun refreshSuspects() {
+        viewModelScope.launch {
+            _reviewState.value = _reviewState.value.copy(loading = true)
+            val report = pipelineCoordinator.runExclusive("suspect-scan") {
+                withContext(Dispatchers.Default) { suspectReview.find() }
+            }
+            _reviewState.value = ReviewState(loading = false, report = report)
+        }
+    }
+
+    /** Undo the merge behind [case]; the absorbed contact comes back as its own row. */
+    fun splitMerge(case: SuspectCase) = applyVerdict(case, rescan = true) {
+        case.ledgerId?.let { suspectReview.split(it) }
+    }
+
+    fun keepMerge(case: SuspectCase) = applyVerdict(case) {
+        case.ledgerId?.let { suspectReview.keepMerged(it) }
+    }
+
+    fun markStale(case: SuspectCase) = applyVerdict(case) { suspectReview.markStale(case) }
+
+    fun adoptReplacement(case: SuspectCase) = applyVerdict(case, rescan = true) {
+        suspectReview.adoptReplacement(case)
+    }
+
+    fun dismissSuspect(case: SuspectCase) = applyVerdict(case) { suspectReview.dismiss(case) }
+
+    /** Runs a review verdict alongside the pipeline's other writers, then drops the case from the queue. */
+    private fun applyVerdict(case: SuspectCase, rescan: Boolean = false, action: suspend () -> Unit) {
+        viewModelScope.launch {
+            pipelineCoordinator.runExclusive("review-verdict") { action() }
+            val state = _reviewState.value
+            _reviewState.value = state.copy(
+                report = state.report?.let { r -> r.copy(cases = r.cases.filter { it.key != case.key }) }
+            )
+            if (rescan) refreshSuspects()
+        }
+    }
 
     fun updateTarget(target: Target) {
         viewModelScope.launch {
