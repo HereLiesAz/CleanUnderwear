@@ -10,9 +10,14 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 /**
  * The physical manifestation of your localized surveillance state.
  */
-@Database(entities = [Target::class], version = 12, exportSchema = false)
+@Database(
+    entities = [Target::class, MergeRecord::class, SuspectDecision::class],
+    version = 13,
+    exportSchema = false
+)
 abstract class CleanUnderwearDatabase : RoomDatabase() {
     abstract fun targetDao(): TargetDao
+    abstract fun mergeLedgerDao(): MergeLedgerDao
 
     companion object {
         @Volatile
@@ -200,6 +205,46 @@ abstract class CleanUnderwearDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Merge ledger and review decisions. Merges made before this version were not recorded, so
+         * the ledger starts empty; only stale-number review works on existing data.
+         */
+        val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS merge_ledger (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        survivor_id INTEGER NOT NULL,
+                        absorbed_json TEXT NOT NULL,
+                        changes_json TEXT NOT NULL,
+                        absorbed_name TEXT NOT NULL,
+                        absorbed_phone TEXT,
+                        absorbed_email TEXT,
+                        probability REAL NOT NULL,
+                        weight_bits REAL NOT NULL,
+                        best_case_bits REAL NOT NULL,
+                        contributions TEXT NOT NULL,
+                        origin TEXT NOT NULL,
+                        merged_at INTEGER NOT NULL,
+                        state TEXT NOT NULL,
+                        veto_a TEXT,
+                        veto_b TEXT
+                    )
+                """.trimIndent())
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_merge_ledger_survivor_id ON merge_ledger (survivor_id)"
+                )
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS suspect_decisions (
+                        suspect_key TEXT NOT NULL,
+                        decision TEXT NOT NULL,
+                        decided_at INTEGER NOT NULL,
+                        PRIMARY KEY(suspect_key)
+                    )
+                """.trimIndent())
+            }
+        }
+
         fun getDatabase(context: Context): CleanUnderwearDatabase {
             return Instance ?: synchronized(this) {
                 Room.databaseBuilder(
@@ -210,7 +255,7 @@ abstract class CleanUnderwearDatabase : RoomDatabase() {
                 .addMigrations(
                     MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
                     MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
-                    MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12
+                    MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13
                 )
                 .build()
                 .also { Instance = it }

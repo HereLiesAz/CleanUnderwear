@@ -1,8 +1,13 @@
 package com.hereliesaz.cleanunderwear.domain
 
+import com.hereliesaz.cleanunderwear.data.ContributionCodec
+import com.hereliesaz.cleanunderwear.data.MergeLedger
+import com.hereliesaz.cleanunderwear.data.MergeRecord
+import com.hereliesaz.cleanunderwear.data.MergeSignature
 import com.hereliesaz.cleanunderwear.data.Target
 import com.hereliesaz.cleanunderwear.data.TargetLite
 import com.hereliesaz.cleanunderwear.data.TargetRepository
+import com.hereliesaz.cleanunderwear.data.TargetSnapshot
 import com.hereliesaz.cleanunderwear.match.MatchField
 import com.hereliesaz.cleanunderwear.match.MatchRecord
 import com.hereliesaz.cleanunderwear.match.ProbabilisticScorer
@@ -34,6 +39,12 @@ import javax.inject.Inject
  *
  * The "winning" record within a component is whichever full row carries the most intel; the
  * losers' unique fields are merged into the winner before the losers are deleted.
+ *
+ * Every merge that could be wrong is written to the [MergeLedger] first (the absorbed row, what it
+ * changed on the winner, and the scorer's verdict), so the review screen can find bad merges and
+ * undo them. Merging a row into an exact copy of itself, which is what every re-harvest produces,
+ * is not recorded: there is nothing there to get wrong or to restore. Pairs the user has split are
+ * never merged again.
  */
 class DeduplicateTargetsUseCase(
     private val repository: TargetRepository,
@@ -51,13 +62,16 @@ class DeduplicateTargetsUseCase(
      * expansion for tests; production supplies [OnDeviceResearchAgent.getNicknames] via the
      * injected constructor below.
      */
-    private val nicknames: (String) -> List<String> = { emptyList() }
+    private val nicknames: (String) -> List<String> = { emptyList() },
+    /** Where merges are recorded for review and undo. Null skips recording and vetoes (tests). */
+    private val ledger: MergeLedger? = null
 ) {
     @Inject
     constructor(
         repository: TargetRepository,
-        researchAgent: OnDeviceResearchAgent
-    ) : this(repository, nicknames = researchAgent::getNicknames)
+        researchAgent: OnDeviceResearchAgent,
+        ledger: MergeLedger
+    ) : this(repository, nicknames = researchAgent::getNicknames, ledger = ledger)
 
     suspend operator fun invoke(onProgress: (Float, String) -> Unit = { _, _ -> }): Int {
         val groups = mutableMapOf<String, MutableList<Int>>() // identityKey -> list of IDs
@@ -103,6 +117,8 @@ class DeduplicateTargetsUseCase(
             }
         )
 
+        val vetoes = ledger?.vetoedPairs().orEmpty()
+
         var processed = 0
         var merged = 0
         var ambiguousSkipped = 0
@@ -123,14 +139,20 @@ class DeduplicateTargetsUseCase(
                 continue
             }
 
-            for (component in confidentMatchComponents(fullGroup, scorer)) {
+            for (component in confidentMatchComponents(fullGroup, scorer, vetoes)) {
                 if (component.size < 2) continue
 
                 val winner = pickWinnerFull(component)
                 val losers = component.filter { it.id != winner.id }
-                val mergedFull = losers.fold(winner) { acc, loser -> mergeFields(acc, loser) }
-                repository.updateTarget(mergedFull)
+                var acc = winner
                 for (loser in losers) {
+                    val next = mergeFields(acc, loser)
+                    recordMerge(scorer, survivorBefore = acc, survivorAfter = next, absorbed = loser, winnerId = winner.id)
+                    acc = next
+                }
+                repository.updateTarget(acc)
+                for (loser in losers) {
+                    ledger?.reassignSurvivor(loser.id, winner.id)
                     repository.deleteTarget(loser)
                     merged++
                 }
@@ -159,7 +181,8 @@ class DeduplicateTargetsUseCase(
      */
     private fun confidentMatchComponents(
         group: List<Target>,
-        scorer: ProbabilisticScorer
+        scorer: ProbabilisticScorer,
+        vetoes: Set<String>
     ): List<List<Target>> {
         val n = group.size
         val parent = IntArray(n) { it }
@@ -181,14 +204,55 @@ class DeduplicateTargetsUseCase(
         }
 
         val records = group.map { toMatchRecord(it) }
+        val signatures = if (vetoes.isEmpty()) emptyList() else group.map { MergeSignature.of(it) }
         for (i in 0 until n) {
             for (j in i + 1 until n) {
+                // A pair the user already split stays split, however confident the scorer is.
+                if (vetoes.isNotEmpty() && MergeSignature.vetoKey(signatures[i], signatures[j]) in vetoes) continue
                 if (scorer.score(records[i], records[j]).isConfidentMatch) union(i, j)
             }
         }
 
         return group.indices.groupBy { find(it) }.values.map { idxs -> idxs.map { group[it] } }
     }
+
+    /**
+     * Write the merge to the ledger, ahead of the update and delete it describes. The verdict is
+     * the scorer's for this exact pair, so the review screen can show why the rows were joined.
+     */
+    private suspend fun recordMerge(
+        scorer: ProbabilisticScorer,
+        survivorBefore: Target,
+        survivorAfter: Target,
+        absorbed: Target,
+        winnerId: Int
+    ) {
+        val ledger = ledger ?: return
+        if (isExactCopy(survivorBefore, absorbed)) return
+        val verdict = scorer.score(toMatchRecord(survivorBefore), toMatchRecord(absorbed))
+        ledger.record(
+            MergeRecord(
+                survivorId = winnerId,
+                absorbedJson = TargetSnapshot.toJson(absorbed),
+                changesJson = TargetSnapshot.changes(survivorBefore, survivorAfter),
+                absorbedName = absorbed.displayName,
+                absorbedPhone = absorbed.phoneNumber,
+                absorbedEmail = absorbed.email,
+                probability = verdict.probability,
+                weightBits = verdict.weightBits,
+                bestCaseBits = verdict.bestCaseWeightBits,
+                contributions = ContributionCodec.encode(verdict.contributions),
+                origin = "DEDUP",
+                mergedAt = System.currentTimeMillis()
+            )
+        )
+    }
+
+    /** Same name, number and email: a re-harvested copy, not a distinct identity. */
+    private fun isExactCopy(a: Target, b: Target): Boolean =
+        a.displayName.trim().equals(b.displayName.trim(), ignoreCase = true) &&
+            StringSimilarity.normalizePhone(a.phoneNumber) == StringSimilarity.normalizePhone(b.phoneNumber) &&
+            StringSimilarity.normalizeEmail(a.email) == StringSimilarity.normalizeEmail(b.email)
 
     private fun toMatchRecord(t: Target): MatchRecord = MatchRecord.fromDisplayName(
         displayName = t.displayName,

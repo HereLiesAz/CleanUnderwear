@@ -353,6 +353,10 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
         return lastMatch && firstMatch
     }
 
+    /** Whether [candidate], a name read off a lookup card, is plausibly the same person as [displayName]. */
+    fun namesConsistent(displayName: String, candidate: String): Boolean =
+        nameConsistent(NameValidator.tokenize(displayName), candidate)
+
     /**
      * Coarse heuristic: returns true when the page HTML smells like a captcha,
      * anti-bot wall, or completely empty body. BrowserScreen uses this to

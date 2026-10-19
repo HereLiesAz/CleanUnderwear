@@ -61,7 +61,37 @@ CleanUnderwear treats the Android `Contacts` database as a persistent data store
 
 ---
 
-## 5. Crash Reporting
+## 5. Correction Step (Review)
+
+Dedup is automatic, so its mistakes are silent. The correction step makes them visible and reversible.
+
+**Merge ledger.** `DeduplicateTargetsUseCase` writes a `MergeRecord` before it updates the winner and deletes the loser: the loser as a JSON snapshot (`TargetSnapshot`), the winner fields the merge changed (`{field: {before, after}}`), and the `ProbabilisticScorer` verdict for the pair (probability, weight, per-field contributions). Merging a row into an exact copy of itself (same name, number and email) is not recorded; every re-harvest produces those, and there is nothing to get wrong or restore. Rows are `ACTIVE` until judged, then `SPLIT` or `KEPT`.
+
+**Detection.** `SuspectDetector` is pure; each rule adds a weighted reason to a *suspicion* list or a *defense* list. A case surfaces only when the suspicion alone reaches `MIN_SUSPICION`; the screen then shows both lists and a lean (`net` of ±`LEAN_MARGIN`), never just a score.
+
+| Signal | Counts as |
+| --- | --- |
+| Two different numbers on one contact | suspicion (2.0) |
+| Both numbers in contact over the same 30+ days, 3+ events each | suspicion (3.0), plus 1.0 if both active in the last 90 days |
+| Number histories strictly sequential | defense (2.5): one person changed numbers; the quiet number is stale |
+| Surname conflict outvoted by other fields | suspicion (3.0) |
+| Only one field agreed / merge probability < 0.99 / number shared with other contacts | suspicion (1.5 / 1.0 / 1.0) |
+| Same phone, same email, names agree, address agrees, DOB agrees | defense (1.5 / 2.0 / 2.0 / 2.0 / 4.0) |
+| No contact with a number in 18 / 36 months | stale suspicion (2.0 / 3.0) |
+| Contact in the last 18 months | stale defense (4.0) |
+| History window shorter than 24 months | defense (1.5): silence proves little |
+| Number shared with a different surname / the same surname | stale suspicion (2.5) / defense (1.5) |
+| Merged-in number with fresher traffic | stale suspicion (3.0), offers **Use that number** |
+
+History comes from `DeviceCommsHistory` (call log + SMS, both optional permissions). Without it the history rows are skipped, not guessed.
+
+**Verdicts.** *Split* (`SuspectReview.split`) restores the absorbed row, reverts only the winner fields still holding the merge's value, and stores a veto: the signatures (name, number, email) of the two rows. `DeduplicateTargetsUseCase` consults the vetoes so the next sweep cannot re-merge them; signatures are used because harvesting re-inserts rows with fresh ids. *Keep merged*, *Number is fine* and *Mark stale* are recorded and stop the case reappearing. *Mark stale* does not edit the number: removing it would only bring it back as a duplicate on the next harvest.
+
+**Alternates.** *Mark stale*, or a *Split* that leaves the survivor without a number, starts the same visible-browser CyberBackgroundChecks flow as Resolve (`MainViewModel.findAlternates`); a stale card also has a *Look up alternates* button. `AlternateFinder` judges the cards with the enricher's verify-before-merge rules. The old number is still searched: a different name on its card means it was recycled. That card is evidence only, never a source of replacement data. A verified number or address from the email, address and name searches (never the stale number itself) is offered in a dialog and written only on **Use these**.
+
+---
+
+## 6. Crash Reporting
 
 The `GitHubCrashReporter` is an UncaughtExceptionHandler that triggers during fatal errors:
 1. Captures the `Throwable` stack trace.
