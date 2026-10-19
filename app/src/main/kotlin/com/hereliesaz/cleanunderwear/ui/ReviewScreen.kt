@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -52,6 +53,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.hereliesaz.cleanunderwear.domain.AlternateInfo
 import com.hereliesaz.cleanunderwear.domain.Evidence
 import com.hereliesaz.cleanunderwear.domain.IdentityLine
 import com.hereliesaz.cleanunderwear.domain.Lean
@@ -71,6 +73,7 @@ fun ReviewScreen(
     onNavigateBack: () -> Unit
 ) {
     val state by viewModel.reviewState.collectAsState()
+    val alternates by viewModel.alternates.collectAsState()
     var kindFilter by rememberSaveable { mutableStateOf<SuspicionKind?>(null) }
     var expandedKey by rememberSaveable { mutableStateOf<String?>(null) }
 
@@ -79,6 +82,14 @@ fun ReviewScreen(
     ) { viewModel.refreshSuspects() }
 
     LaunchedEffect(Unit) { viewModel.refreshSuspects() }
+
+    alternates?.let { info ->
+        AlternatesDialog(
+            info = info,
+            onApply = { viewModel.applyAlternates(info) },
+            onDismiss = { viewModel.dismissAlternates() }
+        )
+    }
 
     val report = state.report
     val cases = report?.cases.orEmpty().filter { kindFilter == null || it.kind == kindFilter }
@@ -295,6 +306,9 @@ private fun SuspectCard(
                                 Button(onClick = { viewModel.adoptReplacement(case) }) { Text("Use $it") }
                             }
                             OutlinedButton(onClick = { viewModel.markStale(case) }) { Text("Mark stale") }
+                            TextButton(onClick = {
+                                viewModel.findAlternates(case.targetId, case.identities.firstOrNull()?.phone)
+                            }) { Text("Look up alternates") }
                             TextButton(onClick = { viewModel.dismissSuspect(case) }) { Text("Number is fine") }
                         }
                     }
@@ -378,4 +392,43 @@ private fun EvidenceList(title: String, items: List<Evidence>, color: Color, emp
             }
         }
     }
+}
+
+@Composable
+private fun AlternatesDialog(info: AlternateInfo, onApply: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Alternate info for ${info.name}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (info.stalePhone != null && info.holderName != null) {
+                    Text(
+                        if (info.holderDiffers) {
+                            "${info.stalePhone} now comes back to \"${info.holderName}\", a different person. The number was likely recycled."
+                        } else {
+                            "${info.stalePhone} still comes back to \"${info.holderName}\", which fits this contact. It may not be stale after all."
+                        },
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                info.phone?.let { Text("Possible current number: $it", fontWeight = FontWeight.Bold) }
+                info.address?.let { Text("Possible address: $it", fontWeight = FontWeight.Bold) }
+                if (!info.hasReplacement) {
+                    Text("The lookup found no verified replacement.", style = MaterialTheme.typography.bodyMedium)
+                }
+                Text(
+                    info.basis,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            if (info.hasReplacement) TextButton(onClick = onApply) { Text("Use these") }
+            else TextButton(onClick = onDismiss) { Text("Close") }
+        },
+        dismissButton = {
+            if (info.hasReplacement) TextButton(onClick = onDismiss) { Text("Not now") }
+        }
+    )
 }

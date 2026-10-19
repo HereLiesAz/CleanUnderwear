@@ -17,6 +17,8 @@ import com.hereliesaz.cleanunderwear.data.TargetLite
 import com.hereliesaz.cleanunderwear.data.TargetRepository
 import com.hereliesaz.cleanunderwear.data.TargetStatus
 import kotlinx.coroutines.flow.Flow
+import com.hereliesaz.cleanunderwear.domain.AlternateFinder
+import com.hereliesaz.cleanunderwear.domain.AlternateInfo
 import com.hereliesaz.cleanunderwear.domain.BrowserMission
 import com.hereliesaz.cleanunderwear.domain.DeduplicateTargetsUseCase
 import com.hereliesaz.cleanunderwear.domain.HarvestContactsUseCase
@@ -64,7 +66,8 @@ class MainViewModel @Inject constructor(
     val sourceCatalog: com.hereliesaz.cleanunderwear.network.SourceCatalog,
     private val cbcEnricher: com.hereliesaz.cleanunderwear.network.CyberBackgroundChecksEnricher,
     private val pipelineCoordinator: PipelineCoordinator,
-    private val suspectReview: SuspectReview
+    private val suspectReview: SuspectReview,
+    private val alternateFinder: AlternateFinder
 ) : AndroidViewModel(application) {
 
     enum class SortOrder { NAME, STATUS, DATE }
@@ -271,21 +274,106 @@ class MainViewModel @Inject constructor(
     }
 
     /** Undo the merge behind [case]; the absorbed contact comes back as its own row. */
-    fun splitMerge(case: SuspectCase) = applyVerdict(case, rescan = true) {
-        case.ledgerId?.let { suspectReview.split(it) }
+    fun splitMerge(case: SuspectCase) {
+        applyVerdict(case, rescan = true) { case.ledgerId?.let { suspectReview.split(it) } }
+        // Undoing a merge can take back a number the survivor had only through it; look one up.
+        viewModelScope.launch {
+            val survivor = repository.getTargetById(case.targetId)
+            if (survivor != null && survivor.phoneNumber.isNullOrBlank()) findAlternates(case.targetId, null)
+        }
     }
 
     fun keepMerge(case: SuspectCase) = applyVerdict(case) {
         case.ledgerId?.let { suspectReview.keepMerged(it) }
     }
 
-    fun markStale(case: SuspectCase) = applyVerdict(case) { suspectReview.markStale(case) }
+    fun markStale(case: SuspectCase) {
+        applyVerdict(case) { suspectReview.markStale(case) }
+        findAlternates(case.targetId, case.identities.firstOrNull()?.phone)
+    }
 
     fun adoptReplacement(case: SuspectCase) = applyVerdict(case, rescan = true) {
         suspectReview.adoptReplacement(case)
     }
 
     fun dismissSuspect(case: SuspectCase) = applyVerdict(case) { suspectReview.dismiss(case) }
+
+    private val _alternates = MutableStateFlow<AlternateInfo?>(null)
+
+    /** The lookup's offer for a contact whose number was just ruled out; null when none is pending. */
+    val alternates: StateFlow<AlternateInfo?> = _alternates
+
+    /**
+     * Search CyberBackgroundChecks for current info on a contact whose number is stale or was
+     * split off. Same visible-browser flow as Resolve, so it needs the user's attention and is only
+     * ever started by a review verdict or the "Look up alternates" button.
+     */
+    fun findAlternates(targetId: Int, stalePhone: String?) {
+        viewModelScope.launch {
+            pipelineCoordinator.runExclusive("find-alternates") {
+                resolveCancellationRequested = false
+                try {
+                    val target = repository.getTargetById(targetId) ?: return@runExclusive
+                    val missions = alternateFinder.missions(target)
+                    if (missions.isEmpty()) {
+                        _alternates.value = AlternateInfo(
+                            target.id, target.displayName, stalePhone, null, false,
+                            phone = null, address = null, basis = "nothing to search on"
+                        )
+                        return@runExclusive
+                    }
+                    _operationState.value = OperationState(
+                        isRunning = true,
+                        description = "Looking up ${target.displayName}...",
+                        progress = -1f
+                    )
+                    val extracted = mutableListOf<Pair<BrowserMission, String>>()
+                    val outcome = launchMissionsAndAwait(missions) { mission, html ->
+                        extracted.add(mission to html)
+                    }
+                    if (outcome == BatchOutcome.UserCancelled || resolveCancellationRequested) return@runExclusive
+
+                    val info = withContext(Dispatchers.Default) {
+                        val cards = extracted.mapNotNull { (mission, html) ->
+                            cbcEnricher.parseFindings(html)?.let { mission to it }
+                        }
+                        alternateFinder.assess(target, stalePhone, cards)
+                    }
+                    _alternates.value = info
+                } finally {
+                    if (_activeMissionBatch.value?.retainBrowserForResolve == true) {
+                        _activeMissionBatch.value = null
+                    }
+                    resolveCancellationRequested = false
+                    _operationState.value = OperationState(isRunning = false)
+                }
+            }
+        }
+    }
+
+    /** Write the offered number and/or address onto the contact. Only fills what the lookup found. */
+    fun applyAlternates(info: AlternateInfo) {
+        viewModelScope.launch {
+            pipelineCoordinator.runExclusive("apply-alternates") {
+                val target = repository.getTargetById(info.targetId) ?: return@runExclusive
+                repository.updateTarget(
+                    target.copy(
+                        phoneNumber = info.phone ?: target.phoneNumber,
+                        areaCode = info.phone
+                            ?.let { com.hereliesaz.cleanunderwear.match.StringSimilarity.normalizePhone(it)?.take(3) }
+                            ?: target.areaCode,
+                        residenceInfo = target.residenceInfo ?: info.address
+                    )
+                )
+            }
+            _alternates.value = null
+            refreshSuspects()
+        }
+    }
+
+    fun dismissAlternates() {
+        _alternates.value = null
+    }
 
     /** Runs a review verdict alongside the pipeline's other writers, then drops the case from the queue. */
     private fun applyVerdict(case: SuspectCase, rescan: Boolean = false, action: suspend () -> Unit) {

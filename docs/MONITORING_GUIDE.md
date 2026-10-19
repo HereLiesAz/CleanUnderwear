@@ -87,6 +87,8 @@ History comes from `DeviceCommsHistory` (call log + SMS, both optional permissio
 
 **Verdicts.** *Split* (`SuspectReview.split`) restores the absorbed row, reverts only the winner fields still holding the merge's value, and stores a veto: the signatures (name, number, email) of the two rows. `DeduplicateTargetsUseCase` consults the vetoes so the next sweep cannot re-merge them; signatures are used because harvesting re-inserts rows with fresh ids. *Keep merged*, *Number is fine* and *Mark stale* are recorded and stop the case reappearing. *Mark stale* does not edit the number: removing it would only bring it back as a duplicate on the next harvest.
 
+**Alternates.** *Mark stale*, or a *Split* that leaves the survivor without a number, starts the same visible-browser CyberBackgroundChecks flow as Resolve (`MainViewModel.findAlternates`); a stale card also has a *Look up alternates* button. `AlternateFinder` judges the cards with the enricher's verify-before-merge rules. The old number is still searched: a different name on its card means it was recycled. That card is evidence only, never a source of replacement data. A verified number or address from the email, address and name searches (never the stale number itself) is offered in a dialog and written only on **Use these**.
+
 ---
 
 ## 6. Crash Reporting
