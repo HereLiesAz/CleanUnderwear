@@ -105,7 +105,7 @@ class SuspectReview @Inject constructor(
         for (t in byId.values) {
             val phone = t.phoneNumber ?: continue
             val number = StringSimilarity.normalizePhone(phone) ?: continue
-            if (t.status == TargetStatus.IGNORED) continue
+            if (t.status == TargetStatus.IGNORED || t.phoneIsStale) continue
             val sharers = byNumber[number].orEmpty().filter { it.id != t.id }.map { NumberSharer(it.displayName) }
 
             SuspectDetector.assessStale(
@@ -156,10 +156,23 @@ class SuspectReview @Inject constructor(
     suspend fun keepMerged(ledgerId: Int) = ledger.setState(ledgerId, MergeState.KEPT)
 
     /**
-     * The number is dead. Recorded and removed from the queue; the number itself stays on the
-     * contact, because deleting it would only bring it back as a duplicate row on the next harvest.
+     * The number is dead. It stays on the contact (deleting it would only return as a duplicate row
+     * on the next harvest) but is marked stale: lookups, merge scoring, triage and note write-back
+     * stop trusting it, and the next lookup that finds a different number replaces it.
      */
-    suspend fun markStale(case: SuspectCase) = decide(case, "STALE")
+    suspend fun markStale(case: SuspectCase) {
+        val target = repository.getTargetById(case.targetId)
+        if (target?.phoneNumber != null) {
+            repository.updateTarget(target.copy(stalePhone = target.phoneNumber))
+        }
+        decide(case, "STALE")
+    }
+
+    /** Take the stale mark back; the number is trusted again. */
+    suspend fun clearStale(targetId: Int) {
+        val target = repository.getTargetById(targetId) ?: return
+        if (target.stalePhone != null) repository.updateTarget(target.copy(stalePhone = null))
+    }
 
     /** Swap the contact's number for the live one found among its merged-in numbers. */
     suspend fun adoptReplacement(case: SuspectCase): Boolean {

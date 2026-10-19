@@ -86,7 +86,7 @@ interface TargetDao {
 
     @Query(
         "SELECT id, display_name, phone_number, email, area_code, status, residence_info, " +
-            "source_account, monitorability_state, last_scraped_timestamp " +
+            "source_account, monitorability_state, last_scraped_timestamp, stale_phone " +
             "FROM targets ORDER BY display_name ASC LIMIT :limit OFFSET :offset"
     )
     suspend fun getTargetWorkInfoPaged(limit: Int, offset: Int): List<TargetWorkInfo>
