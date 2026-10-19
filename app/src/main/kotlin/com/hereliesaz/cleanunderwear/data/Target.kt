@@ -79,8 +79,28 @@ data class Target(
     @ColumnInfo(name = "match_kind")
     val matchKind: String? = null,
     @ColumnInfo(name = "match_reasons")
-    val matchReasons: String? = null
-)
+    val matchReasons: String? = null,
+    /**
+     * The phone number the user ruled stale in Review. Holds the number itself rather than a flag, so
+     * the mark lapses by itself the moment [phoneNumber] changes (see [phoneIsStale]).
+     */
+    @ColumnInfo(name = "stale_phone")
+    val stalePhone: String? = null
+) {
+    /** True while [phoneNumber] is still the number the user marked stale. */
+    val phoneIsStale: Boolean
+        get() = isStalePhone(phoneNumber, stalePhone)
+
+    /** [phoneNumber] unless it is stale: the number to trust for lookups, matching and note write-back. */
+    val usablePhone: String?
+        get() = phoneNumber?.takeUnless { phoneIsStale }
+}
+
+/** Whether [phone] is the number recorded in [stalePhone], ignoring formatting. */
+fun isStalePhone(phone: String?, stalePhone: String?): Boolean {
+    val stale = com.hereliesaz.cleanunderwear.match.StringSimilarity.normalizePhone(stalePhone) ?: return false
+    return com.hereliesaz.cleanunderwear.match.StringSimilarity.normalizePhone(phone) == stale
+}
 
 enum class TargetStatus {
     MONITORING,
@@ -146,8 +166,11 @@ data class TargetWorkInfo(
     @ColumnInfo(name = "residence_info") val residenceInfo: String?,
     @ColumnInfo(name = "source_account") val sourceAccount: String?,
     @ColumnInfo(name = "monitorability_state") val monitorabilityState: MonitorabilityState,
-    @ColumnInfo(name = "last_scraped_timestamp") val lastScrapedTimestamp: Long
-)
+    @ColumnInfo(name = "last_scraped_timestamp") val lastScrapedTimestamp: Long,
+    @ColumnInfo(name = "stale_phone") val stalePhone: String? = null
+) {
+    val phoneIsStale: Boolean get() = isStalePhone(phoneNumber, stalePhone)
+}
 
 /**
  * Lightweight projection of source-related fields. Kept around for any caller

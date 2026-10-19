@@ -123,7 +123,8 @@ class TriageTargetsUseCase @Inject constructor(
 
     private fun decide(target: TargetWorkInfo): Decision {
         val nameVerifiable = NameValidator.isVerifiable(target.displayName)
-        val hasPhone = (target.phoneNumber?.filter { it.isDigit() }?.length ?: 0) >= 10
+        // A number the user ruled stale doesn't identify anyone; the contact must stand on its location.
+        val hasPhone = !target.phoneIsStale && (target.phoneNumber?.filter { it.isDigit() }?.length ?: 0) >= 10
         val hasLocation = !target.residenceInfo.isNullOrBlank() ||
             (!target.areaCode.isNullOrBlank() && target.areaCode != "LOCAL")
 

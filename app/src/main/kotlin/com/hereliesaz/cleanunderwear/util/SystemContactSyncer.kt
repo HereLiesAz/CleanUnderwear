@@ -28,7 +28,8 @@ class SystemContactSyncer @Inject constructor(@ApplicationContext private val co
 
     fun syncToSystem(target: Target) {
         try {
-            val phone = target.phoneNumber ?: return
+            // A stale number may now belong to a stranger's contact; never write this person's status there.
+            val phone = target.usablePhone ?: return
             val contactId = findContactIdByPhone(context.contentResolver, phone) ?: return
 
             val statusText = when (target.status) {

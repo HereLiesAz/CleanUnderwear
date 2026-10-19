@@ -41,7 +41,8 @@ data class AlternateInfo(
 class AlternateFinder @Inject constructor(
     private val enricher: CyberBackgroundChecksEnricher
 ) {
-    fun missions(target: Target): List<BrowserMission> = enricher.pickAllMissions(target)
+    fun missions(target: Target): List<BrowserMission> =
+        enricher.pickAllMissions(target, includeStalePhone = true)
 
     fun assess(
         target: Target,

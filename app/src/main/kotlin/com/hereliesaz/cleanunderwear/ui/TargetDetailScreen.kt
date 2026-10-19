@@ -74,7 +74,14 @@ fun TargetDetailScreen(
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
 
-            target.phoneNumber?.let { DetailRow(label = "Contact Number", value = it) }
+            target.phoneNumber?.let {
+                DetailRow(label = "Contact Number", value = if (target.phoneIsStale) "$it (marked stale)" else it)
+                if (target.phoneIsStale) {
+                    TextButton(onClick = { onUpdateTarget(target.copy(stalePhone = null)) }) {
+                        Text("Number is current after all")
+                    }
+                }
+            }
             target.email?.let { DetailRow(label = "Email", value = it) }
             target.areaCode?.let { DetailRow(label = "Location Reference", value = it) }
             if (!target.residenceInfo.isNullOrBlank()) {
@@ -260,7 +267,7 @@ fun TargetDetailScreen(
                             onClick = {
                                 // Pick the best mode the contact supports —
                                 // phone is most precise, name is least.
-                                val mission: BrowserMission = target.phoneNumber?.let {
+                                val mission: BrowserMission = target.usablePhone?.let {
                                     BrowserMission.CbcByPhone(it)
                                 } ?: target.email?.let {
                                     BrowserMission.CbcByEmail(it)
@@ -405,7 +412,7 @@ fun TargetDetailScreen(
                     label = { Text("Name Check") }
                 )
 
-                target.phoneNumber?.let { phone ->
+                target.usablePhone?.let { phone ->
                     AssistChip(
                         onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(CyberBackgroundChecks.getPhoneSearchUrl(phone)))) },
                         label = { Text("Phone Check") }

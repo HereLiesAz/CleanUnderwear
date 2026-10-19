@@ -256,7 +256,7 @@ class DeduplicateTargetsUseCase(
 
     private fun toMatchRecord(t: Target): MatchRecord = MatchRecord.fromDisplayName(
         displayName = t.displayName,
-        phone = t.phoneNumber,
+        phone = t.usablePhone, // a stale (possibly recycled) number must not vouch for a merge
         email = t.email,
         address = t.residenceInfo,
         areaCode = t.areaCode
@@ -310,6 +310,7 @@ class DeduplicateTargetsUseCase(
         return into.copy(
             displayName = preferNonPlaceholder(into.displayName, from.displayName),
             phoneNumber = into.phoneNumber ?: from.phoneNumber,
+            stalePhone = into.stalePhone ?: from.stalePhone,
             email = into.email ?: from.email,
             areaCode = into.areaCode ?: from.areaCode,
             jurisdiction = into.jurisdiction ?: from.jurisdiction,

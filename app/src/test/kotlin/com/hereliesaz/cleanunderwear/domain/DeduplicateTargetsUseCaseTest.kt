@@ -243,4 +243,19 @@ class DeduplicateTargetsUseCaseTest {
         assertEquals(2, repo.store.size)
         assertTrue(ledger.records.isEmpty())
     }
+
+    @Test
+    fun staleNumber_doesNotVouchForAMerge() = runTest {
+        // Same name and number would merge. Once the user ruled the number stale it is no longer
+        // evidence, and a name alone is never enough.
+        val repo = FakeRepository(
+            listOf(
+                Target(id = 1, displayName = "John Smith", phoneNumber = "555-123-4567", stalePhone = "555-123-4567"),
+                Target(id = 2, displayName = "John Smith", phoneNumber = "555-123-4567", email = "j@x.com")
+            )
+        )
+
+        assertEquals(0, DeduplicateTargetsUseCase(repo).invoke())
+        assertEquals(2, repo.store.size)
+    }
 }

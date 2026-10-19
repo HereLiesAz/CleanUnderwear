@@ -1,6 +1,7 @@
 package com.hereliesaz.cleanunderwear.network
 
 import com.hereliesaz.cleanunderwear.data.Target
+import com.hereliesaz.cleanunderwear.data.isStalePhone
 import com.hereliesaz.cleanunderwear.domain.BrowserMission
 import com.hereliesaz.cleanunderwear.util.DiagnosticLogger
 import org.jsoup.Jsoup
@@ -31,8 +32,10 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
      * ENRICHMENT_FAILED. The order is also the tiebreaker [mergeAll] uses
      * when consensus across results is split.
      */
-    fun pickAllMissions(target: Target): List<BrowserMission> = buildList {
-        target.phoneNumber
+    fun pickAllMissions(target: Target, includeStalePhone: Boolean = false): List<BrowserMission> = buildList {
+        // A number the user ruled stale returns whoever holds it now, not this contact. Only the
+        // alternates lookup asks for it, to learn who that is.
+        (if (includeStalePhone) target.phoneNumber else target.usablePhone)
             ?.filter { it.isDigit() }
             ?.takeIf { it.length >= 10 }
             ?.let { add(BrowserMission.CbcByPhone(it)) }
@@ -58,7 +61,7 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
      * ENRICHMENT_FAILED).
      */
     fun pickMission(target: Target): BrowserMission? {
-        val phone = target.phoneNumber
+        val phone = target.usablePhone
             ?.filter { it.isDigit() }
             ?.takeIf { it.length >= 10 }
         if (phone != null) return BrowserMission.CbcByPhone(phone)
@@ -152,9 +155,9 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
 
         val merged = target.copy(
             displayName = if (nameWasPlaceholder && findings.name != null) findings.name else target.displayName,
-            phoneNumber = target.phoneNumber ?: findings.phone,
+            phoneNumber = adoptPhone(target, findings.phone),
             residenceInfo = target.residenceInfo ?: findings.address,
-            areaCode = target.areaCode ?: findings.phone?.takeLast(10)?.take(3),
+            areaCode = areaCodeFor(target, findings.phone),
             middleName = target.middleName ?: findings.middleName,
             dateOfBirth = target.dateOfBirth ?: findings.dob
         )
@@ -178,9 +181,9 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
 
         val merged = target.copy(
             displayName = if (nameWasPlaceholder && consensus.name != null) consensus.name else target.displayName,
-            phoneNumber = target.phoneNumber ?: consensus.phone,
+            phoneNumber = adoptPhone(target, consensus.phone),
             residenceInfo = target.residenceInfo ?: consensus.address,
-            areaCode = target.areaCode ?: consensus.phone?.filter { it.isDigit() }?.takeLast(10)?.take(3),
+            areaCode = areaCodeFor(target, consensus.phone),
             middleName = target.middleName ?: consensus.middleName,
             dateOfBirth = target.dateOfBirth ?: consensus.dob,
         )
@@ -224,9 +227,9 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
             val prov = "$modes · verified ($basis)"
             val merged = target.copy(
                 displayName = if (nameWasPlaceholder && consensus.name != null) consensus.name else target.displayName,
-                phoneNumber = target.phoneNumber ?: consensus.phone,
+                phoneNumber = adoptPhone(target, consensus.phone),
                 residenceInfo = target.residenceInfo ?: consensus.address,
-                areaCode = target.areaCode ?: consensus.phone?.filter { it.isDigit() }?.takeLast(10)?.take(3),
+                areaCode = areaCodeFor(target, consensus.phone),
                 middleName = target.middleName ?: consensus.middleName,
                 dateOfBirth = target.dateOfBirth ?: consensus.dob,
                 enrichmentProvenance = prov
@@ -351,6 +354,24 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
             cFirst.startsWith(tFirst) ||
             ((tFirst.length == 1 || cFirst.length == 1) && tFirst.firstOrNull() == cFirst.firstOrNull())
         return lastMatch && firstMatch
+    }
+
+    /**
+     * The number a merge should leave on [target]: the existing one, filled from [found] only when
+     * missing, except that a number the user marked stale is replaced by any different number found.
+     * Replacing it lapses the stale mark ([Target.phoneIsStale] compares against the live number).
+     */
+    private fun adoptPhone(target: Target, found: String?): String? = when {
+        target.phoneIsStale && found != null &&
+            !isStalePhone(found, target.stalePhone) -> found
+        else -> target.phoneNumber ?: found
+    }
+
+    /** Area code that follows the number [adoptPhone] chose; unchanged unless a stale number was replaced. */
+    private fun areaCodeFor(target: Target, found: String?): String? {
+        val digits = found?.filter { it.isDigit() }?.takeLast(10)
+        return if (target.phoneIsStale && adoptPhone(target, found) != target.phoneNumber) digits?.take(3)
+        else target.areaCode ?: digits?.take(3)
     }
 
     /** Whether [candidate], a name read off a lookup card, is plausibly the same person as [displayName]. */
