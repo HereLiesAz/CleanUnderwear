@@ -128,7 +128,7 @@ fun ReviewScreen(
                 )
             }
 
-            if (report != null && !report.historyAvailable) {
+            if (report != null && !report.historyAvailable && report.historyRequestable) {
                 item {
                     HistoryBanner(onAllow = {
                         historyPermissions.launch(

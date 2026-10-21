@@ -9,7 +9,7 @@ CleanUnderwear helps you keep the contacts you already have up to date, and tell
 
 ## 1. What the app reads
 - **Your device contacts** (`READ_CONTACTS`): names, phone numbers, email addresses, postal addresses, account type and the Notes field.
-- **Your call log and text messages** (`READ_CALL_LOG`, `READ_SMS`, optional): only if you allow it from the Review screen. The app reads the phone number and date of each call and text, and keeps only how many there were and the first and last date for each number, in memory, while it works out which numbers are stale or wrongly merged. It does not read message text, call durations or contact names from them, does not store the log, and never sends it anywhere.
+- **Messaging-app registration**: from your contacts (the same `READ_CONTACTS` permission), the Review screen checks which saved numbers WhatsApp, Signal, Telegram or Viber have registered, to tell a live number from a dead one. It reads only that a number is registered, in memory, and sends nothing anywhere. The app does not read your call log or text messages.
 - **Accounts you choose to import from**: if you start an import from Settings, the app opens Facebook, WhatsApp Web, Instagram or Google Contacts in an in-app browser, using your own session, and reads the names in your friends, chats, followers or contacts list. Nothing is imported unless you start it.
 
 ## 2. What is stored, and where
