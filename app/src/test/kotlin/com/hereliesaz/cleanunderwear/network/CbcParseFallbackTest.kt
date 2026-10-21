@@ -74,4 +74,53 @@ class CbcParseFallbackTest {
         assertTrue(line, line.contains("hdr-person"))
         assertTrue(line, line.contains("resident-addr"))
     }
+
+    @Test
+    fun lastCommaFirst_isStoredInNaturalOrder_withTheRightMiddleName() {
+        val html = """<html><body><div class="person-card"><span class="name">REYES, DANA MARIE</span></div></body></html>"""
+        val f = enricher.parseFindings(html)!!
+        assertEquals("DANA MARIE REYES", f.name)
+        assertEquals("MARIE", f.middleName)
+    }
+
+    @Test
+    fun aRelativesPersonRecord_neverFillsTheCardsFields() {
+        val html = """
+            <html><head><script type="application/ld+json">
+            [{"@type":"Person","name":"Luis Okafor","telephone":"504-555-1111","birthDate":"1950"},
+             {"@type":"Person","name":"Dana Reyes","telephone":"504-555-0909"}]
+            </script></head>
+            <body><div class="person-card"><span class="name">Dana Reyes</span></div></body></html>
+        """.trimIndent()
+        val f = enricher.parseFindings(html)!!
+        assertEquals("5045550909", f.phone)
+        assertNull(f.dob)
+    }
+
+    @Test
+    fun schemaOrgUrlType_andEmptyFirstPerson_areHandled() {
+        val html = """
+            <html><head><script type="application/ld+json">
+            [{"@type":"Person"},{"@type":"https://schema.org/Person","name":"Dana Reyes","birthDate":"1980"}]
+            </script></head><body></body></html>
+        """.trimIndent()
+        val f = enricher.parseFindings(html)!!
+        assertEquals("Dana Reyes", f.name)
+        assertEquals("1980", f.dob)
+    }
+
+    @Test
+    fun deeplyNestedJsonLd_doesNotCrash() {
+        val deep = "[".repeat(5000) + "]".repeat(5000)
+        val html = """<html><head><script type="application/ld+json">$deep</script></head><body></body></html>"""
+        assertNull(enricher.parseFindings(html))
+    }
+
+    @Test
+    fun describeParse_neverLogsThePageTitle() {
+        val html = """<html><head><title>Dana Reyes, Age 44</title></head><body><h1>x</h1></body></html>"""
+        val line = enricher.describeParse(html, null)
+        assertTrue(line, !line.contains("Dana"))
+        assertTrue(line, line.contains("title=yes"))
+    }
 }

@@ -335,7 +335,11 @@ class MainViewModel @Inject constructor(
 
                     val info = withContext(Dispatchers.Default) {
                         val cards = extracted.mapNotNull { (mission, html) ->
-                            cbcEnricher.parseFindings(html)?.let { mission to it }
+                            val findings = cbcEnricher.parseFindings(html)
+                            com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log(
+                                "CYBG parse (alternates) ${mission.label}: ${cbcEnricher.describeParse(html, findings)}"
+                            )
+                            findings?.let { mission to it }
                         }
                         alternateFinder.assess(target, stalePhone, cards)
                     }
