@@ -617,7 +617,11 @@ class MainViewModel @Inject constructor(
 
                     val collected = withContext(Dispatchers.Default) {
                         extracted.mapNotNull { (mission, html) ->
-                            cbcEnricher.parseFindings(html)?.let { mission to it }
+                            val findings = cbcEnricher.parseFindings(html)
+                            com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log(
+                                "CYBG parse ${mission.label}: ${cbcEnricher.describeParse(html, findings)}"
+                            )
+                            findings?.let { mission to it }
                         }
                     }
                     if (resolveCancellationRequested) return@runExclusive
