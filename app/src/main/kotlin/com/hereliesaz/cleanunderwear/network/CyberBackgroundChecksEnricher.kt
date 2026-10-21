@@ -129,9 +129,18 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
                 .find(root.text())?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
 
         // Structured data (schema.org Person, as JSON-LD or microdata) doesn't drift with the
-        // site's CSS, so it fills whatever the class selectors missed.
-        val structured = structuredPerson(doc)
-        val finalName = name ?: structured?.name
+        // site's CSS, so it fills whatever the class selectors missed. A page can carry several
+        // Person records (relatives, neighbours); only one that is the card's person may fill in.
+        val cardName = name?.let { naturalOrder(it) }
+        val people = structuredPeople(doc)
+        val structured = if (cardName != null) {
+            people.firstOrNull { it.name == null || nameConsistent(NameValidator.tokenize(cardName), it.name) }
+        } else {
+            people.firstOrNull()
+        }
+        // "Last, First" is written back to the contact and split for the middle name, so store it
+        // in natural order.
+        val finalName = cardName ?: structured?.name?.let { naturalOrder(it) }
         val finalAddress = address ?: structured?.address
         val finalPhone = phone ?: structured?.phone
         val finalDob = dob ?: structured?.dob
@@ -145,8 +154,9 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
 
     /**
      * One line for the diagnostic log: what [parseFindings] got from a page, or, when it got
-     * nothing, enough of the page's shape (title, headings, likely class names) to fix the
-     * selectors against real markup. Holds no more personal data than the parse itself.
+     * nothing, enough of the page's shape (headings, likely class names) to fix the selectors
+     * against real markup. Records which fields were found, never their values, and leaves out
+     * the page title because people-search titles carry the person's name.
      */
     fun describeParse(html: String, findings: Findings?): String {
         if (findings != null) {
@@ -158,7 +168,7 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
         }
         if (html.isBlank()) return "empty page"
         val doc = Jsoup.parse(html)
-        val title = doc.title().take(80)
+        val hasTitle = doc.title().isNotBlank()
         val headings = doc.select("h1, h2").take(3).joinToString(" | ") { it.tagName() + "." + it.className() }
         val classes = doc.select("[class]")
             .flatMap { it.classNames() }
@@ -166,41 +176,52 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
             .distinct()
             .take(30)
         val ldJson = doc.select("script[type=application/ld+json]").size
-        return "nothing found · title='$title' · headings=[$headings] · ld+json=$ldJson · classes=$classes"
+        return "nothing found · title=${if (hasTitle) "yes" else "no"} · headings=[$headings] · ld+json=$ldJson · classes=$classes"
     }
 
-    /** schema.org Person from JSON-LD or microdata, if the page carries one. */
-    private fun structuredPerson(doc: org.jsoup.nodes.Document): Findings? {
+    /** Every schema.org Person on the page that carries at least one usable field, JSON-LD first. */
+    private fun structuredPeople(doc: org.jsoup.nodes.Document): List<Findings> {
+        val people = mutableListOf<Findings>()
         for (script in doc.select("script[type=application/ld+json]")) {
             val element = try {
                 com.google.gson.JsonParser.parseString(script.data())
             } catch (e: Exception) {
                 continue
             }
-            findPerson(element)?.let { return it }
+            collectPeople(element, depth = 0, out = people)
         }
-        val item = doc.selectFirst("[itemtype*=schema.org/Person]") ?: return null
-        fun prop(name: String) = item.selectFirst("[itemprop=$name]")?.let {
-            it.attr("content").ifBlank { it.text() }
-        }?.trim()?.takeIf { it.isNotBlank() }
-        return Findings(
-            name = prop("name"),
-            address = prop("address"),
-            phone = prop("telephone")?.filter { it.isDigit() || it == '+' }?.takeIf { it.length >= 10 },
-            dob = prop("birthDate")
-        ).takeIf { it.name != null || it.address != null || it.phone != null || it.dob != null }
+        for (item in doc.select("[itemtype*=schema.org/Person]")) {
+            fun prop(name: String) = item.selectFirst("[itemprop=$name]")?.let {
+                it.attr("content").ifBlank { it.text() }
+            }?.trim()?.takeIf { it.isNotBlank() }
+            Findings(
+                name = prop("name"),
+                address = prop("address"),
+                phone = prop("telephone")?.filter { it.isDigit() || it == '+' }?.takeIf { it.length >= 10 },
+                dob = prop("birthDate")
+            ).takeIf { it.hasAnything() }?.let { people += it }
+        }
+        return people
     }
 
-    private fun findPerson(e: com.google.gson.JsonElement): Findings? {
-        if (e.isJsonArray) return e.asJsonArray.firstNotNullOfOrNull { findPerson(it) }
-        if (!e.isJsonObject) return null
+    private fun Findings.hasAnything() = name != null || address != null || phone != null || dob != null
+
+    private fun isPersonType(v: com.google.gson.JsonElement): Boolean =
+        v.isJsonPrimitive && v.asString.let { it == "Person" || it.endsWith("schema.org/Person") }
+
+    /** Depth-capped walk: page-supplied JSON must not be able to exhaust the stack. */
+    private fun collectPeople(e: com.google.gson.JsonElement, depth: Int, out: MutableList<Findings>) {
+        if (depth > MAX_JSON_DEPTH) return
+        if (e.isJsonArray) {
+            e.asJsonArray.forEach { collectPeople(it, depth + 1, out) }
+            return
+        }
+        if (!e.isJsonObject) return
         val o = e.asJsonObject
-        o.get("@graph")?.let { graph -> findPerson(graph)?.let { return it } }
-        val type = o.get("@type")
-        val isPerson = type != null &&
-            (if (type.isJsonArray) type.asJsonArray.any { it.isJsonPrimitive && it.asString == "Person" }
-            else type.isJsonPrimitive && type.asString == "Person")
-        if (!isPerson) return null
+        o.get("@graph")?.let { collectPeople(it, depth + 1, out) }
+        val type = o.get("@type") ?: return
+        val isPerson = if (type.isJsonArray) type.asJsonArray.any(::isPersonType) else isPersonType(type)
+        if (!isPerson) return
 
         fun str(key: String): String? = o.get(key)?.let { v ->
             when {
@@ -225,12 +246,12 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
                 else -> null
             }
         }
-        return Findings(
+        Findings(
             name = str("name"),
             address = address,
             phone = str("telephone")?.filter { it.isDigit() || it == '+' }?.takeIf { it.length >= 10 },
             dob = str("birthDate")
-        )
+        ).takeIf { it.hasAnything() }?.let { out += it }
     }
 
     /** Middle token(s) of a full name ("John A. Smith" → "A."), or null. */
@@ -516,13 +537,14 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
         // Class selectors are guesses at CBC's markup and drift with redesigns; the structured-
         // data fallback and [describeParse]'s log line exist for when they miss.
         const val NAME_SELECTORS =
-            ".name, h1.full-name, .full-name, .person-name, .name-given, [itemprop=name]"
+            ".name, h1.full-name, .full-name, .person-name, [itemprop=name]"
         const val ADDRESS_SELECTORS =
             ".address, .current-address, .address-current, .person-address, .city-state, [itemprop=address]"
         const val PHONE_SELECTORS =
             ".phone, .phone-number, [itemprop=telephone], [href^=tel]"
         const val DOB_SELECTORS =
             ".dob, .date-of-birth, .born, .age, [data-dob], [itemprop=birthDate]"
+        const val MAX_JSON_DEPTH = 8
         val CLASS_HINT = Regex("name|addr|phone|age|dob|birth|person|result|card|resident", RegexOption.IGNORE_CASE)
 
         private val BLOCK_MARKERS = listOf(
