@@ -27,6 +27,14 @@ The app uses a tiered scraping strategy to balance speed and reliability:
 
 ---
 
+### Reading CyberBackgroundChecks pages
+
+`CyberBackgroundChecksEnricher.parseFindings` reads name, address, phone and age/DOB with class selectors (`NAME_SELECTORS` etc.), which are guesses at CBC's markup and drift with its redesigns. Anything they miss is filled from schema.org `Person` data on the page (JSON-LD, including `@graph`, or microdata), which doesn't depend on CSS. Card names written "Last, First" are reordered before the same-person check.
+
+Every Resolve search logs one line, `CYBG parse <mode>: …`: which fields were found, or, when none were, the page's title, heading classes, JSON-LD count and likely class names. That line is what to fix the selectors against.
+
+---
+
 ## 2. Identity Verification & Evidence
 
 Because human names are ambiguous, the `IdentityVerifier` performs the following checks before declaring a match:
