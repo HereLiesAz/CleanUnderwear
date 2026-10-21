@@ -167,7 +167,8 @@ data class TargetWorkInfo(
     @ColumnInfo(name = "source_account") val sourceAccount: String?,
     @ColumnInfo(name = "monitorability_state") val monitorabilityState: MonitorabilityState,
     @ColumnInfo(name = "last_scraped_timestamp") val lastScrapedTimestamp: Long,
-    @ColumnInfo(name = "stale_phone") val stalePhone: String? = null
+    @ColumnInfo(name = "stale_phone") val stalePhone: String? = null,
+    @ColumnInfo(name = "enrichment_provenance") val enrichmentProvenance: String? = null
 ) {
     val phoneIsStale: Boolean get() = isStalePhone(phoneNumber, stalePhone)
 }

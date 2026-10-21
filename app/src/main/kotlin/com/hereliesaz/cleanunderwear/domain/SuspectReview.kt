@@ -16,7 +16,12 @@ import com.hereliesaz.cleanunderwear.util.DiagnosticLogger
 import javax.inject.Inject
 
 /** The review queue plus whether call/SMS history could be read to build it. */
-data class SuspectReport(val cases: List<SuspectCase>, val historyAvailable: Boolean)
+data class SuspectReport(
+    val cases: List<SuspectCase>,
+    val historyAvailable: Boolean,
+    /** Whether this build can ask for call/SMS history at all (see [CommsHistory.requestable]). */
+    val historyRequestable: Boolean = false
+)
 
 /**
  * The correction step: finds contacts that look wrongly merged or carry a stale number, and
@@ -29,7 +34,8 @@ data class SuspectReport(val cases: List<SuspectCase>, val historyAvailable: Boo
 class SuspectReview @Inject constructor(
     private val repository: TargetRepository,
     private val ledger: MergeLedgerDao,
-    private val history: CommsHistory
+    private val history: CommsHistory,
+    private val messaging: com.hereliesaz.cleanunderwear.data.MessagingPresenceSource
 ) {
 
     suspend fun find(onProgress: (Float, String) -> Unit = { _, _ -> }): SuspectReport {
@@ -38,6 +44,7 @@ class SuspectReview @Inject constructor(
         val index = history.load()
         val historyAvailable = index != null
         val coverage = index?.oldestMillis?.let { now - it }
+        val presence = messaging.load()
 
         // One pass over the registry: enough to name every contact and group them by number.
         val byId = HashMap<Int, TargetWorkInfo>()
@@ -83,7 +90,10 @@ class SuspectReview @Inject constructor(
                     survivorHistory = survivorHistory,
                     absorbedHistory = absorbedHistory,
                     historyAvailable = historyAvailable,
-                    survivorPhoneSharers = sharers
+                    survivorPhoneSharers = sharers,
+                    survivorApps = presence.appsFor(survivor.phoneNumber),
+                    absorbedApps = presence.appsFor(m.absorbedPhone),
+                    presenceAvailable = presence.available
                 ),
                 now
             )?.let { cases += it }
@@ -94,9 +104,16 @@ class SuspectReview @Inject constructor(
                 (survivorHistory == null || absorbedHistory.lastMillis > survivorHistory.lastMillis)
             ) {
                 val current = replacements[survivor.id]
-                if (current == null || absorbedHistory.lastMillis > current.history.lastMillis) {
+                if (current == null || absorbedHistory.lastMillis > (current.history?.lastMillis ?: Long.MIN_VALUE)) {
                     replacements[survivor.id] = ReplacementCandidate(m.absorbedPhone!!, m.absorbedName, absorbedHistory)
                 }
+            }
+            // Without history, registration does the same job: the merged-in number is live, the one on file isn't.
+            val absorbedApps = presence.appsFor(m.absorbedPhone)
+            if (absorbedNumber != null && absorbedNumber != survivorNumber && survivor.id !in replacements &&
+                absorbedApps.isNotEmpty() && presence.appsFor(survivor.phoneNumber).isEmpty()
+            ) {
+                replacements[survivor.id] = ReplacementCandidate(m.absorbedPhone!!, m.absorbedName, null, absorbedApps)
             }
         }
 
@@ -119,7 +136,10 @@ class SuspectReview @Inject constructor(
                     historyAvailable = historyAvailable,
                     historyCoverageMillis = coverage,
                     sharers = sharers,
-                    replacement = replacements[t.id]
+                    replacement = replacements[t.id],
+                    apps = presence.appsFor(phone),
+                    appsOnDevice = presence.appsOnDevice,
+                    otherHolder = otherHolder(t.enrichmentProvenance)
                 ),
                 now
             )?.let { cases += it }
@@ -128,7 +148,7 @@ class SuspectReview @Inject constructor(
         val open = cases.filter { it.key !in decided }
             .sortedWith(compareByDescending<SuspectCase> { it.net }.thenBy { it.title.lowercase() })
         onProgress(1f, "${open.size} to review.")
-        return SuspectReport(open, historyAvailable)
+        return SuspectReport(open, historyAvailable, history.requestable())
     }
 
     /**
@@ -194,7 +214,20 @@ class SuspectReview @Inject constructor(
     private suspend fun decide(case: SuspectCase, decision: String) =
         ledger.insertDecision(SuspectDecision(case.key, decision, System.currentTimeMillis()))
 
-    private companion object {
-        const val CHUNK = 1000
+    internal companion object {
+        private const val CHUNK = 1000
+
+        /**
+         * Name on a people-search card that Resolve rejected for not being this contact, when a
+         * phone search was among the lookups ("phone+name · NOT merged (name conflict: card 'X' ≠ Y)").
+         */
+        private val CONFLICT = Regex("""name conflict: card '(.+?)' ≠""")
+
+        fun otherHolder(provenance: String?): String? {
+            if (provenance == null) return null
+            val modes = provenance.substringBefore(" · ")
+            if ("phone" !in modes.split("+")) return null
+            return CONFLICT.find(provenance)?.groupValues?.get(1)
+        }
     }
 }

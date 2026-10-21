@@ -57,6 +57,9 @@ class HistoryIndex(
 /** Source of [HistoryIndex]; null when the device history cannot be read. */
 interface CommsHistory {
     suspend fun load(): HistoryIndex?
+
+    /** Whether the app declares the permissions at all, so asking the user for them can work. */
+    fun requestable(): Boolean = false
 }
 
 /**
@@ -69,6 +72,19 @@ class DeviceCommsHistory @Inject constructor(
 ) : CommsHistory {
 
     fun hasAccess(): Boolean = granted(Manifest.permission.READ_CALL_LOG) || granted(Manifest.permission.READ_SMS)
+
+    /**
+     * Google Play restricts both permissions to default dialer and SMS apps, so the manifest does
+     * not declare them for now; this reports whether a build declares them again.
+     */
+    override fun requestable(): Boolean = try {
+        val info = context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_PERMISSIONS)
+        info.requestedPermissions.orEmpty().any {
+            it == Manifest.permission.READ_CALL_LOG || it == Manifest.permission.READ_SMS
+        }
+    } catch (e: Exception) {
+        false
+    }
 
     override suspend fun load(): HistoryIndex? = withContext(Dispatchers.IO) {
         val builder = HistoryIndex.Builder()

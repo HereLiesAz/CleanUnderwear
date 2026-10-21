@@ -74,14 +74,24 @@ data class MergeCaseInput(
     /** False when call/SMS history cannot be read; history signals are then skipped, not guessed. */
     val historyAvailable: Boolean,
     /** How many other contacts carry the survivor's number. */
-    val survivorPhoneSharers: Int
+    val survivorPhoneSharers: Int,
+    /** Messaging apps each number is registered with right now ([com.hereliesaz.cleanunderwear.data.MessagingPresence]). */
+    val survivorApps: Set<String> = emptySet(),
+    val absorbedApps: Set<String> = emptySet(),
+    /** False when no messaging app on the device lists any contact; presence is then skipped. */
+    val presenceAvailable: Boolean = false
 )
 
 /** Another contact sharing a number under review. */
 data class NumberSharer(val name: String)
 
 /** A number merged into this contact that seems to have replaced the one on file. */
-data class ReplacementCandidate(val phone: String, val name: String, val history: HistoryStats)
+data class ReplacementCandidate(
+    val phone: String,
+    val name: String,
+    val history: HistoryStats?,
+    val apps: Set<String> = emptySet()
+)
 
 /** Everything the detector needs to judge whether one contact's number has gone stale. */
 data class StaleCaseInput(
@@ -95,7 +105,13 @@ data class StaleCaseInput(
     /** How far back the device history reaches; null when unknown or unavailable. */
     val historyCoverageMillis: Long?,
     val sharers: List<NumberSharer>,
-    val replacement: ReplacementCandidate?
+    val replacement: ReplacementCandidate?,
+    /** Messaging apps this number is registered with right now. */
+    val apps: Set<String> = emptySet(),
+    /** Messaging apps that list any contacts on this device; empty skips the presence signal. */
+    val appsOnDevice: Set<String> = emptySet(),
+    /** Name a people-search lookup on this number returned when it wasn't this contact. */
+    val otherHolder: String? = null
 )
 
 /**
@@ -194,6 +210,7 @@ object SuspectDetector {
         }
 
         addHistoryEvidence(i, differentNumbers, now, suspicion, defense)
+        addPresenceEvidence(i, differentNumbers, suspicion, defense)
 
         if (suspicion.sumOf { it.weight } < MIN_SUSPICION) return null
 
@@ -205,12 +222,52 @@ object SuspectDetector {
             title = i.survivorName,
             headline = "\"${i.absorbedName}\" was merged into this contact on ${day(i.mergedAtMillis)}.",
             identities = listOf(
-                IdentityLine("Kept", i.survivorName, i.survivorPhone, i.survivorEmail, describe(i.survivorHistory, i.historyAvailable)),
-                IdentityLine("Absorbed", i.absorbedName, i.absorbedPhone, i.absorbedEmail, describe(i.absorbedHistory, i.historyAvailable))
+                IdentityLine(
+                    "Kept", i.survivorName, i.survivorPhone, i.survivorEmail,
+                    status(describe(i.survivorHistory, i.historyAvailable), i.survivorApps, i.presenceAvailable)
+                ),
+                IdentityLine(
+                    "Absorbed", i.absorbedName, i.absorbedPhone, i.absorbedEmail,
+                    status(describe(i.absorbedHistory, i.historyAvailable), i.absorbedApps, i.presenceAvailable)
+                )
             ),
             suspicion = suspicion.sortedByDescending { it.weight },
             defense = defense.sortedByDescending { it.weight }
         )
+    }
+
+    /**
+     * Messaging-app registration stands in for call history: it says which lines are live now,
+     * though not since when. Two live numbers argue for two people; one live, one not, for a
+     * number change.
+     */
+    private fun addPresenceEvidence(
+        i: MergeCaseInput,
+        differentNumbers: Boolean,
+        suspicion: MutableList<Evidence>,
+        defense: MutableList<Evidence>
+    ) {
+        if (!differentNumbers || !i.presenceAvailable) return
+        val kept = i.survivorApps
+        val absorbed = i.absorbedApps
+        when {
+            kept.isNotEmpty() && absorbed.isNotEmpty() -> {
+                suspicion += Evidence(
+                    "Both numbers are registered on messaging apps right now (${i.survivorPhone}: ${kept.joinToString()}; " +
+                        "${i.absorbedPhone}: ${absorbed.joinToString()}), so both lines are live: two people, or one person with two phones.",
+                    2.0
+                )
+                defense += Evidence("Plenty of people keep a work phone and a personal one.", 1.0)
+            }
+            kept.isNotEmpty() || absorbed.isNotEmpty() -> {
+                val live = if (kept.isNotEmpty()) i.survivorPhone else i.absorbedPhone
+                val dead = if (kept.isNotEmpty()) i.absorbedPhone else i.survivorPhone
+                defense += Evidence(
+                    "Only $live is on a messaging app; $dead isn't, which fits an old number retired for a new one.",
+                    1.5
+                )
+            }
+        }
     }
 
     private fun addHistoryEvidence(
@@ -322,18 +379,48 @@ object SuspectDetector {
             defense += Evidence("Shared with ${list(same)}, same surname: probably a household line.", 1.5)
         }
 
+        if (i.appsOnDevice.isNotEmpty()) {
+            if (i.apps.isNotEmpty()) {
+                defense += Evidence(
+                    "${i.phone} is registered on ${i.apps.joinToString()} right now, so the line is in service. " +
+                        "That alone doesn't prove it's still theirs.",
+                    2.5
+                )
+            } else {
+                suspicion += Evidence(
+                    "${i.phone} isn't registered on ${i.appsOnDevice.joinToString(" or ")}. Many people use none of them, so this is a weak sign.",
+                    1.0
+                )
+            }
+        }
+        i.otherHolder?.let {
+            suspicion += Evidence(
+                "A people-search lookup on this number came back to \"$it\", not this contact: it has likely been reassigned.",
+                3.0
+            )
+        }
+
         if (i.lookupFailed) suspicion += Evidence("A people-search lookup found no one at this number.", 1.0)
         if (!i.email.isNullOrBlank()) {
             defense += Evidence("There's an email address too, so reaching them doesn't hinge on this number.", 1.0)
         }
 
         i.replacement?.let { r ->
-            suspicion += Evidence(
-                "${r.phone} (merged in from \"${r.name}\") has been in contact since " +
-                    "${monthYear.format(Instant.ofEpochMilli(r.history.firstMillis))}, most recently " +
-                    "${monthYear.format(Instant.ofEpochMilli(r.history.lastMillis))}. It looks like the live line.",
-                3.0
-            )
+            val history = r.history
+            suspicion += if (history != null) {
+                Evidence(
+                    "${r.phone} (merged in from \"${r.name}\") has been in contact since " +
+                        "${monthYear.format(Instant.ofEpochMilli(history.firstMillis))}, most recently " +
+                        "${monthYear.format(Instant.ofEpochMilli(history.lastMillis))}. It looks like the live line.",
+                    3.0
+                )
+            } else {
+                Evidence(
+                    "${r.phone} (merged in from \"${r.name}\") is registered on ${r.apps.joinToString()} right now " +
+                        "and the number on file isn't. It looks like the live line.",
+                    2.5
+                )
+            }
         }
 
         if (suspicion.sumOf { it.weight } < MIN_SUSPICION) return null
@@ -345,7 +432,12 @@ object SuspectDetector {
             ledgerId = null,
             title = i.name,
             headline = "The number ${i.phone} may be out of date.",
-            identities = listOf(IdentityLine("On file", i.name, i.phone, i.email, describe(i.history, i.historyAvailable))),
+            identities = listOf(
+                IdentityLine(
+                    "On file", i.name, i.phone, i.email,
+                    status(describe(i.history, i.historyAvailable), i.apps, i.appsOnDevice.isNotEmpty())
+                )
+            ),
             suspicion = suspicion.sortedByDescending { it.weight },
             defense = defense.sortedByDescending { it.weight },
             replacementPhone = i.replacement?.phone
@@ -377,6 +469,16 @@ object SuspectDetector {
         stats == null -> "No calls or texts on record"
         else -> "${stats.count} call${plural(stats.count)}/text${plural(stats.count)}, " +
             "${monthYear.format(Instant.ofEpochMilli(stats.firstMillis))} to ${monthYear.format(Instant.ofEpochMilli(stats.lastMillis))}"
+    }
+
+    /** History summary plus messaging registration, for the side-by-side identity lines. */
+    private fun status(history: String?, apps: Set<String>, presenceAvailable: Boolean): String? {
+        val presence = when {
+            !presenceAvailable -> null
+            apps.isEmpty() -> "Not on a messaging app"
+            else -> "On ${apps.joinToString()}"
+        }
+        return listOfNotNull(history, presence).joinToString(" · ").ifBlank { null }
     }
 
     private fun span(s: HistoryStats) =
