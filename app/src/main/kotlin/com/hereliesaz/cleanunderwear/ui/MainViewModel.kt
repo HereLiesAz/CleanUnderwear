@@ -67,7 +67,8 @@ class MainViewModel @Inject constructor(
     private val cbcEnricher: com.hereliesaz.cleanunderwear.network.CyberBackgroundChecksEnricher,
     private val pipelineCoordinator: PipelineCoordinator,
     private val suspectReview: SuspectReview,
-    private val alternateFinder: AlternateFinder
+    private val alternateFinder: AlternateFinder,
+    private val updateChecker: com.hereliesaz.cleanunderwear.update.UpdateChecker
 ) : AndroidViewModel(application) {
 
     enum class SortOrder { NAME, STATUS, DATE }
@@ -255,6 +256,50 @@ class MainViewModel @Inject constructor(
             }
         ).flow
     }.cachedIn(viewModelScope)
+
+    /**
+     * Update check state. [prompt] is an update to announce in a dialog (automatic check, not yet
+     * dismissed for this version); [lastResult] is what Settings shows.
+     */
+    data class UpdateState(
+        val checking: Boolean = false,
+        val lastResult: com.hereliesaz.cleanunderwear.update.UpdateResult? = null,
+        val prompt: com.hereliesaz.cleanunderwear.update.UpdateResult.Available? = null
+    )
+
+    private val _updateState = MutableStateFlow(UpdateState())
+    val updateState: StateFlow<UpdateState> = _updateState
+
+    val installedVersion: String get() = updateChecker.currentVersion
+    val updateChannel get() = updateChecker.channel()
+
+    /**
+     * Check the install's own channel for a newer version. Automatic checks run at most every
+     * [AUTO_UPDATE_CHECK_INTERVAL_MS] and prompt once per version; a manual check always runs and
+     * always prompts when something is available.
+     */
+    fun checkForUpdates(manual: Boolean) {
+        val now = System.currentTimeMillis()
+        if (!manual && now - prefs.getLong("last_update_check", 0L) < AUTO_UPDATE_CHECK_INTERVAL_MS) return
+        if (_updateState.value.checking) return
+        viewModelScope.launch {
+            _updateState.value = _updateState.value.copy(checking = true)
+            val result = updateChecker.check()
+            prefs.edit { putLong("last_update_check", now) }
+            val available = result as? com.hereliesaz.cleanunderwear.update.UpdateResult.Available
+            val dismissed = prefs.getString("dismissed_update", null)
+            val prompt = available?.takeIf { manual || "${it.channel}:${it.version}" != dismissed }
+            _updateState.value = UpdateState(checking = false, lastResult = result, prompt = prompt)
+        }
+    }
+
+    /** "Later": don't raise the automatic prompt again for this version. */
+    fun dismissUpdatePrompt() {
+        _updateState.value.prompt?.let { prefs.edit { putString("dismissed_update", "${it.channel}:${it.version}") } }
+        _updateState.value = _updateState.value.copy(prompt = null)
+    }
+
+    fun playWebUrl(): String = updateChecker.playWebUrl()
 
     /** The correction step's queue: null until the first scan finishes. */
     data class ReviewState(val loading: Boolean = false, val report: SuspectReport? = null)
@@ -829,3 +874,6 @@ class MainViewModel @Inject constructor(
         )
     }
 }
+
+/** Automatic update checks run at most this often; the manual check in Settings ignores it. */
+private const val AUTO_UPDATE_CHECK_INTERVAL_MS = 12L * 60 * 60 * 1000

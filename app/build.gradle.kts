@@ -183,6 +183,9 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
 
+    // In-app update check for Play installs (UpdateChecker)
+    implementation(libs.play.app.update.ktx)
+
     // Image Loading
     implementation(libs.coil.compose)
 
