@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -334,6 +333,17 @@ fun BrowserScreen(
                                     null
                                 )
                                 pageReady = true
+                                // Paused for a CAPTCHA or a slow page, and a page just finished
+                                // loading: that is the user solving it (Cloudflare and friends
+                                // navigate on success). Resume on our own instead of waiting
+                                // for "Retry extraction"; a page that is still blocked pauses
+                                // again. A failed load (mainFrameFailed) stays paused.
+                                if (paused && !mainFrameFailed) {
+                                    extractionGate.invalidate()
+                                    automationRan = false
+                                    paused = false
+                                    DiagnosticLogger.log("BrowserScreen: page loaded while paused; resuming extraction")
+                                }
                                 // Each navigation bumps the counter so drill-in
                                 // missions re-trigger extraction on the new page.
                                 pageLoadCount += 1
@@ -371,7 +381,7 @@ fun BrowserScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                            com.hereliesaz.aznavrail.AzLoad()
                             Spacer(modifier = Modifier.height(12.dp))
                             Text(
                                 text = if (!pageReady) "Loading…" else "Working — please don't touch the screen",

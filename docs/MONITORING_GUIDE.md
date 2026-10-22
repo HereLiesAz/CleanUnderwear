@@ -22,7 +22,9 @@ The app uses a tiered scraping strategy to balance speed and reliability:
 
 - **Lifetime**: `MainViewModel.completeMissionBatch()` retains the active batch between contacts while Resolve parses results. `CleanUnderwearApp` therefore keeps the same `BrowserScreen` and WebView mounted until Resolve completes or is cancelled. The ordinary one-off browser flows are not retained.
 - **Lookup isolation**: Each batch has a monotonic id. `BrowserScreen` resets mission/page state on id changes and `BrowserExtractionGate` tags every JavaScript extraction. Stale, duplicate, cancelled and previous-page callbacks are discarded.
-- **CBC drill state**: The one-result-navigation marker in `sessionStorage` is scoped to the batch and mission, so an interrupted lookup cannot suppress drilling for another contact.
+- **CBC drill state**: The one-result-navigation marker in `sessionStorage` is scoped to the batch and mission, so an interrupted lookup cannot suppress drilling for another contact. It is never cleared during the lookup, so a CAPTCHA on the detail page can't reset it and send the script drilling into a related person's page once solved.
+- **CAPTCHA resume**: while paused, any page that finishes loading (other than a failed load) resumes extraction by itself, since solving a challenge navigates to the real page. A page that is still blocked pauses again; **Retry extraction** remains for challenges that resolve without navigating.
+- **Busy indicator**: the rail's global `azAdvanced(isLoading)` overlay is not used, because it swallows every touch, including the pause controls. The same `AzLoad` is drawn in the content area with no input handling instead, captioned with the running operation's description (as the old indicator was), and the browser's automation scrim uses it too with its own "Loading…" / "Working" caption.
 - **Session**: Browser cookies, authentication, CAPTCHA handling, advertising filters and the visible pause/retry/skip/abort controls remain available throughout a run. Destruction happens on completion or cancellation.
 
 ---

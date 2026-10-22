@@ -288,9 +288,9 @@ fun TargetListScreen(
                 
                 if (targets.loadState.append is LoadState.Loading) {
                     item {
-                        CircularProgressIndicator(
-                            modifier = Modifier.fillMaxWidth().padding(16.dp).wrapContentWidth(Alignment.CenterHorizontally)
-                        )
+                        Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                            AzLoad()
+                        }
                     }
                 }
             }
