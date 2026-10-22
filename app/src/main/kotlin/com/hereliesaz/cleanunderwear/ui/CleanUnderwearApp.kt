@@ -61,7 +61,6 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
         )
 
         azAdvanced(
-            isLoading = operationState.isRunning,
             helpEnabled = true,
             helpList = mapOf(
                 "registry" to "Your monitored contacts.",
@@ -208,6 +207,7 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
 
             val startDestination = if (isOnboardingCompleted) "targetList" else "onboarding"
 
+            Box(modifier = Modifier.fillMaxSize()) {
             NavHost(navController = navController, startDestination = startDestination) {
                 composable("onboarding") {
                     OnboardingScreen(onComplete = {
@@ -259,6 +259,14 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                         )
                     }
                 }
+            }
+            // The rail's global loading overlay swallows every touch, so the busy indicator is
+            // drawn here instead: the same AzLoad, with no input handling, so taps pass through.
+            if (operationState.isRunning) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    AzLoad()
+                }
+            }
             }
         }
     }

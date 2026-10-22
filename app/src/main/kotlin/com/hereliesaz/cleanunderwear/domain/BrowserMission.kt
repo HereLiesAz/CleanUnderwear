@@ -126,7 +126,10 @@ private val DRILL_TO_FIRST_RESULT_SCRIPT = """
     '.person-card, .result-card, .search-result, [data-result-card]'
   );
   // A detail page may also contain a result card. Allow only one drill per
-  // lookup, so related-person links cannot turn extraction into a loop.
+  // lookup, so related-person links cannot turn extraction into a loop. The
+  // key is unique per lookup (BrowserExtractionGate.tagScript), so it is never
+  // cleared: clearing it on dump let a CAPTCHA on the detail page reset it,
+  // and once solved the script drilled again into a relative's page.
   var drillKey = 'cleanunderwear-cbc-drill';
   var drilled = false;
   try { drilled = sessionStorage.getItem(drillKey) === '1'; } catch (_) {}
@@ -136,7 +139,6 @@ private val DRILL_TO_FIRST_RESULT_SCRIPT = """
     window.location.href = firstLink.href;
     return;
   }
-  try { sessionStorage.removeItem(drillKey); } catch (_) {}
   // Detail page, already drilled, or no results: hand the DOM to the parser.
   window.HTMLOUT.dump(document.documentElement.outerHTML);
 })();
