@@ -183,6 +183,17 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
 
 
         onscreen {
+            val updateState by viewModel.updateState.collectAsState()
+            LaunchedEffect(Unit) { viewModel.checkForUpdates(manual = false) }
+            updateState.prompt?.let { update ->
+                UpdateDialog(
+                    update = update,
+                    installed = viewModel.installedVersion,
+                    playWebUrl = viewModel.playWebUrl(),
+                    onDismiss = { viewModel.dismissUpdatePrompt() }
+                )
+            }
+
             // Mission overlay: when a BrowserMission is active, the visible
             // WebView screen takes over the whole content area. This honors
             // the rule that cyberbackgroundchecks / Facebook flows must use

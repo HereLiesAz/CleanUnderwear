@@ -69,6 +69,9 @@ The app uses your phone's native address book as its "external memory":
 - **Registry Actions**: Long-press any individual to Archive, Resume Monitoring, or view original verification sites.
 - **Verify Identity**: To rule out false alarms, the profile of a contact with a records match to check (possible match, incarcerated or deceased) exposes launch-in-browser chips for the face-recognition, reverse-image-search, and name-based OSINT providers, used to confirm that a records match is really your contact, ported from the sister project [doxray](https://github.com/HereLiesAz/doxray) — PimEyes, FaceCheck.id, Lenso.ai, FaceSeek, Yandex Images, TinEye, Google Lens, CyberBackgroundChecks `/name/`, SmartBackgroundChecks `/name/`, GitHub user search, and `site:` Google searches for LinkedIn, Twitter/X, Instagram, and Facebook. These never auto-scrape. The face and reverse-image entries open the provider's home page only (no photo is passed; photo search is not implemented yet), and the name-based services bot-block raw HTTP; each chip opens the provider in the user's own browser so their session cookies apply. Defined in `app/src/main/assets/sources.json` under `identity_sources`; loaded by `SourceCatalog.identitySources()`.
 
+### 6. Updates
+The app checks the channel it was installed from. A Play install asks Google Play (in-app update API) and opens the Play listing; any other install (sideloaded APK from GitHub) reads the latest non-prerelease GitHub release and opens its page. Play installs are never offered GitHub builds: the signing keys differ, so Android would refuse the install. A dismissed version is not offered again until a newer one appears; Settings → Updates checks on demand. Code: `update/UpdateChecker.kt`, `ui/UpdateUi.kt`.
+
 ---
 
 ## 🔐 What Leaves Your Device
@@ -84,6 +87,7 @@ The app uses your phone's native address book as its "external memory":
 | Your session on Facebook, WhatsApp, Instagram, Google Contacts | That service only | Only when you start an import from Settings |
 | Status, record links and check date written to the contact's Notes field | Whatever account that contact syncs with (e.g. Google Contacts) | When a contact's status changes |
 | Crash message, stack trace, device model, Android version | GitHub Issues (this repository) | When the app crashes |
+| Nothing but the request itself (no contact data) | Google Play (Play installs) or the GitHub releases API (all other installs) | Update check: at launch, at most every 12 hours, and from Settings |
 
 Nothing else is uploaded. There is no analytics, advertising or tracking SDK.
 

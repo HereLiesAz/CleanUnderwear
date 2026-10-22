@@ -123,6 +123,49 @@ fun SettingsScreen(
 
             HorizontalDivider()
 
+            val updateState by viewModel.updateState.collectAsState()
+            Text(
+                text = "Updates",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Version ${viewModel.installedVersion}, updates from ${viewModel.updateChannel.label}",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                val result = updateState.lastResult
+                Text(
+                    when {
+                        updateState.checking -> "Checking…"
+                        result is com.hereliesaz.cleanunderwear.update.UpdateResult.Available ->
+                            "${result.version} is available on ${result.channel.label}."
+                        result is com.hereliesaz.cleanunderwear.update.UpdateResult.UpToDate -> "You're up to date."
+                        result is com.hereliesaz.cleanunderwear.update.UpdateResult.Failed -> "Couldn't check: ${result.reason}."
+                        else -> "Not checked yet."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (result is com.hereliesaz.cleanunderwear.update.UpdateResult.Available && !updateState.checking) {
+                    AzButton(
+                        text = if (result.channel == com.hereliesaz.cleanunderwear.update.UpdateChannel.PLAY) "Open Play Store" else "Open on GitHub",
+                        onClick = { openUpdate(context, result, viewModel.playWebUrl()) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = AzButtonShape.RECTANGLE
+                    )
+                } else {
+                    AzButton(
+                        text = "Check for updates",
+                        onClick = { viewModel.checkForUpdates(manual = true) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = AzButtonShape.RECTANGLE
+                    )
+                }
+            }
+
+            HorizontalDivider()
+
             Text(
                 text = "Permissions",
                 style = MaterialTheme.typography.labelLarge,
