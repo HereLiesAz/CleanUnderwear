@@ -59,7 +59,7 @@ class CbcParseFallbackTest {
     fun lastCommaFirst_cardName_verifies() {
         val target = Target(displayName = "Dana Reyes", phoneNumber = "5045550303")
         val card = BrowserMission.CbcByName("Dana Reyes") to
-            CyberBackgroundChecksEnricher.Findings("REYES, DANA M", "New Orleans, LA", null)
+            CyberBackgroundChecksEnricher.Findings("REYES, DANA M", "New Orleans, LA", "504-555-0303")
         val outcome = enricher.enrich(target, listOf(card))
         assertTrue(outcome.provenance, outcome.verified)
         assertEquals("New Orleans, LA", outcome.target.residenceInfo)

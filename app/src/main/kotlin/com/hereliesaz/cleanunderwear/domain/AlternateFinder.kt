@@ -68,7 +68,11 @@ class AlternateFinder @Inject constructor(
         }
 
         // Judge the remaining cards as if the contact had no number: whatever they carry is new.
-        val outcome = enricher.enrich(target.copy(phoneNumber = null), ownCards)
+        // The old number's area code stays: a same-name card from the same region corroborates.
+        val outcome = enricher.enrich(
+            target.copy(phoneNumber = null, areaCode = target.areaCode ?: StringSimilarity.nanpAreaCode(target.phoneNumber)),
+            ownCards
+        )
         val phone = outcome.target.phoneNumber
             ?.takeIf { outcome.verified && StringSimilarity.normalizePhone(it) != staleNumber }
         val address = outcome.target.residenceInfo

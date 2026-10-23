@@ -63,8 +63,8 @@ class AlternateFinderTest {
 
     @Test
     fun afterASplit_thereIsNoOldNumberToCheck() {
-        val bare = dana.copy(phoneNumber = null)
-        val info = finder.assess(bare, null, listOf(nameCard("Dana Reyes", "5045559999")))
+        val bare = dana.copy(phoneNumber = null, residenceInfo = "New Orleans, LA")
+        val info = finder.assess(bare, null, listOf(nameCard("Dana Reyes", "5045559999", "8 Canal St, New Orleans, LA")))
         assertNull(info.holderName)
         assertEquals("5045559999", info.phone)
     }

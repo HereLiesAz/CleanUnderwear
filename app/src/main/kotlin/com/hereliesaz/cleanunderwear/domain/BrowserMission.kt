@@ -118,10 +118,17 @@ sealed class BrowserMission {
  */
 private val DRILL_TO_FIRST_RESULT_SCRIPT = """
 (function(){
+  // A result card's own link first. Only if no card carries one, a person link in the page
+  // body, skipping header/nav/footer so a "People search" menu item never wins.
   var firstLink = document.querySelector(
-    '.person-card a[href], .result-card a[href], .search-result a[href],' +
-    ' [data-result-card] a[href], a[href*="/person"], a[href*="/people"]'
+    '.person-card a[href], .result-card a[href], .search-result a[href], [data-result-card] a[href]'
   );
+  if (!firstLink) {
+    var links = document.querySelectorAll('a[href*="/person"], a[href*="/people"]');
+    for (var i = 0; i < links.length; i++) {
+      if (!links[i].closest('header, nav, footer, [role="navigation"]')) { firstLink = links[i]; break; }
+    }
+  }
   var hasList = document.querySelector(
     '.person-card, .result-card, .search-result, [data-result-card]'
   );
@@ -153,17 +160,19 @@ private val DRILL_TO_FIRST_RESULT_SCRIPT = """
 private val FACEBOOK_HARVEST_SCRIPT = """
 (function(){
   var collected = document.documentElement.outerHTML;
+  // Every page fetched once, and a hard page cap, so a "more" link that keeps pointing at a
+  // page already seen ends the walk instead of looping.
+  var visited = {};
+  visited[window.location.pathname + window.location.search] = true;
+  var pages = 0;
   function nextBatch() {
     var more = document.querySelector('a[href*="/friends"]:not([href*="profile"])');
-    if (!more) {
+    var href = more ? more.getAttribute('href') : null;
+    if (!href || visited[href] || ++pages > 50) {
       window.HTMLOUT.dump(collected);
       return;
     }
-    var href = more.getAttribute('href');
-    if (!href || href === window.location.pathname) {
-      window.HTMLOUT.dump(collected);
-      return;
-    }
+    visited[href] = true;
     fetch(href, { credentials: 'include' })
       .then(function(r){ return r.text(); })
       .then(function(html){

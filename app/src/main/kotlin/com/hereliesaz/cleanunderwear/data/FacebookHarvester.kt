@@ -52,7 +52,15 @@ class FacebookHarvester @Inject constructor() {
         // navigation chrome by ignoring known noise links.
         val noise = setOf(
             "Friends", "Mutual friends", "Followers", "Following",
-            "See all", "See more", "Edit profile", "Home", "Menu"
+            "See all", "See more", "Edit profile", "Home", "Menu",
+            "Messages", "Notifications", "Marketplace", "Groups", "Watch", "Events", "Pages",
+            "Settings", "Bookmarks", "Search", "Log out", "Logout", "Help", "Saved", "Memories"
+        )
+        // Single-segment paths that are Facebook's own pages, not a friend's profile.
+        val reservedPaths = setOf(
+            "home.php", "messages", "notifications", "marketplace", "groups", "watch", "events",
+            "pages", "settings", "bookmarks", "search", "help", "friends", "menu", "login", "logout.php",
+            "saved", "memories", "gaming", "reel", "stories", "privacy", "policies"
         )
         val elements = doc.select("a[href]")
 
@@ -63,6 +71,8 @@ class FacebookHarvester @Inject constructor() {
                 href.matches(Regex("^/[A-Za-z0-9._-]+(?:/)?(?:\\?[A-Za-z0-9._%=&-]*)?$")) ||
                 href.contains("/friends/?profile_id=")
             if (!looksLikeProfile) continue
+            val firstSegment = href.trimStart('/').substringBefore('?').substringBefore('/').lowercase()
+            if (!href.contains("profile.php") && firstSegment in reservedPaths) continue
 
             val name = element.text().trim()
             if (name.isBlank() || name in noise) continue

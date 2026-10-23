@@ -44,7 +44,8 @@ class CyberBackgroundChecksEnricherTest {
         assertNotNull(f)
         assertEquals("John Alan Smith", f!!.name)
         assertEquals("Alan", f.middleName)
-        assertTrue(f.dob!!.contains("45"))
+        // A bare age is pinned to a birth year so it doesn't read as "45" forever.
+        assertEquals("~${java.time.Year.now().value - 45}", f.dob)
     }
 
     @Test
@@ -328,19 +329,60 @@ class CyberBackgroundChecksEnricherTest {
 
     @Test
     fun enrich_nameSearchConsistentWithRealName_isVerifiedAndFillsGaps() {
-        val t = target(displayName = "John Smith")
+        val t = target(displayName = "John Smith", phone = "512-555-0199")
         val outcome = enricher.enrich(
             t,
             listOf(
                 BrowserMission.CbcByName("John Smith") to
                     CyberBackgroundChecksEnricher.Findings(
-                        name = "John Smith", address = "5 Oak St", phone = null
+                        name = "John Smith", address = "5 Oak St", phone = "(512) 555-0100"
                     )
             )
         )
         assertTrue(outcome.verified)
         assertEquals("John Smith", outcome.target.displayName)
         assertEquals("5 Oak St", outcome.target.residenceInfo)
+    }
+
+    @Test
+    fun enrich_nameSearchWithNothingElseInCommon_isNotMerged() {
+        // Whoever the site ranks first among every John Smith is a guess, not the contact.
+        val t = target(displayName = "John Smith", phone = "512-555-0199")
+        val outcome = enricher.enrich(
+            t,
+            listOf(
+                BrowserMission.CbcByName("John Smith") to
+                    CyberBackgroundChecksEnricher.Findings(
+                        name = "John Smith", address = "9 Elm St, Tulsa, OK", phone = "918-555-0100", dob = "1950"
+                    )
+            )
+        )
+        assertFalse(outcome.verified)
+        assertEquals(null, outcome.target.dateOfBirth)
+    }
+
+    @Test
+    fun enrich_conflictingPhoneCardContributesNothing() {
+        // A recycled number's new owner must not supply the address, even when a name card verifies.
+        val t = target(displayName = "John Smith", phone = "512-555-0199")
+        val outcome = enricher.enrich(
+            t,
+            listOf(
+                BrowserMission.CbcByPhone("5125550199") to
+                    CyberBackgroundChecksEnricher.Findings(name = "Mary Jones", address = "1 Stranger Rd", phone = null),
+                BrowserMission.CbcByEmail("j@x.com") to
+                    CyberBackgroundChecksEnricher.Findings(name = "John Smith", address = "5 Oak St", phone = null)
+            )
+        )
+        assertTrue(outcome.verified)
+        assertEquals("5 Oak St", outcome.target.residenceInfo)
+    }
+
+    @Test
+    fun names_shortFormsOnlyMatchTrueLongForms() {
+        assertTrue(enricher.namesConsistent("Ron Smith", "Ronald Smith"))
+        assertFalse(enricher.namesConsistent("Eric Smith", "Erica Smith"))
+        assertFalse(enricher.namesConsistent("Don Smith", "Donna Smith"))
     }
 
     @Test
@@ -384,13 +426,13 @@ class CyberBackgroundChecksEnricherTest {
     fun enrich_firstInitialMatchCountsAsConsistent() {
         // "Jon Smith" vs "Jonathan Smith" — same last name, matching first
         // initial (a common nickname/long-form variation).
-        val t = target(displayName = "Jon Smith")
+        val t = target(displayName = "Jon Smith", phone = "512-555-0199")
         val outcome = enricher.enrich(
             t,
             listOf(
                 BrowserMission.CbcByName("Jon Smith") to
                     CyberBackgroundChecksEnricher.Findings(
-                        name = "Jonathan Smith", address = "5 Oak St", phone = null
+                        name = "Jonathan Smith", address = "5 Oak St", phone = "512-555-0199"
                     )
             )
         )
