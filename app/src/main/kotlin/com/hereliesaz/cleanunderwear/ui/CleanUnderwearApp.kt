@@ -34,6 +34,7 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     
     val operationState by viewModel.operationState.collectAsState()
+    val operationInBackground by viewModel.operationInBackground.collectAsState()
     val showDiagnosticLog by viewModel.showDiagnosticLog.collectAsState()
     val diagnosticLogs by viewModel.diagnosticLogs.collectAsState()
     val showIgnored by viewModel.showIgnored.collectAsState()
@@ -233,18 +234,35 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                     }
                 }
             }
-            // The rail's global loading overlay swallows every touch, so the busy indicator is
-            // drawn here instead: the same AzLoad, with no input handling, so taps pass through.
+            // A running operation covers the app (OperationOverlay), unless the user put one
+            // that keeps going aside; then a bar at the bottom says it is still running.
             if (operationState.isRunning) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    LoadingCaption(operationState.description.ifBlank { "Working…" })
+                if (operationInBackground) {
+                    OperationBar(
+                        state = operationState,
+                        onShow = viewModel::showOperation,
+                        onCancel = viewModel::cancelOperation,
+                        modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
+                    )
+                } else {
+                    OperationOverlay(
+                        state = operationState,
+                        onCancel = viewModel::cancelOperation,
+                        onKeepUsingApp = viewModel::sendOperationToBackground
+                    )
                 }
             }
 
-            // One-line results ("Imported 42 contacts", "No new matches").
+            // One-line results ("Imported 42 contacts", "No new matches"), above the bar if it shows.
             val snackbar = remember { SnackbarHostState() }
             LaunchedEffect(Unit) { viewModel.messages.collect { snackbar.showSnackbar(it) } }
-            SnackbarHost(snackbar, modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
+            SnackbarHost(
+                snackbar,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(bottom = if (operationState.isRunning && operationInBackground) 64.dp else 0.dp)
+            )
             }
         }
     }

@@ -14,6 +14,13 @@ Use these rather than building a screen's own:
 - `AppAction` (the main button), `AppTextAction` (secondary), `AppDialog`
 - `LoadingCaption`, `StatusBadge` / `statusSpec` (the one place a status gets its label and icon), `DetailRow`
 
+## Busy screen (`ui/OperationOverlay.kt`)
+While an operation runs, everything behind it, rail included, is darkened and blurred (blur needs Android 12 and a device that allows it; without it the screen is darkened further). The loader and what is happening sit in the middle, **Cancel** at the bottom; Cancel keeps what was finished before it. It is always drawn dark, in either theme.
+- An operation that keeps going on its own says so, and **Keep using the app** (or Back) puts it aside: a bar at the bottom shows it is still running, with Cancel, and tapping it brings the busy screen back. Reading contacts keeps going while the app is in use; the records check runs in WorkManager and keeps going after the user leaves the app.
+- An operation that needs the user (a lookup in the browser) has no "keep using" option.
+- Delete everything can't be cancelled: half a deletion is worse than none, and it takes a moment.
+- In the browser, an automated page is darkened and blurred the same way, with Cancel at the bottom; it lifts when the page needs the user.
+
 ## Writing
 Plain words for the person, not the system: "Checked daily", "Possible match", "Fill in details", not "MONITORING" or "Resolve". Say what will happen before it does (a confirmation names how many contacts a lookup will send), and what a setting costs. A possible death or arrest is never stated as fact.
 

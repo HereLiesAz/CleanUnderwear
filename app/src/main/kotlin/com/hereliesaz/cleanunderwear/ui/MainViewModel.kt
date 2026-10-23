@@ -228,8 +228,59 @@ class MainViewModel @Inject constructor(
     data class OperationState(
         val isRunning: Boolean = false,
         val description: String = "",
-        val progress: Float = 0f // 0.0 to 1.0, or -1f for indeterminate
+        val progress: Float = 0f, // 0.0 to 1.0, or -1f for indeterminate
+        /** Whether Cancel can stop it partway without leaving a mess. */
+        val cancellable: Boolean = true,
+        /** Whether it keeps going if the user stops watching it. */
+        val continues: Continues = Continues.NO
     )
+
+    enum class Continues {
+        /** Needs the user's attention; the busy screen stays until it ends or is cancelled. */
+        NO,
+        /** Keeps going while the user does other things in the app. */
+        IN_APP,
+        /** Keeps going in the app and after the user leaves it (WorkManager). */
+        ANYWHERE
+    }
+
+    /** Stops the operation now running; set by [begin]. */
+    private var cancelRunning: (() -> Unit)? = null
+
+    /** The user put the running operation aside to keep using the app; a bar shows it instead. */
+    private val _operationInBackground = MutableStateFlow(false)
+    val operationInBackground: StateFlow<Boolean> = _operationInBackground
+
+    /**
+     * Shows [state] as the running operation. Cancel stops the calling coroutine, or runs [cancel]
+     * when the work lives elsewhere. A new operation starts in front of the user.
+     */
+    private suspend fun begin(state: OperationState, cancel: (() -> Unit)? = null) {
+        val job = kotlinx.coroutines.currentCoroutineContext()[kotlinx.coroutines.Job]
+        cancelRunning = cancel ?: { job?.cancel() }
+        if (!_operationState.value.isRunning) _operationInBackground.value = false
+        _operationState.value = state.copy(isRunning = true)
+    }
+
+    /** Cancel on the busy screen or its bar. What was finished before stays. */
+    fun cancelOperation() {
+        val state = _operationState.value
+        if (!state.isRunning || !state.cancellable) return
+        resolveCancellationRequested = true
+        cancelRunning?.invoke()
+        cancelRunning = null
+        _operationState.value = OperationState(isRunning = false)
+        _operationInBackground.value = false
+        post("Stopped. What was done before stopping is kept.")
+    }
+
+    fun sendOperationToBackground() {
+        if (_operationState.value.continues != Continues.NO) _operationInBackground.value = true
+    }
+
+    fun showOperation() {
+        _operationInBackground.value = false
+    }
 
     /**
      * One-line results for the user ("Imported 42 contacts", "Nothing was due for a check"),
@@ -395,11 +446,10 @@ class MainViewModel @Inject constructor(
                         )
                         return@runExclusive
                     }
-                    _operationState.value = OperationState(
-                        isRunning = true,
+                    begin(OperationState(
                         description = "Looking up ${target.displayName}...",
                         progress = -1f
-                    )
+                    ))
                     val extracted = mutableListOf<Pair<BrowserMission, String>>()
                     val outcome = launchMissionsAndAwait(missions) { mission, html ->
                         // One result per search: a page re-extracted after a rotation replaces the first.
@@ -605,7 +655,8 @@ class MainViewModel @Inject constructor(
     fun deleteEverything() {
         viewModelScope.launch {
             pipelineCoordinator.runExclusive("delete-everything") {
-                _operationState.value = OperationState(isRunning = true, description = "Deleting…", progress = -1f)
+                // Half a deletion is worse than none; it's quick, so it runs to the end.
+                begin(OperationState(description = "Deleting…", progress = -1f, cancellable = false))
                 val notes = withContext(Dispatchers.IO) { contactSyncer.removeAllBlocks() }
                 repository.wipeAll()
                 _operationState.value = OperationState(isRunning = false)
@@ -631,7 +682,7 @@ class MainViewModel @Inject constructor(
 
     fun addManualTarget(name: String, phone: String?, email: String?) {
         viewModelScope.launch {
-            _operationState.value = OperationState(isRunning = true, description = "Processing manual ingestion...", progress = -1f)
+            begin(OperationState(description = "Adding $name…", progress = -1f))
             
             // Re-use de-duplication and AI validation logic via UseCase if possible, 
             // or just build a single Target and insert.
@@ -676,7 +727,7 @@ class MainViewModel @Inject constructor(
                 // Serialised with the daily check and every other job that writes the registry,
                 // and run off the main thread: harvest, name checks and dedup are heavy.
                 pipelineCoordinator.runExclusive("contact-sweep") { try {
-                    _operationState.value = OperationState(isRunning = true, description = "Reading contacts...", progress = 0.1f)
+                    begin(OperationState(description = "Reading contacts...", progress = 0.1f, continues = Continues.IN_APP))
                     val before = repository.getTargetsPaged(limit = Int.MAX_VALUE, offset = 0).size
                     withContext(Dispatchers.Default) {
                         // 1. Ingest raw data from enabled sources
@@ -719,11 +770,10 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             pipelineCoordinator.runExclusive("facebook-harvest") {
                 try {
-                    _operationState.value = OperationState(
-                        isRunning = true,
+                    begin(OperationState(
                         description = "Awaiting visible Facebook session...",
                         progress = -1f
-                    )
+                    ))
                     val html = launchMissionAndAwait(BrowserMission.HarvestFacebookFriends)
                     if (html.isNullOrBlank()) return@runExclusive
                     _operationState.value = _operationState.value.copy(
@@ -794,11 +844,10 @@ class MainViewModel @Inject constructor(
                 }
 
                 val total = unverified.size
-                _operationState.value = OperationState(
-                    isRunning = true,
+                begin(OperationState(
                     description = "Looking up 1 of $total on CyberBackgroundChecks...",
                     progress = 0f
-                )
+                ))
                 var filled = 0
 
                 for ((index, lite) in unverified.withIndex()) {
@@ -813,8 +862,7 @@ class MainViewModel @Inject constructor(
                         continue
                     }
 
-                    _operationState.value = OperationState(
-                        isRunning = true,
+                    _operationState.value = _operationState.value.copy(
                         description = "Looking up ${target.displayName} (${index + 1} of $total)",
                         progress = index.toFloat() / total
                     )
@@ -962,7 +1010,7 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             pipelineCoordinator.runExclusive(key) {
                 try {
-                    _operationState.value = OperationState(isRunning = true, description = "Importing $what. Sign in if asked.", progress = -1f)
+                    begin(OperationState(description = "Importing $what. Sign in if asked.", progress = -1f))
                     val html = launchMissionAndAwait(mission)
                     if (html.isNullOrBlank()) return@runExclusive
                     val found = parse(html)
@@ -980,6 +1028,7 @@ class MainViewModel @Inject constructor(
 
     fun triggerManualInterrogation() {
         // One manual check at a time: a second tap while one runs joins it.
+        manualCheckCancelled = false
         val request = OneTimeWorkRequestBuilder<ScrapingWorker>().build()
         workManager.enqueueUniqueWork("manual_check", androidx.work.ExistingWorkPolicy.KEEP, request)
         if (watchingManualCheck) return
@@ -1000,13 +1049,24 @@ class MainViewModel @Inject constructor(
 
     @Volatile private var watchingManualCheck = false
 
+    /** Set by Cancel, so a last progress report from the stopping work doesn't bring the busy screen back. */
+    @Volatile private var manualCheckCancelled = false
+
     private fun onManualCheck(workInfo: androidx.work.WorkInfo?) {
         when (workInfo?.state) {
             androidx.work.WorkInfo.State.RUNNING -> {
+                if (manualCheckCancelled) return
+                if (!_operationState.value.isRunning) _operationInBackground.value = false
+                // The check runs in WorkManager, not here: Cancel stops the work itself.
+                cancelRunning = {
+                    manualCheckCancelled = true
+                    workManager.cancelUniqueWork("manual_check")
+                }
                 _operationState.value = OperationState(
                     isRunning = true,
                     description = workInfo.progress.getString("description") ?: "Checking records…",
-                    progress = workInfo.progress.getFloat("progress", -1f)
+                    progress = workInfo.progress.getFloat("progress", -1f),
+                    continues = Continues.ANYWHERE
                 )
             }
             androidx.work.WorkInfo.State.SUCCEEDED -> {
