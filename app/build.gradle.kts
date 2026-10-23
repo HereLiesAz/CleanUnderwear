@@ -15,12 +15,9 @@ val versionProps = Properties().apply {
     }
 }
 
-// version.properties is the single source of truth for the version. The build
-// reads it verbatim and never mutates it — bumping the version is a deliberate
-// edit to that file, not a side effect of compiling. (Previously the build
-// auto-incremented versionBuild/versionPatch and wrote them back, so the APK
-// version was always the file value + 1 and the committed file drifted on
-// every local build.)
+// The build reads version.properties and never writes it. The release workflows bump it
+// after each release and pass the released name and code as -P properties (below); a local
+// build gets major.minor.patch from the file.
 // Properties.load() strips leading but not trailing whitespace, so trim each
 // value — a stray trailing space in a hand-edited file would otherwise crash
 // versionBuild.toInt() or produce a malformed versionName like "1.0.5 ".
