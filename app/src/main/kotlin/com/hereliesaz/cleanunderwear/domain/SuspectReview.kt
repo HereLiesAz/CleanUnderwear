@@ -201,7 +201,7 @@ class SuspectReview @Inject constructor(
         repository.updateTarget(
             target.copy(
                 phoneNumber = phone,
-                areaCode = StringSimilarity.normalizePhone(phone)?.take(3) ?: target.areaCode
+                areaCode = StringSimilarity.nanpAreaCode(phone) ?: target.areaCode
             )
         )
         decide(case, "ADOPTED")

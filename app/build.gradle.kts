@@ -50,6 +50,12 @@ configurations.configureEach {
     }
 }
 
+// Room writes each schema version here (committed), so migrations can be tested against the
+// exact shape every released version had.
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 android {
     namespace = "com.hereliesaz.cleanunderwear"
     compileSdk = 37

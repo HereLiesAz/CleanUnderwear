@@ -95,6 +95,8 @@ class WhatsAppHarvester @Inject constructor(
             }
         }
 
+        // Chat titles are the only identifier WhatsApp Web exposes, so a repeated
+        // title (pagination overlap) is treated as the same chat.
         val deduped = contacts.distinctBy { it.displayName }
         DiagnosticLogger.log("WhatsApp Harvest: Identified ${deduped.size} chat partners.")
         return deduped

@@ -135,21 +135,20 @@ class ContactHarvester @Inject constructor(
             val number = data.phoneNumber
             val email = data.email
             
-            // Allow email-only or phone-only contacts
-            if (number == null && email == null) return@mapNotNull null
-            
             val cleanNumber = number?.filter { char -> char.isDigit() }
-            
-            if (cleanNumber != null) {
-                // Filter out clearly non-person entities (short codes, etc.)
-                // We allow 7-digit local numbers and 10+ digit full numbers.
-                if (cleanNumber.length < 7 || cleanNumber.length in 8..9) return@mapNotNull null
-            }
 
+            // Short codes and fragments aren't people's numbers; drop the number, not the
+            // contact, so an email or address still comes through. 7-digit local numbers and
+            // 8-9 digit international numbers are kept.
+            val usableNumber = number?.takeIf { (cleanNumber?.length ?: 0) >= 7 }
+            if (usableNumber == null && email == null) return@mapNotNull null
+
+            // Only North American numbers carry an area code the catalog can resolve; a London
+            // "+44 20…" must not read as Maine's 207.
             val areaCode = when {
-                cleanNumber == null -> null
-                cleanNumber.length >= 10 -> cleanNumber.takeLast(10).take(3)
-                else -> "LOCAL"
+                usableNumber == null -> null
+                cleanNumber!!.length == 7 -> "LOCAL"
+                else -> com.hereliesaz.cleanunderwear.match.StringSimilarity.nanpAreaCode(usableNumber)
             }
 
             val sourceAccounts = if (data.accounts.isEmpty()) {
@@ -160,7 +159,7 @@ class ContactHarvester @Inject constructor(
 
             Target(
                 displayName = data.displayName,
-                phoneNumber = number,
+                phoneNumber = usableNumber,
                 email = email,
                 areaCode = areaCode,
                 sourceAccount = sourceAccounts,

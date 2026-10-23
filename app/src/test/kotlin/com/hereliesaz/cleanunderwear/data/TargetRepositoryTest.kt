@@ -103,6 +103,28 @@ class TargetRepositoryTest {
             }
         }
 
+        override suspend fun ignore(id: Int, timestamp: Long) {
+            targets.replaceAll {
+                if (it.id != id) it
+                else it.copy(
+                    statusBeforeIgnore = if (it.status == TargetStatus.IGNORED) it.statusBeforeIgnore else it.status,
+                    status = TargetStatus.IGNORED,
+                    lastStatusChangeTimestamp = timestamp
+                )
+            }
+        }
+
+        override suspend fun unignore(id: Int, timestamp: Long) {
+            targets.replaceAll {
+                if (it.id != id || it.status != TargetStatus.IGNORED) it
+                else it.copy(
+                    status = it.statusBeforeIgnore ?: TargetStatus.UNKNOWN,
+                    statusBeforeIgnore = null,
+                    lastStatusChangeTimestamp = timestamp
+                )
+            }
+        }
+
         override suspend fun updateStatusOnly(id: Int, status: TargetStatus, timestamp: Long) {
             targets.replaceAll {
                 if (it.id == id) it.copy(status = status, lastStatusChangeTimestamp = timestamp)

@@ -320,9 +320,10 @@ class MainViewModel @Inject constructor(
 
     /** Undo the merge behind [case]; the absorbed contact comes back as its own row. */
     fun splitMerge(case: SuspectCase) {
-        applyVerdict(case, rescan = true) { case.ledgerId?.let { suspectReview.split(it) } }
-        // Undoing a merge can take back a number the survivor had only through it; look one up.
-        viewModelScope.launch {
+        applyVerdict(case, rescan = true) {
+            case.ledgerId?.let { suspectReview.split(it) }
+            // Undoing a merge can take back a number the survivor had only through it; look one
+            // up, reading the survivor after the split has landed.
             val survivor = repository.getTargetById(case.targetId)
             if (survivor != null && survivor.phoneNumber.isNullOrBlank()) findAlternates(case.targetId, null)
         }
@@ -409,7 +410,7 @@ class MainViewModel @Inject constructor(
                     target.copy(
                         phoneNumber = info.phone ?: target.phoneNumber,
                         areaCode = info.phone
-                            ?.let { com.hereliesaz.cleanunderwear.match.StringSimilarity.normalizePhone(it)?.take(3) }
+                            ?.let { com.hereliesaz.cleanunderwear.match.StringSimilarity.nanpAreaCode(it) }
                             ?: target.areaCode,
                         residenceInfo = target.residenceInfo ?: info.address
                     )
@@ -444,13 +445,13 @@ class MainViewModel @Inject constructor(
 
     fun ignoreTarget(id: Int) {
         viewModelScope.launch {
-            repository.updateStatusOnly(id, TargetStatus.IGNORED, System.currentTimeMillis())
+            repository.ignore(id, System.currentTimeMillis())
         }
     }
 
     fun restoreTarget(id: Int) {
         viewModelScope.launch {
-            repository.updateStatusOnly(id, TargetStatus.UNKNOWN, System.currentTimeMillis())
+            repository.unignore(id, System.currentTimeMillis())
         }
     }
 
@@ -527,7 +528,10 @@ class MainViewModel @Inject constructor(
                 displayName = name,
                 phoneNumber = phone,
                 email = email,
-                areaCode = phone?.filter { it.isDigit() }?.let { if (it.length >= 10) it.takeLast(10).take(3) else "LOCAL" },
+                areaCode = phone?.let {
+                    com.hereliesaz.cleanunderwear.match.StringSimilarity.nanpAreaCode(it)
+                        ?: "LOCAL".takeIf { _ -> it.count(Char::isDigit) == 7 }
+                },
                 sourceAccount = "Manual Entry",
                 status = TargetStatus.UNKNOWN
             )

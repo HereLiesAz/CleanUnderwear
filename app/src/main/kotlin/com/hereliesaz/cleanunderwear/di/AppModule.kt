@@ -58,8 +58,8 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideTargetRepository(targetDao: TargetDao): TargetRepository {
-        return OfflineTargetRepository(targetDao)
+    fun provideTargetRepository(targetDao: TargetDao, database: CleanUnderwearDatabase): TargetRepository {
+        return OfflineTargetRepository(targetDao, database)
     }
 
     @Provides

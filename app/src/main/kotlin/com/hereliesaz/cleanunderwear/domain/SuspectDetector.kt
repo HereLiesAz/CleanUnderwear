@@ -297,7 +297,7 @@ object SuspectDetector {
                     "People do carry two numbers (work and personal, a second SIM), so overlap alone doesn't prove two people.",
                     1.0
                 )
-            } else {
+            } else if (overlap <= 0) {
                 val keptQuiet = kept.lastMillis <= absorbed.lastMillis
                 val quiet = if (keptQuiet) kept else absorbed
                 val quietNumber = if (keptQuiet) i.survivorPhone else i.absorbedPhone

@@ -239,7 +239,13 @@ class ScrapeTargetsUseCase @Inject constructor(
             }
             if (inconclusive) {
                 emitStep("couldn't read ${failedSources.size} source${if (failedSources.size == 1) "" else "s"} — will retry")
-                commit(target) { current -> current.copy(lastScrapedTimestamp = now, nextScheduledCheck = nextCheck) }
+                commit(target) { current ->
+                    current.copy(
+                        lastScrapedTimestamp = now,
+                        nextScheduledCheck = nextCheck,
+                        unreadSources = failedSources.joinToString(", ")
+                    )
+                }
                 return
             }
 
@@ -258,8 +264,8 @@ class ScrapeTargetsUseCase @Inject constructor(
             val isDeath = best?.candidate?.kind == EventKind.DEATH
 
             emitStep("persisting findings")
-            // Every source was read. A match replaces the evidence; no match means the record is
-            // gone (released, or never there), so the old evidence is cleared with the status.
+            // A match replaces the evidence, whatever else failed. With no match, every source was
+            // read: the record is gone (released, or never there), so old evidence goes with it.
             val updatedTarget = commit(target) { current ->
                 current.copy(
                     status = newStatus,
@@ -271,7 +277,8 @@ class ScrapeTargetsUseCase @Inject constructor(
                     lastVerificationSnippet = best?.candidate?.snippet,
                     matchConfidence = best?.confidence,
                     matchKind = best?.candidate?.kind?.name,
-                    matchReasons = best?.reasons?.joinToString("\n")
+                    matchReasons = best?.reasons?.joinToString("\n"),
+                    unreadSources = failedSources.takeIf { it.isNotEmpty() }?.joinToString(", ")
                 )
             } ?: return
 

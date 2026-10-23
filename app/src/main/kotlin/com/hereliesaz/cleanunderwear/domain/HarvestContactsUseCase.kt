@@ -3,6 +3,7 @@ package com.hereliesaz.cleanunderwear.domain
 import com.hereliesaz.cleanunderwear.data.ContactHarvester
 import com.hereliesaz.cleanunderwear.data.Target
 import com.hereliesaz.cleanunderwear.data.TargetRepository
+import com.hereliesaz.cleanunderwear.match.StringSimilarity
 import com.hereliesaz.cleanunderwear.network.OnDeviceResearchAgent
 import com.hereliesaz.cleanunderwear.util.DiagnosticLogger
 import javax.inject.Inject
@@ -22,21 +23,45 @@ class HarvestContactsUseCase @Inject constructor(
         DiagnosticLogger.log("Consolidation complete: ${processedTargets.size} unique targets verified.")
         
         // 3. Commit to the ledger
-        repository.insertTargets(processedTargets)
+        repository.insertTargets(withoutKnownNameOnlyRows(processedTargets))
     }
 
     suspend fun processManualTargets(manualTargets: List<Target>) {
         val processed = processIntelligence(manualTargets)
-        repository.insertTargets(processed)
+        repository.insertTargets(withoutKnownNameOnlyRows(processed))
     }
+
+    /**
+     * Drops rows with nothing but a name (social imports) that the registry already holds under
+     * the same name from the same account. Dedup can't merge name-only pairs, so without this
+     * every re-import would add another copy of every friend.
+     */
+    private suspend fun withoutKnownNameOnlyRows(rows: List<Target>): List<Target> {
+        if (rows.none { it.phoneNumber.isNullOrBlank() && it.email.isNullOrBlank() }) return rows
+        val known = repository.getTargetWorkInfoPaged(limit = Int.MAX_VALUE, offset = 0)
+            .filter { it.phoneNumber.isNullOrBlank() && it.email.isNullOrBlank() }
+            .map { nameOnlyKey(it.displayName, it.sourceAccount) }
+            .toSet()
+        return rows.filterNot {
+            it.phoneNumber.isNullOrBlank() && it.email.isNullOrBlank() &&
+                nameOnlyKey(it.displayName, it.sourceAccount) in known
+        }
+    }
+
+    private fun nameOnlyKey(name: String, source: String?) =
+        name.trim().lowercase() + "|" + source.orEmpty().trim().lowercase()
 
     private fun processIntelligence(targets: List<Target>): List<Target> {
         val uniqueTargets = mutableMapOf<String, Target>()
         var rejectedNameCount = 0
 
         targets.forEach { target ->
-            // Use phone number or email as a primary key for de-duplication
-            val key = target.phoneNumber ?: target.email ?: target.displayName
+            // Same person if the number (or email) and the name agree; two people sharing a
+            // landline stay two rows, and formatting differences don't split one person.
+            val contactKey = StringSimilarity.normalizePhone(target.phoneNumber)
+                ?: StringSimilarity.normalizeEmail(target.email)
+                ?: target.sourceAccount.orEmpty()
+            val key = contactKey + "|" + target.displayName.trim().lowercase()
 
             val existing = uniqueTargets[key]
             if (existing != null) {

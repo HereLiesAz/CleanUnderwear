@@ -43,7 +43,9 @@ class FacebookHarvester @Inject constructor() {
     }
 
     private fun parseFriendsDocument(doc: Document): List<Target> {
-        val friends = mutableListOf<Target>()
+        // Keyed by profile link: one entry per account, so two friends with the
+        // same name stay two people while a repeated row is counted once.
+        val friends = linkedMapOf<String, Target>()
 
         // mbasic friend rows are anchors whose href points at the user's
         // profile and whose text is the friend's display name. We exclude
@@ -66,14 +68,17 @@ class FacebookHarvester @Inject constructor() {
             if (name.isBlank() || name in noise) continue
             if (name.length < 2) continue
 
-            friends += Target(
-                displayName = name,
-                sourceAccount = "Meta (Facebook)",
-                status = TargetStatus.UNKNOWN
+            friends.putIfAbsent(
+                href.substringBefore('#').trimEnd('/'),
+                Target(
+                    displayName = name,
+                    sourceAccount = "Meta (Facebook)",
+                    status = TargetStatus.UNKNOWN
+                )
             )
         }
 
-        val deduped = friends.distinctBy { it.displayName }
+        val deduped = friends.values.toList()
         DiagnosticLogger.log("Facebook Harvest: parsed ${deduped.size} friends from visible session.")
         return deduped
     }

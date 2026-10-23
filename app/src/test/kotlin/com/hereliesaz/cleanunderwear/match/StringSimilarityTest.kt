@@ -90,4 +90,26 @@ class StringSimilarityTest {
         assertTrue(StringSimilarity.streetTokens(null).isEmpty())
         assertTrue(StringSimilarity.streetTokens("").isEmpty())
     }
+
+    @Test
+    fun normalizePhone_keepsInternationalNumbersApart() {
+        assertEquals(
+            false,
+            StringSimilarity.normalizePhone("+44 7700 900123") == StringSimilarity.normalizePhone("+44 7700 900199")
+        )
+    }
+
+    @Test
+    fun normalizePhone_matchesTrunkAndCountryCodeForms() {
+        assertEquals(StringSimilarity.normalizePhone("4915112345678"), StringSimilarity.normalizePhone("0151 12345678"))
+        assertEquals("12345678", StringSimilarity.normalizePhone("12 34 56 78"))
+    }
+
+    @Test
+    fun nanpAreaCode_onlyForNorthAmericanNumbers() {
+        assertEquals("555", StringSimilarity.nanpAreaCode("+1 (555) 123-4567"))
+        assertEquals("555", StringSimilarity.nanpAreaCode("555-123-4567"))
+        assertEquals(null, StringSimilarity.nanpAreaCode("+44 20 7946 0958"))
+        assertEquals(null, StringSimilarity.nanpAreaCode("612 345 678"))
+    }
 }

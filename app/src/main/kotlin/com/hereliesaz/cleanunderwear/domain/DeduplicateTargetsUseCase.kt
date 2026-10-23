@@ -5,6 +5,7 @@ import com.hereliesaz.cleanunderwear.data.MergeLedger
 import com.hereliesaz.cleanunderwear.data.MergeRecord
 import com.hereliesaz.cleanunderwear.data.MergeSignature
 import com.hereliesaz.cleanunderwear.data.Target
+import com.hereliesaz.cleanunderwear.data.TargetStatus
 import com.hereliesaz.cleanunderwear.data.TargetLite
 import com.hereliesaz.cleanunderwear.data.TargetRepository
 import com.hereliesaz.cleanunderwear.data.TargetSnapshot
@@ -144,18 +145,22 @@ class DeduplicateTargetsUseCase(
 
                 val winner = pickWinnerFull(component)
                 val losers = component.filter { it.id != winner.id }
-                var acc = winner
-                for (loser in losers) {
-                    val next = mergeFields(acc, loser)
-                    recordMerge(scorer, survivorBefore = acc, survivorAfter = next, absorbed = loser, winnerId = winner.id)
-                    acc = next
+                // Ledger, survivor and deletions in one transaction: a merge interrupted halfway
+                // would leave a ledger entry for a row that still exists, and a split would copy it.
+                repository.inTransaction {
+                    var acc = winner
+                    for (loser in losers) {
+                        val next = mergeFields(acc, loser)
+                        recordMerge(scorer, survivorBefore = acc, survivorAfter = next, absorbed = loser, winnerId = winner.id)
+                        acc = next
+                    }
+                    repository.updateTarget(acc)
+                    for (loser in losers) {
+                        ledger?.reassignSurvivor(loser.id, winner.id)
+                        repository.deleteTarget(loser)
+                    }
                 }
-                repository.updateTarget(acc)
-                for (loser in losers) {
-                    ledger?.reassignSurvivor(loser.id, winner.id)
-                    repository.deleteTarget(loser)
-                    merged++
-                }
+                merged += losers.size
             }
 
             processed++
@@ -228,7 +233,8 @@ class DeduplicateTargetsUseCase(
         winnerId: Int
     ) {
         val ledger = ledger ?: return
-        if (isExactCopy(survivorBefore, absorbed)) return
+        // A re-harvested copy that adds nothing and carries no state of its own needs no undo.
+        if (isExactCopy(survivorBefore, absorbed) && survivorBefore == survivorAfter && !carriesState(absorbed)) return
         val verdict = scorer.score(toMatchRecord(survivorBefore), toMatchRecord(absorbed))
         ledger.record(
             MergeRecord(
@@ -247,6 +253,11 @@ class DeduplicateTargetsUseCase(
             )
         )
     }
+
+    /** Whether [t] holds anything the user or a check put there, beyond what a fresh import has. */
+    private fun carriesState(t: Target): Boolean =
+        statusRank(t.status) > statusRank(TargetStatus.MONITORING) ||
+            !t.dismissedMatchKeys.isNullOrBlank() || !t.dateOfBirth.isNullOrBlank() || !t.middleName.isNullOrBlank()
 
     /** Same name, number and email: a re-harvested copy, not a distinct identity. */
     private fun isExactCopy(a: Target, b: Target): Boolean =
@@ -280,9 +291,14 @@ class DeduplicateTargetsUseCase(
     private fun surnameKey(displayName: String): String? =
         MatchRecord.fromDisplayName(displayName).surnameKey
 
-    private fun pickWinnerFull(group: List<Target>): Target {
-        return group.maxByOrNull { fullFieldScore(it) } ?: group.first()
-    }
+    /**
+     * The row that survives: the one holding the weightiest status (a confirmed or pending match,
+     * an ignore), then the most complete; ties go to the oldest row.
+     */
+    private fun pickWinnerFull(group: List<Target>): Target =
+        group.sortedBy { it.id }
+            .maxWithOrNull(compareBy<Target>({ statusRank(it.status) }, { fullFieldScore(it) }))
+            ?: group.first()
 
     private fun fullFieldScore(t: Target): Int {
         var score = 0
@@ -298,15 +314,22 @@ class DeduplicateTargetsUseCase(
     }
 
     private fun identityKey(t: TargetLite): String {
-        val phone = t.phoneNumber?.filter { it.isDigit() }?.takeIf { it.length >= 7 }
+        // Same normalisation the scorer uses, so "+1 555…" and "(555) …" land in one block.
+        val phone = StringSimilarity.normalizePhone(t.phoneNumber)?.takeIf { it.length >= 7 }
         if (phone != null) return "phone:$phone"
         val email = t.email?.lowercase()?.trim()?.takeIf { it.isNotBlank() }
         if (email != null) return "email:$email"
         return "name:${t.displayName.lowercase().trim()}"
     }
 
+    /**
+     * Folds [from] into [into]. Identity fields fill gaps; the weightier status wins and brings its
+     * match evidence with it; dismissed records are unioned, so a false positive the user rejected
+     * on either copy stays rejected. Nothing the absorbed row held is dropped without a trace.
+     */
     private fun mergeFields(into: Target, from: Target): Target {
         val mergedSources = mergeSources(into.sourceAccount, from.sourceAccount)
+        val statusFrom = if (statusRank(from.status) > statusRank(into.status)) from else into
         return into.copy(
             displayName = preferNonPlaceholder(into.displayName, from.displayName),
             phoneNumber = into.phoneNumber ?: from.phoneNumber,
@@ -315,13 +338,38 @@ class DeduplicateTargetsUseCase(
             areaCode = into.areaCode ?: from.areaCode,
             jurisdiction = into.jurisdiction ?: from.jurisdiction,
             residenceInfo = into.residenceInfo ?: from.residenceInfo,
-            lockupUrl = into.lockupUrl ?: from.lockupUrl,
-            obituaryUrl = into.obituaryUrl ?: from.obituaryUrl,
+            middleName = into.middleName ?: from.middleName,
+            dateOfBirth = into.dateOfBirth ?: from.dateOfBirth,
+            enrichmentProvenance = into.enrichmentProvenance ?: from.enrichmentProvenance,
+            status = statusFrom.status,
+            lockupUrl = statusFrom.lockupUrl ?: into.lockupUrl ?: from.lockupUrl,
+            obituaryUrl = statusFrom.obituaryUrl ?: into.obituaryUrl ?: from.obituaryUrl,
+            lastVerificationSnippet = statusFrom.lastVerificationSnippet ?: into.lastVerificationSnippet ?: from.lastVerificationSnippet,
+            matchConfidence = statusFrom.matchConfidence,
+            matchKind = statusFrom.matchKind,
+            matchReasons = statusFrom.matchReasons,
+            dismissedMatchKeys = unionCsv(into.dismissedMatchKeys, from.dismissedMatchKeys),
             sourceAccount = mergedSources,
+            checkFrequencyHours = minOf(into.checkFrequencyHours, from.checkFrequencyHours),
+            nextScheduledCheck = minOf(into.nextScheduledCheck, from.nextScheduledCheck),
             lastScrapedTimestamp = maxOf(into.lastScrapedTimestamp, from.lastScrapedTimestamp),
-            lastStatusChangeTimestamp = maxOf(into.lastStatusChangeTimestamp, from.lastStatusChangeTimestamp),
-            lastVerificationSnippet = into.lastVerificationSnippet ?: from.lastVerificationSnippet
+            lastStatusChangeTimestamp = maxOf(into.lastStatusChangeTimestamp, from.lastStatusChangeTimestamp)
         )
+    }
+
+    private fun unionCsv(a: String?, b: String?): String? =
+        (a.orEmpty().split(',') + b.orEmpty().split(','))
+            .map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+            .takeIf { it.isNotEmpty() }?.joinToString(",")
+
+    /** How much a status says about a person: confirmed outranks pending outranks routine. */
+    private fun statusRank(status: TargetStatus): Int = when (status) {
+        TargetStatus.DECEASED, TargetStatus.INCARCERATED -> 5
+        TargetStatus.IGNORED -> 4
+        TargetStatus.POSSIBLE_MATCH -> 3
+        TargetStatus.WEAK_MATCH -> 2
+        TargetStatus.MONITORING -> 1
+        TargetStatus.UNVERIFIED, TargetStatus.UNKNOWN -> 0
     }
 
     private fun preferNonPlaceholder(a: String, b: String): String {

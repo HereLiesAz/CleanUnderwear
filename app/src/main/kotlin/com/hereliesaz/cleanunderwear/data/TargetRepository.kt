@@ -1,5 +1,7 @@
 package com.hereliesaz.cleanunderwear.data
 
+import androidx.room.RoomDatabase
+import androidx.room.withTransaction
 import androidx.paging.PagingSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -46,6 +48,8 @@ interface TargetRepository {
     suspend fun updateMonitorabilityState(id: Int, state: MonitorabilityState)
     suspend fun updateMonitorabilityStateBatch(ids: List<Int>, state: MonitorabilityState)
     suspend fun updateStatusOnly(id: Int, status: TargetStatus, timestamp: Long)
+    suspend fun ignore(id: Int, timestamp: Long) = updateStatusOnly(id, TargetStatus.IGNORED, timestamp)
+    suspend fun unignore(id: Int, timestamp: Long) = updateStatusOnly(id, TargetStatus.UNKNOWN, timestamp)
     suspend fun updateUrls(id: Int, lockupUrl: String?, obituaryUrl: String?)
 
     // Mutations.
@@ -54,9 +58,18 @@ interface TargetRepository {
     suspend fun updateTarget(target: Target)
     suspend fun deleteTarget(target: Target)
     suspend fun wipeSlateClean()
+
+    /** Runs [block] as one database transaction, so a multi-row change lands whole or not at all. */
+    suspend fun <R> inTransaction(block: suspend () -> R): R = block()
 }
 
-class OfflineTargetRepository(private val targetDao: TargetDao) : TargetRepository {
+class OfflineTargetRepository(
+    private val targetDao: TargetDao,
+    private val database: RoomDatabase? = null
+) : TargetRepository {
+
+    override suspend fun <R> inTransaction(block: suspend () -> R): R =
+        database?.withTransaction { block() } ?: block()
 
     override fun getAllTargetsLite(): Flow<List<TargetLite>> = targetDao.getAllTargetsLite()
     
@@ -74,7 +87,8 @@ class OfflineTargetRepository(private val targetDao: TargetDao) : TargetReposito
         pendingEnrichF: Boolean?,
         sort: String
     ): PagingSource<Int, TargetLite> = targetDao.searchTargets(
-        query, showIgnored, googleF, metaF, appleF, deviceF,
+        // Typed % and _ are literal characters, not wildcards (the query uses ESCAPE '\').
+        query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_"), showIgnored, googleF, metaF, appleF, deviceF,
         namelessF, emailOnlyF, hasEmailF, hasAddressF,
         pendingEnrichF, sort
     )
@@ -111,6 +125,9 @@ class OfflineTargetRepository(private val targetDao: TargetDao) : TargetReposito
 
     override suspend fun updateMonitorabilityStateBatch(ids: List<Int>, state: MonitorabilityState) =
         withContext(Dispatchers.IO) { targetDao.updateMonitorabilityStateBatch(ids, state) }
+
+    override suspend fun ignore(id: Int, timestamp: Long) = targetDao.ignore(id, timestamp)
+    override suspend fun unignore(id: Int, timestamp: Long) = targetDao.unignore(id, timestamp)
 
     override suspend fun updateStatusOnly(id: Int, status: TargetStatus, timestamp: Long) =
         withContext(Dispatchers.IO) { targetDao.updateStatusOnly(id, status, timestamp) }
