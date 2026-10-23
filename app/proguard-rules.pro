@@ -4,7 +4,7 @@
 # You can edit the include path and order by changing the proguardFiles
 # directive in build.gradle.
 
-# Keep line numbers for crash reports / GitHubCrashReporter stack traces.
+# Keep line numbers for crash report stack traces.
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
 
@@ -125,10 +125,6 @@
 # ---------------------------------------------------------------------------
 -keep class com.hereliesaz.cleanunderwear.ui.HtmlDumpInterface { *; }
 
-# ---------------------------------------------------------------------------
-# Crash reporter — kept by name so its frames stay readable in reported traces.
-# ---------------------------------------------------------------------------
--keep class com.hereliesaz.cleanunderwear.util.GitHubCrashReporter { *; }
 
 # ---------------------------------------------------------------------------
 # Compose / Material — both ship comprehensive consumer rules; nothing to add.

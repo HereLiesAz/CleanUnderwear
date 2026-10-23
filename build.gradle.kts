@@ -1,6 +1,8 @@
 // FILE: build.gradle.kts
 import org.gradle.api.plugins.quality.CheckstyleExtension
 buildscript {
+    // Pinned past versions with published vulnerabilities, for build tooling that pulls them
+    // in transitively. Raise a pin when a newer fix lands; drop it once nothing resolves it.
     val commonForcedDependencies = listOf(
         "commons-beanutils:commons-beanutils:1.11.0",
         "org.jdom:jdom2:2.0.6.1",
@@ -45,13 +47,9 @@ buildscript {
 
 plugins {
     alias(libs.plugins.android.application) apply false
-    alias(libs.plugins.android.library) apply false
-    alias(libs.plugins.kotlin.android) apply false
     alias(libs.plugins.jetbrains.kotlin.compose) apply false
     alias(libs.plugins.hilt) apply false
     alias(libs.plugins.ksp) apply false
-    alias(libs.plugins.kotlinx.serialization) apply false
-    alias(libs.plugins.kotlin.parcelize) apply false
     id("io.gitlab.arturbosch.detekt") version "1.23.8"
 }
 

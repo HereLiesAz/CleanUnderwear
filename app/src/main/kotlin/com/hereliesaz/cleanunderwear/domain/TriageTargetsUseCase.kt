@@ -66,8 +66,9 @@ class TriageTargetsUseCase @Inject constructor(
             val toNoAutomatedSource = mutableListOf<Int>()
             val statusUpdates = mutableListOf<Pair<Int, TargetStatus>>()
 
+            val byId = chunk.associateBy { it.id }
             decisions.forEach { (id, decision) ->
-                val original = chunk.find { it.id == id } ?: return@forEach
+                val original = byId[id] ?: return@forEach
 
                 if (decision == null) {
                     ignoredCount++

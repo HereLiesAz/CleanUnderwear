@@ -37,11 +37,16 @@ import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
@@ -230,17 +235,20 @@ class MainViewModel @Inject constructor(
      * One-line results for the user ("Imported 42 contacts", "Nothing was due for a check"),
      * shown briefly once an operation ends so it never just goes quiet.
      */
-    private val _messages = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 8)
-    val messages: kotlinx.coroutines.flow.SharedFlow<String> = _messages
+    // A channel, not a SharedFlow: a message posted while no screen is collecting (the browser
+    // covers the list during a lookup) waits for the next collector instead of being dropped.
+    private val _messages = kotlinx.coroutines.channels.Channel<String>(capacity = 16, onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
+    val messages: kotlinx.coroutines.flow.Flow<String> = _messages.receiveAsFlow()
 
-    private fun post(message: String) { _messages.tryEmit(message) }
+    private fun post(message: String) { _messages.trySend(message) }
 
     private val _operationState = MutableStateFlow(OperationState())
     val operationState: StateFlow<OperationState> = _operationState
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val targets: Flow<PagingData<TargetLite>> = combine(
-        _searchQuery, _sortOrder, _showIgnored,
+        // Typing settles before the list is re-queried (each query scans the table).
+        @OptIn(kotlinx.coroutines.FlowPreview::class) _searchQuery.debounce(250), _sortOrder, _showIgnored,
         _showNamelessFilter, _showEmailOnlyFilter, _hasEmailFilter, _hasAddressFilter,
         _googleFilter, _metaFilter, _appleFilter, _deviceFilter,
         _pendingEnrichmentFilter
@@ -296,7 +304,8 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             _updateState.value = _updateState.value.copy(checking = true)
             val result = updateChecker.check()
-            prefs.edit { putLong("last_update_check", now) }
+            // A failed check (offline, rate-limited) doesn't count: the next launch tries again.
+            if (result !is com.hereliesaz.cleanunderwear.update.UpdateResult.Failed) prefs.edit { putLong("last_update_check", now) }
             val available = result as? com.hereliesaz.cleanunderwear.update.UpdateResult.Available
             val dismissed = prefs.getString("dismissed_update", null)
             val prompt = available?.takeIf { manual || "${it.channel}:${it.version}" != dismissed }
@@ -393,6 +402,8 @@ class MainViewModel @Inject constructor(
                     )
                     val extracted = mutableListOf<Pair<BrowserMission, String>>()
                     val outcome = launchMissionsAndAwait(missions) { mission, html ->
+                        // One result per search: a page re-extracted after a rotation replaces the first.
+                        extracted.removeAll { it.first == mission }
                         extracted.add(mission to html)
                     }
                     if (outcome == BatchOutcome.UserCancelled || resolveCancellationRequested) return@runExclusive
@@ -455,15 +466,29 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun updateTarget(target: Target) {
+    /**
+     * Applies the user's [change] to the contact as it is now, not to the copy on screen ([shown]),
+     * so a daily check or lookup that wrote it meanwhile isn't undone. A verdict on a match (one
+     * that changes the status) is refused if the match itself changed since the user saw it.
+     */
+    fun updateTarget(shown: Target, change: (Target) -> Target) {
         viewModelScope.launch {
-            val before = repository.getTargetById(target.id)
-            val changed = before != null && before.status != target.status
-            val stamped = if (changed) target.copy(lastStatusChangeTimestamp = System.currentTimeMillis()) else target
-            repository.updateTarget(stamped)
+            val verdict = change(shown).status != shown.status
+            val written = repository.inTransaction {
+                val current = repository.getTargetById(shown.id) ?: return@inTransaction null
+                val matchMoved = current.status != shown.status ||
+                    current.matchRecordKey != shown.matchRecordKey ||
+                    current.lastVerificationSnippet != shown.lastVerificationSnippet
+                if (verdict && matchMoved) return@inTransaction null
+                val next = change(current)
+                val stamped = if (next.status != current.status) next.copy(lastStatusChangeTimestamp = System.currentTimeMillis()) else next
+                repository.updateTarget(stamped)
+                stamped.takeIf { it.status != current.status }
+            }
+            if (verdict && written == null) post("${shown.displayName} changed while you were looking. Check it again.")
             // A status the user just confirmed or cleared goes to the phone-book note now, not at
             // the next check.
-            if (changed) syncNote(stamped.id)
+            written?.let { syncNote(it.id) }
         }
     }
 
@@ -542,6 +567,54 @@ class MainViewModel @Inject constructor(
         _isDarkTheme.value = enabled
     }
 
+    /** Alerts about possible deaths, and about arrests and custody; matches still show in the app. */
+    private val _notifyDeath = MutableStateFlow(prefs.getBoolean(NotificationHelper.PREF_NOTIFY_DEATH, true))
+    val notifyDeath: StateFlow<Boolean> = _notifyDeath
+    private val _notifyCustody = MutableStateFlow(prefs.getBoolean(NotificationHelper.PREF_NOTIFY_CUSTODY, true))
+    val notifyCustody: StateFlow<Boolean> = _notifyCustody
+
+    fun setNotifyDeath(on: Boolean) { prefs.edit { putBoolean(NotificationHelper.PREF_NOTIFY_DEATH, on) }; _notifyDeath.value = on }
+    fun setNotifyCustody(on: Boolean) { prefs.edit { putBoolean(NotificationHelper.PREF_NOTIFY_CUSTODY, on) }; _notifyCustody.value = on }
+
+    /** The hour of day the daily check aims for; the OS may run it later (battery, network). */
+    private val _checkHour = MutableStateFlow(prefs.getInt("check_hour", 9))
+    val checkHour: StateFlow<Int> = _checkHour
+
+    fun setCheckHour(hour: Int) {
+        prefs.edit { putInt("check_hour", hour) }
+        _checkHour.value = hour
+        scheduleDailyPanopticon(reschedule = true)
+    }
+
+    /**
+     * Signs out of every site opened in the app's browser (Facebook, Google, Instagram,
+     * WhatsApp Web, CyberBackgroundChecks): their cookies and stored data are deleted.
+     */
+    fun signOutOfSites() {
+        android.webkit.CookieManager.getInstance().removeAllCookies { removed ->
+            android.webkit.CookieManager.getInstance().flush()
+            post(if (removed) "Signed out of every site used in the app's browser." else "There were no site sign-ins to remove.")
+        }
+        android.webkit.WebStorage.getInstance().deleteAllData()
+    }
+
+    /**
+     * Deletes everything the app stored: its contact list, merge history and review decisions,
+     * the notes it wrote into phone-book contacts, and site sign-ins. Settings are kept.
+     */
+    fun deleteEverything() {
+        viewModelScope.launch {
+            pipelineCoordinator.runExclusive("delete-everything") {
+                _operationState.value = OperationState(isRunning = true, description = "Deleting…", progress = -1f)
+                val notes = withContext(Dispatchers.IO) { contactSyncer.removeAllBlocks() }
+                repository.wipeAll()
+                _operationState.value = OperationState(isRunning = false)
+                post("Deleted the app's data and its notes on $notes contact${if (notes == 1) "" else "s"}.")
+            }
+            signOutOfSites()
+        }
+    }
+
     fun setShowDiagnosticLog(enabled: Boolean) {
         prefs.edit { putBoolean("show_diagnostic_log", enabled) }
         _showDiagnosticLog.value = enabled
@@ -574,11 +647,16 @@ class MainViewModel @Inject constructor(
                 status = TargetStatus.UNKNOWN
             )
             
-            // We pass it through the Harvester's processor by wrapping in a list
-            harvestContactsUseCase.processManualTargets(listOf(target))
-
-            _operationState.value = OperationState(isRunning = false)
-            post("Added $name.")
+            try {
+                harvestContactsUseCase.processManualTargets(listOf(target))
+                post("Added $name.")
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                post("Couldn't add $name. Try again.")
+            } finally {
+                _operationState.value = OperationState(isRunning = false)
+            }
         }
     }
 
@@ -597,7 +675,7 @@ class MainViewModel @Inject constructor(
             try {
                 // Serialised with the daily check and every other job that writes the registry,
                 // and run off the main thread: harvest, name checks and dedup are heavy.
-                pipelineCoordinator.runExclusive("contact-sweep") {
+                pipelineCoordinator.runExclusive("contact-sweep") { try {
                     _operationState.value = OperationState(isRunning = true, description = "Reading contacts...", progress = 0.1f)
                     val before = repository.getTargetsPaged(limit = Int.MAX_VALUE, offset = 0).size
                     withContext(Dispatchers.Default) {
@@ -622,7 +700,12 @@ class MainViewModel @Inject constructor(
                         if (after > before) "Imported ${after - before} new contact${if (after - before == 1) "" else "s"}; $after in all."
                         else "No new contacts; $after in all."
                     )
-                }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log("Import failed: ${e.javaClass.simpleName}", com.hereliesaz.cleanunderwear.util.DiagnosticLogger.LogEntry.LogLevel.ERROR)
+                    post("Importing contacts failed. Try again; if it keeps failing, the activity log shows where.")
+                } }
             } finally {
                 sweepPending = false
                 if (_operationState.value.isRunning) _operationState.value = OperationState(isRunning = false)
@@ -650,6 +733,7 @@ class MainViewModel @Inject constructor(
                     harvestContactsUseCase.processManualTargets(friends)
                     post("Read ${friends.size} Facebook friend${if (friends.size == 1) "" else "s"}.")
                 } finally {
+                    com.hereliesaz.cleanunderwear.util.WebSessions.forget(com.hereliesaz.cleanunderwear.util.WebSessions.FACEBOOK)
                     _operationState.value = OperationState(isRunning = false)
                 }
             }
@@ -672,8 +756,16 @@ class MainViewModel @Inject constructor(
 
     private suspend fun resolveCandidates(): List<Target> {
         val limit = _globalTargetLimit.value.takeIf { it > 0 } ?: Int.MAX_VALUE
-        val ids = repository
-            .getTargetWorkInfoPaged(limit = 5000, offset = 0)
+        // Every contact, a page at a time; large phone books run past one page.
+        val all = mutableListOf<com.hereliesaz.cleanunderwear.data.TargetWorkInfo>()
+        var offset = 0
+        while (true) {
+            val page = repository.getTargetWorkInfoPaged(limit = 5000, offset = offset)
+            if (page.isEmpty()) break
+            all += page
+            offset += page.size
+        }
+        val ids = all
             .filter { it.status != TargetStatus.IGNORED }
             .map { it.id }
             .sorted()
@@ -731,6 +823,8 @@ class MainViewModel @Inject constructor(
                     // Jsoup parsing can stall the entire browser on large pages.
                     val extracted = mutableListOf<Pair<BrowserMission, String>>()
                     val outcome = launchMissionsAndAwait(missions) { mission, html ->
+                        // One result per search: a page re-extracted after a rotation replaces the first.
+                        extracted.removeAll { it.first == mission }
                         extracted.add(mission to html)
                     }
 
@@ -759,6 +853,12 @@ class MainViewModel @Inject constructor(
                     // conflicting card (e.g. a recycled phone number returning a
                     // stranger) is NOT written into the registry or the user's
                     // system contacts — we keep it UNVERIFIED and record why.
+                    // Judged against the contact as it is now: the user may have spent minutes in
+                    // the browser, and a check or an edit may have written it meanwhile.
+                    val id = target.id
+                    repository.inTransaction {
+                    @Suppress("NAME_SHADOWING")
+                    val target = repository.getTargetById(id) ?: return@inTransaction
                     val enrichment = cbcEnricher.enrich(target, collected)
                     if (enrichment.verified) {
                         filled++
@@ -785,6 +885,7 @@ class MainViewModel @Inject constructor(
                         // An unconfirmed card on an already-monitored contact is
                         // simply not used; the contact keeps monitoring as before.
                         repository.updateTarget(target.copy(enrichmentProvenance = enrichment.target.enrichmentProvenance))
+                    }
                     }
                 }
 
@@ -841,15 +942,15 @@ class MainViewModel @Inject constructor(
         return deferred.await()
     }
 
-    fun harvestWhatsApp() = harvestInBrowser("whatsapp-harvest", BrowserMission.HarvestWhatsApp, "WhatsApp chats") {
+    fun harvestWhatsApp() = harvestInBrowser("whatsapp-harvest", BrowserMission.HarvestWhatsApp, "WhatsApp chats", com.hereliesaz.cleanunderwear.util.WebSessions.WHATSAPP) {
         whatsAppHarvester.parse(it)
     }
 
-    fun harvestInstagram() = harvestInBrowser("instagram-harvest", BrowserMission.HarvestInstagram, "Instagram followers") {
+    fun harvestInstagram() = harvestInBrowser("instagram-harvest", BrowserMission.HarvestInstagram, "Instagram followers", com.hereliesaz.cleanunderwear.util.WebSessions.INSTAGRAM) {
         instagramHarvester.parse(it)
     }
 
-    fun harvestGoogleContacts() = harvestInBrowser("google-harvest", BrowserMission.HarvestGoogleContacts, "Google Contacts") {
+    fun harvestGoogleContacts() = harvestInBrowser("google-harvest", BrowserMission.HarvestGoogleContacts, "Google Contacts", com.hereliesaz.cleanunderwear.util.WebSessions.GOOGLE) {
         googleContactsHarvester.parse(it)
     }
 
@@ -857,7 +958,7 @@ class MainViewModel @Inject constructor(
      * Opens [mission] in the visible browser, where the user signs in (or scans a QR code) if the
      * service needs it, and imports what [parse] reads from the page it hands back.
      */
-    private fun harvestInBrowser(key: String, mission: BrowserMission, what: String, parse: (String) -> List<Target>) {
+    private fun harvestInBrowser(key: String, mission: BrowserMission, what: String, hosts: List<String>, parse: (String) -> List<Target>) {
         viewModelScope.launch {
             pipelineCoordinator.runExclusive(key) {
                 try {
@@ -869,6 +970,8 @@ class MainViewModel @Inject constructor(
                     harvestContactsUseCase.processManualTargets(found)
                     post(if (found.isEmpty()) "Nothing was read from $what. If you weren't signed in, try again." else "Read ${found.size} from $what.")
                 } finally {
+                    // The sign-in was for this import only.
+                    com.hereliesaz.cleanunderwear.util.WebSessions.forget(hosts)
                     _operationState.value = OperationState(isRunning = false)
                 }
             }
@@ -876,44 +979,52 @@ class MainViewModel @Inject constructor(
     }
 
     fun triggerManualInterrogation() {
+        // One manual check at a time: a second tap while one runs joins it.
         val request = OneTimeWorkRequestBuilder<ScrapingWorker>().build()
-        workManager.enqueue(request)
-        
+        workManager.enqueueUniqueWork("manual_check", androidx.work.ExistingWorkPolicy.KEEP, request)
+        if (watchingManualCheck) return
+        watchingManualCheck = true
+
         viewModelScope.launch {
-            workManager.getWorkInfoByIdFlow(request.id).collect { workInfo ->
-                if (workInfo != null) {
-                    when (workInfo.state) {
-                        androidx.work.WorkInfo.State.RUNNING -> {
-                            val progress = workInfo.progress.getFloat("progress", -1f)
-                            val description = workInfo.progress.getString("description") ?: "Checking records..."
-                            
-                            _operationState.value = OperationState(
-                                isRunning = true, 
-                                description = description,
-                                progress = progress
-                            )
-                        }
-                        androidx.work.WorkInfo.State.SUCCEEDED -> {
-                            _operationState.value = OperationState(isRunning = false)
-                            workInfo.outputData.getString(ScrapingWorker.SUMMARY)?.let(::post)
-                        }
-                        androidx.work.WorkInfo.State.FAILED -> {
-                            _operationState.value = OperationState(isRunning = false)
-                            post("The check stopped with an error. It will run again with the next daily check.")
-                        }
-                        androidx.work.WorkInfo.State.CANCELLED -> {
-                            _operationState.value = OperationState(isRunning = false)
-                        }
-                        else -> {}
-                    }
-                }
+            try {
+                workManager.getWorkInfosForUniqueWorkFlow("manual_check")
+                    // This run, or one already in progress that the tap joined; never an old result.
+                    .map { infos -> infos.firstOrNull { it.id == request.id || !it.state.isFinished } }
+                    .onEach { onManualCheck(it) }
+                    .first { it != null && it.state.isFinished }
+            } finally {
+                watchingManualCheck = false
             }
         }
     }
 
-    fun scheduleDailyPanopticon() {
+    @Volatile private var watchingManualCheck = false
+
+    private fun onManualCheck(workInfo: androidx.work.WorkInfo?) {
+        when (workInfo?.state) {
+            androidx.work.WorkInfo.State.RUNNING -> {
+                _operationState.value = OperationState(
+                    isRunning = true,
+                    description = workInfo.progress.getString("description") ?: "Checking records…",
+                    progress = workInfo.progress.getFloat("progress", -1f)
+                )
+            }
+            androidx.work.WorkInfo.State.SUCCEEDED -> {
+                _operationState.value = OperationState(isRunning = false)
+                workInfo.outputData.getString(ScrapingWorker.SUMMARY)?.let(::post)
+            }
+            androidx.work.WorkInfo.State.FAILED -> {
+                _operationState.value = OperationState(isRunning = false)
+                post("The check stopped with an error. It will run again with the next daily check.")
+            }
+            androidx.work.WorkInfo.State.CANCELLED -> _operationState.value = OperationState(isRunning = false)
+            else -> Unit
+        }
+    }
+
+    fun scheduleDailyPanopticon(reschedule: Boolean = false) {
         val calendar = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, 9)
+            set(Calendar.HOUR_OF_DAY, _checkHour.value)
             set(Calendar.MINUTE, 0)
             set(Calendar.SECOND, 0)
         }
@@ -943,9 +1054,10 @@ class MainViewModel @Inject constructor(
         // UPDATE rather than KEEP so existing installs pick up new constraints
         // when the build changes them, instead of being stuck on whatever
         // policy was in effect the day they first installed.
+        // A new check time needs a fresh schedule; UPDATE would keep the old start time.
         workManager.enqueueUniquePeriodicWork(
             "daily_panopticon",
-            ExistingPeriodicWorkPolicy.UPDATE,
+            if (reschedule) ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE else ExistingPeriodicWorkPolicy.UPDATE,
             periodicWorkRequest
         )
     }

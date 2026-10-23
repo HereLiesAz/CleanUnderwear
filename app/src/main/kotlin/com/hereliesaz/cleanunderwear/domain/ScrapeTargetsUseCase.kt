@@ -72,7 +72,7 @@ class ScrapeTargetsUseCase @Inject constructor(
                     if (newMatches == 0) ". No new matches"
                     else ". $newMatches possible match${if (newMatches == 1) "" else "es"} to review"
                 )
-                if (incomplete > 0) append("; $incomplete couldn't be fully checked and will be retried")
+                if (incomplete > 0) append("; $incomplete couldn't be fully checked: some sites didn't answer")
                 append('.')
             }
         }
@@ -256,22 +256,31 @@ class ScrapeTargetsUseCase @Inject constructor(
                 DiagnosticLogger.log("${target.displayName}: $suppressed record(s) naming them were set aside by verification")
             }
 
-            // No match, but a source couldn't be read: that's not a clean "nothing found", so the
-            // contact keeps its status and evidence and is looked at again sooner.
-            val inconclusive = best == null && failedSources.isNotEmpty()
-            val nextCheck = now + if (inconclusive) {
+            // A status restored from the contact's note waits for the user: the record behind it
+            // may be older than any search reaches, so finding nothing now doesn't clear it.
+            val noteClaim = target.status == TargetStatus.POSSIBLE_MATCH &&
+                target.matchRecordKey == com.hereliesaz.cleanunderwear.util.ContactNote.RESTORED_KEY
+            // No match, but a source couldn't be read: that's not a clean "nothing found", so a
+            // pending match keeps its status and evidence and is looked at again sooner. With no
+            // match to protect, the check stands (unread sources noted), so a site that is always
+            // down can't hold a contact at "Not checked yet".
+            val pendingMatch = target.status == TargetStatus.POSSIBLE_MATCH || target.status == TargetStatus.WEAK_MATCH
+            val inconclusive = best == null && (noteClaim || (failedSources.isNotEmpty() && pendingMatch))
+            val nextCheck = now + if (inconclusive && failedSources.isNotEmpty()) {
                 minOf(target.checkFrequencyHours, RETRY_HOURS) * 3600000L
             } else {
                 target.checkFrequencyHours * 3600000L
             }
+            if (failedSources.isNotEmpty()) incomplete.incrementAndGet()
             if (inconclusive) {
-                incomplete.incrementAndGet()
-                emitStep("couldn't read ${failedSources.size} source${if (failedSources.size == 1) "" else "s"} — will retry")
+                if (failedSources.isNotEmpty()) {
+                    emitStep("couldn't read ${failedSources.size} source${if (failedSources.size == 1) "" else "s"} — will retry")
+                }
                 commit(target) { current ->
                     current.copy(
                         lastScrapedTimestamp = now,
                         nextScheduledCheck = nextCheck,
-                        unreadSources = failedSources.joinToString(", ")
+                        unreadSources = failedSources.takeIf { it.isNotEmpty() }?.joinToString(", ")
                     )
                 }
                 return
@@ -319,6 +328,8 @@ class ScrapeTargetsUseCase @Inject constructor(
 
             emitStep("syncing back to system contacts")
             contactSyncer.syncToSystem(updatedTarget)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             DiagnosticLogger.log(
                 "Scrape failed for ${target.displayName}: ${e.javaClass.simpleName}: ${e.message}",
@@ -332,13 +343,13 @@ class ScrapeTargetsUseCase @Inject constructor(
      * or the user changed its status or dismissed records since [snapshot] was read; their action
      * wins over this run's, and the next run starts from it.
      */
-    private suspend fun commit(snapshot: Target, change: (Target) -> Target): Target? {
-        val current = repository.getTargetById(snapshot.id) ?: return null
+    private suspend fun commit(snapshot: Target, change: (Target) -> Target): Target? = repository.inTransaction {
+        val current = repository.getTargetById(snapshot.id) ?: return@inTransaction null
         if (current.status != snapshot.status || current.dismissedMatchKeys != snapshot.dismissedMatchKeys) {
             DiagnosticLogger.log("${snapshot.displayName}: changed during the check; keeping the user's change")
-            return null
+            return@inTransaction null
         }
-        return change(current).also { repository.updateTarget(it) }
+        change(current).also { repository.updateTarget(it) }
     }
 
     /**

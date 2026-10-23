@@ -4,7 +4,7 @@ import android.content.Context
 import com.hereliesaz.cleanunderwear.BuildConfig
 import com.hereliesaz.cleanunderwear.data.CleanUnderwearDatabase
 import com.hereliesaz.cleanunderwear.data.CommsHistory
-import com.hereliesaz.cleanunderwear.data.DeviceCommsHistory
+import com.hereliesaz.cleanunderwear.data.NoCommsHistory
 import com.hereliesaz.cleanunderwear.data.DeviceMessagingPresence
 import com.hereliesaz.cleanunderwear.data.MessagingPresenceSource
 import com.hereliesaz.cleanunderwear.data.MergeLedger
@@ -50,7 +50,7 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideCommsHistory(history: DeviceCommsHistory): CommsHistory = history
+    fun provideCommsHistory(history: NoCommsHistory): CommsHistory = history
 
     @Provides
     @Singleton

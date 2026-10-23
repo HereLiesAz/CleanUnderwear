@@ -82,6 +82,10 @@ fun BrowserScreen(
     onAllComplete: () -> Unit,
     onCancel: () -> Unit,
     isBlocked: (String) -> Boolean = { false },
+    /** Who or what this is for ("Looking up Jane Doe (4 of 212)"); the mission label if null. */
+    context: String? = null,
+    /** Whether backing out ends a whole run of lookups, not just this page. */
+    stopsBatch: Boolean = false,
 ) {
     if (missions.isEmpty()) {
         // Defensive: nothing to do.
@@ -89,8 +93,9 @@ fun BrowserScreen(
         return
     }
 
-    var currentIndex by remember(batchId) { mutableIntStateOf(0) }
-    var batchComplete by remember { mutableStateOf(false) }
+    // Saved across rotation: a recreated screen resumes at the same search, not the first.
+    var currentIndex by androidx.compose.runtime.saveable.rememberSaveable(batchId) { mutableIntStateOf(0) }
+    var batchComplete by androidx.compose.runtime.saveable.rememberSaveable(batchId) { mutableStateOf(false) }
     val extractionGate = remember { BrowserExtractionGate() }
     var pageReady by remember { mutableStateOf(false) }
     var automationRan by remember { mutableStateOf(false) }
@@ -202,6 +207,20 @@ fun BrowserScreen(
         }
     }
 
+    // Pause the page with the app: no loading or scripts while it's in the background.
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            when (event) {
+                androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> webView?.onPause()
+                androidx.lifecycle.Lifecycle.Event.ON_RESUME -> webView?.onResume()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             extractionGate.finish()
@@ -209,6 +228,8 @@ fun BrowserScreen(
             webView?.let {
                 try {
                     it.stopLoading()
+                    // Detach before destroying, as Chromium expects.
+                    (it.parent as? android.view.ViewGroup)?.removeView(it)
                     it.destroy()
                 } catch (e: Exception) {
                     DiagnosticLogger.log("BrowserScreen: WebView destroy failed: ${e.message}")
@@ -220,26 +241,24 @@ fun BrowserScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("${mission.label} (${currentIndex + 1}/${missions.size})") },
-                navigationIcon = {
-                    IconButton(onClick = ::cancel) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Cancel")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    titleContentColor = MaterialTheme.colorScheme.primary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.primary
-                )
+            AppTopBar(
+                title = context?.takeIf { it.isNotBlank() }
+                    ?: if (missions.size > 1) "${mission.label} (${currentIndex + 1} of ${missions.size})" else mission.label,
+                onBack = ::cancel,
+                backLabel = when {
+                    stopsBatch -> "Stop all lookups"
+                    mission.autoExtract -> "Stop"
+                    else -> "Close"
+                }
             )
-        }
+        },
+        containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
         ) {
             Box(
                 modifier = Modifier
@@ -382,14 +401,7 @@ fun BrowserScreen(
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            com.hereliesaz.aznavrail.AzLoad()
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = if (!pageReady) "Loading…" else "Working — please don't touch the screen",
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
+                        LoadingCaption(if (!pageReady) "Loading the page…" else "Reading the page. Please don't touch it.")
                     }
                 }
             }
@@ -398,19 +410,25 @@ fun BrowserScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                        .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
                     Text(
-                        "This page may be blocked, have failed to load, or timed out. Solve any CAPTCHA, retry, skip, or abort.",
-                        color = MaterialTheme.colorScheme.primary
+                        "This page needs you, or didn't load. If it shows a CAPTCHA or a sign-in, complete it and " +
+                            "the lookup carries on by itself.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    AppCaption(
+                        "Try again reloads this page. Skip moves on without it." +
+                            if (stopsBatch) " Stop ends every lookup left; what was found so far is kept." else " Stop closes it."
                     )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
                     ) {
                         AzButton(
-                            text = "Retry extraction",
+                            text = "Try again",
                             onClick = {
                                 extractionGate.invalidate()
                                 automationRan = false
@@ -427,7 +445,7 @@ fun BrowserScreen(
                             shape = AzButtonShape.RECTANGLE
                         )
                         AzButton(
-                            text = "Skip search",
+                            text = "Skip",
                             onClick = {
                                 paused = false
                                 onMissionResult(mission, MissionOutcome.Blocked)
@@ -437,7 +455,7 @@ fun BrowserScreen(
                             shape = AzButtonShape.RECTANGLE
                         )
                         AzButton(
-                            text = "Abort",
+                            text = "Stop",
                             onClick = ::cancel,
                             modifier = Modifier.weight(1f),
                             shape = AzButtonShape.RECTANGLE

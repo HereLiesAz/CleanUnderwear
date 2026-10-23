@@ -28,7 +28,10 @@ import javax.inject.Singleton
 class NotificationHelper @Inject constructor(@ApplicationContext private val context: Context) {
 
     companion object {
-        private const val CHANNEL_ID = "panopticon_alerts"
+        // A channel's importance can't be lowered once created, so the default-importance
+        // channel has a new id and the old high-importance one is deleted.
+        private const val CHANNEL_ID = "possible_matches"
+        private const val OLD_CHANNEL_ID = "panopticon_alerts"
         private const val CHANNEL_NAME = "Possible matches"
         const val EXTRA_TARGET_ID = "com.hereliesaz.cleanunderwear.TARGET_ID"
         const val PREFS = "clean_underwear_prefs"
@@ -47,6 +50,7 @@ class NotificationHelper @Inject constructor(@ApplicationContext private val con
                 lockscreenVisibility = android.app.Notification.VISIBILITY_PRIVATE
             }
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.deleteNotificationChannel(OLD_CHANNEL_ID)
             notificationManager.createNotificationChannel(channel)
         }
     }

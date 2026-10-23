@@ -61,6 +61,9 @@ interface TargetRepository {
 
     /** Runs [block] as one database transaction, so a multi-row change lands whole or not at all. */
     suspend fun <R> inTransaction(block: suspend () -> R): R = block()
+
+    /** Deletes everything the app stored: contacts, merge history, review decisions. */
+    suspend fun wipeAll() = wipeSlateClean()
 }
 
 class OfflineTargetRepository(
@@ -70,6 +73,10 @@ class OfflineTargetRepository(
 
     override suspend fun <R> inTransaction(block: suspend () -> R): R =
         database?.withTransaction { block() } ?: block()
+
+    override suspend fun wipeAll() = withContext(Dispatchers.IO) {
+        database?.clearAllTables() ?: targetDao.wipeSlateClean()
+    }
 
     override fun getAllTargetsLite(): Flow<List<TargetLite>> = targetDao.getAllTargetsLite()
     

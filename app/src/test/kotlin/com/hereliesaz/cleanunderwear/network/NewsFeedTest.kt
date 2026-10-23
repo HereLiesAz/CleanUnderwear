@@ -87,4 +87,20 @@ class NewsFeedTest {
         assertEquals(EventKind.DEATH, NewsFeed.classify("Local teacher dies at 70"))
         assertNull(NewsFeed.classify("Smith named principal"))
     }
+
+    @Test
+    fun `a death notice naming the contact by title or funeral is kept`() {
+        for (title in listOf("Funeral services for John Smith, 82, of Kenner", "Longtime coach John Smith dies at 70")) {
+            val found = NewsFeed.candidates(feed(item(title)), "John", "Smith", "google_news_us", "Google News", now)
+            assertEquals(title, 1, found.size)
+            assertEquals(EventKind.DEATH, found.single().kind)
+        }
+    }
+
+    @Test
+    fun `an official speaking about a death or an arrest is not the subject`() {
+        assertTrue(NewsFeed.namedInRole("Man dies in crash, Sheriff John Smith said", "John", "Smith", EventKind.DEATH))
+        assertTrue(NewsFeed.namedInRole("Judge John Smith sentenced the man", "John", "Smith", EventKind.ARREST))
+        assertTrue(NewsFeed.namedInRole("Man arrested at the funeral of John Smith", "John", "Smith", EventKind.ARREST))
+    }
 }

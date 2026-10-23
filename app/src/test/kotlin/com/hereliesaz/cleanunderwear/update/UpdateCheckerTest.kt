@@ -44,19 +44,25 @@ class UpdateCheckerTest {
 
     @Test
     fun githubRelease_toleratesNullBody() {
-        val release = GitHubRelease.parse("""{"tag_name":"1.10.5","html_url":"u","prerelease":false,"body":null}""")!!
+        val release = GitHubRelease.parse("""{"tag_name":"1.10.5","html_url":"https://github.com/HereLiesAz/CleanUnderwear/releases/tag/x","prerelease":false,"body":null}""")!!
         assertEquals("1.10.5", release.version)
     }
 
     @Test
     fun githubRelease_readsVPrefixedTags() {
-        val release = GitHubRelease.parse("""{"tag_name":"v1.11.0","html_url":"u","prerelease":false,"body":"Build v1.11.0.2"}""")!!
+        val release = GitHubRelease.parse("""{"tag_name":"v1.11.0","html_url":"https://github.com/HereLiesAz/CleanUnderwear/releases/tag/x","prerelease":false,"body":"Build v1.11.0.2"}""")!!
         assertEquals("1.11.0.2", release.version)
     }
 
     @Test
     fun githubRelease_ignoresUnrelatedVersionsInBody() {
-        val release = GitHubRelease.parse("""{"tag_name":"1.11.0","html_url":"u","prerelease":false,"body":"Built with Kotlin 2.4.0 and AGP 9.2.1; build 1.11.0.1"}""")!!
+        val release = GitHubRelease.parse("""{"tag_name":"1.11.0","html_url":"https://github.com/HereLiesAz/CleanUnderwear/releases/tag/x","prerelease":false,"body":"Built with Kotlin 2.4.0 and AGP 9.2.1; build 1.11.0.1"}""")!!
         assertEquals("1.11.0.1", release.version)
+    }
+
+    @Test
+    fun githubRelease_onlyOpensThisRepositorysReleases() {
+        assertNull(GitHubRelease.parse("""{"tag_name":"9.9.9","html_url":"intent://evil","prerelease":false,"body":""}"""))
+        assertNull(GitHubRelease.parse("""{"tag_name":"9.9.9","html_url":"https://github.com/someone/else/releases/tag/9.9.9","prerelease":false,"body":""}"""))
     }
 }

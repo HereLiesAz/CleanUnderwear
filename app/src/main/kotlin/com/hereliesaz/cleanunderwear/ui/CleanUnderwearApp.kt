@@ -7,6 +7,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.Text
+import kotlinx.coroutines.launch
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarHost
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
@@ -36,11 +39,12 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
     val showIgnored by viewModel.showIgnored.collectAsState()
     val sortOrder by viewModel.sortOrder.collectAsState()
 
-    // Active marks the current destination; gold highlights touch focus and
-    // app-driven secondary state. The active tint adapts to light/dark themes.
+    // Monochrome: the active item and focus share the one accent.
     val activeColor = MaterialTheme.colorScheme.primary
-    val highlightedColor = MaterialTheme.colorScheme.tertiary
+    val highlightedColor = MaterialTheme.colorScheme.onSurfaceVariant
     val backgroundColor = MaterialTheme.colorScheme.background
+    var confirmLookUp by remember { mutableStateOf<Int?>(null) }
+    val scope = rememberCoroutineScope()
 
     AzHostActivityLayout(
         navController = navController,
@@ -53,7 +57,7 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
             dockingSide = AzDockingSide.LEFT,
             packButtons = true,
         )
-        
+
         azTheme(
             activeColor = activeColor,
             focusColor = highlightedColor,
@@ -62,102 +66,50 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
             defaultShape = AzButtonShape.RECTANGLE
         )
 
+        // Keys are the rail item ids below, so every item has its help line.
         azAdvanced(
             helpEnabled = true,
             helpList = mapOf(
-                "registry" to "Your monitored contacts.",
-                "ingest" to "Add a contact that didn't sync automatically.",
-                "review" to "Find contacts that were merged wrongly or have an out-of-date number.",
-                "harvest" to "Import contacts from your device and connected accounts.",
-                "interrogate" to "Force a real-time check against public rosters."
+                "registry" to "Everyone the app checks, with what the last check found.",
+                "review" to "Contacts that may be two people combined, or have an out-of-date number.",
+                "harvest" to "Read the people saved on your phone into the app.",
+                "ingest" to "Add someone who isn't in your phone's contacts.",
+                "update" to "Run the daily check now instead of waiting for it.",
+                "resolve" to "Look up missing names, numbers and ages on a people-search site, contact by contact. Asks first.",
+                "archives" to "Show or hide contacts you archived.",
+                "settings" to "Alerts, check time, imports, your data.",
+                "diagnostic_log" to "Show what the app is doing, step by step."
             )
-
         )
 
         if (isOnboardingCompleted) {
-            // Rail order follows the user's journey top-down: see the list,
-            // fill and process it (Operations), arrange it (Sort), hide the
-            // noise (Archives), then configure (Settings).
-            azRailItem(
-                id = "registry",
-                text = "Registry",
-                route = "targetList",
-                info = "View all monitored contacts."
-            )
+            // Top-down: see the list, act on it, arrange it, then configure.
+            azRailItem(id = "registry", text = "Contacts", route = "targetList", info = "Everyone the app checks.")
+            azRailItem(id = "review", text = "Review", route = "review", info = "Possible wrong combinations and old numbers.")
 
-            azRailItem(
-                id = "review",
-                text = "Review",
-                route = "review",
-                info = "Check for bad merges and stale numbers."
-            )
+            azRailHostItem(id = "intelligence_ops", text = "Actions")
+            azRailSubItem(id = "harvest", hostId = "intelligence_ops", text = "Import contacts", shape = AzButtonShape.NONE,
+                onClick = { viewModel.sweepContacts() })
+            azRailSubItem(id = "ingest", hostId = "intelligence_ops", text = "Add someone", shape = AzButtonShape.NONE,
+                onClick = { viewModel.setShowManualEntryDialog(true) })
+            azRailSubItem(id = "update", hostId = "intelligence_ops", text = "Check now", shape = AzButtonShape.NONE,
+                onClick = { viewModel.triggerManualInterrogation() })
+            azRailSubItem(id = "resolve", hostId = "intelligence_ops", text = "Fill in details", shape = AzButtonShape.NONE,
+                onClick = { scope.launch { confirmLookUp = viewModel.resolveCandidateCount() } })
 
-            azRailHostItem(
-                id = "intelligence_ops",
-                text = "Operations"
-            )
-
-            // Harvest leads: importing your contacts is the first thing to do.
-            azRailSubItem(
-                id = "harvest",
-                hostId = "intelligence_ops",
-                text = "Harvest",
-                shape = AzButtonShape.NONE,
-                onClick = { viewModel.sweepContacts() }
-            )
-            azRailSubItem(
-                id = "ingest",
-                hostId = "intelligence_ops",
-                text = "Entry",
-                shape = AzButtonShape.NONE,
-                onClick = { viewModel.setShowManualEntryDialog(true) }
-            )
-            azRailSubItem(
-                id = "update",
-                hostId = "intelligence_ops",
-                text = "Update",
-                shape = AzButtonShape.NONE,
-                onClick = { viewModel.triggerManualInterrogation() }
-            )
-            azRailSubItem(
-                id = "resolve",
-                hostId = "intelligence_ops",
-                text = "Resolve",
-                shape = AzButtonShape.NONE,
-                onClick = { viewModel.resolveUnverifiedBatch() }
-            )
-
-            azRailHostItem(
-                id = "sort_host",
-                text = "Sort"
-            )
-            azRailSubItem(
-                id = "sort_name",
-                hostId = "sort_host",
-                text = "By Name",
-                shape = AzButtonShape.NONE,
-                onClick = { viewModel.setSortOrder(MainViewModel.SortOrder.NAME) }
-            )
-            azRailSubItem(
-                id = "sort_status",
-                hostId = "sort_host",
-                text = "By Status",
-                shape = AzButtonShape.NONE,
-                onClick = { viewModel.setSortOrder(MainViewModel.SortOrder.STATUS) }
-            )
-            azRailSubItem(
-                id = "sort_date",
-                hostId = "sort_host",
-                text = "By Date",
-                shape = AzButtonShape.NONE,
-                onClick = { viewModel.setSortOrder(MainViewModel.SortOrder.DATE) }
-            )
+            azRailHostItem(id = "sort_host", text = "Sort")
+            azRailSubItem(id = "sort_name", hostId = "sort_host", text = "By name", shape = AzButtonShape.NONE,
+                onClick = { viewModel.setSortOrder(MainViewModel.SortOrder.NAME) })
+            azRailSubItem(id = "sort_status", hostId = "sort_host", text = "By status", shape = AzButtonShape.NONE,
+                onClick = { viewModel.setSortOrder(MainViewModel.SortOrder.STATUS) })
+            azRailSubItem(id = "sort_date", hostId = "sort_host", text = "By last check", shape = AzButtonShape.NONE,
+                onClick = { viewModel.setSortOrder(MainViewModel.SortOrder.DATE) })
 
             azRailToggle(
                 id = "archives",
                 isChecked = showIgnored,
-                toggleOnText = "Hide",
-                toggleOffText = "Archives",
+                toggleOnText = "Hide archived",
+                toggleOffText = "Show archived",
                 info = "Show or hide archived contacts."
             ) {
                 viewModel.toggleShowIgnored()
@@ -165,27 +117,22 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
 
             azDivider()
 
-            azRailItem(
-                id = "settings",
-                text = "Settings",
-                route = "settings"
-            )
-            
+            azRailItem(id = "settings", text = "Settings", route = "settings")
+
             azMenuToggle(
                 id = "diagnostic_log",
                 isChecked = showDiagnosticLog,
-                toggleOnText = "Hide",
-                toggleOffText = "Log",
+                toggleOnText = "Hide log",
+                toggleOffText = "Show log",
                 onClick = { viewModel.setShowDiagnosticLog(!showDiagnosticLog) }
             )
         }
 
-
-
         onscreen {
             val updateState by viewModel.updateState.collectAsState()
-            LaunchedEffect(Unit) { viewModel.checkForUpdates(manual = false) }
-            updateState.prompt?.let { update ->
+            // Not during onboarding: the first screens are the explanation and the permission ask.
+            LaunchedEffect(isOnboardingCompleted) { if (isOnboardingCompleted) viewModel.checkForUpdates(manual = false) }
+            updateState.prompt?.takeIf { isOnboardingCompleted }?.let { update ->
                 UpdateDialog(
                     update = update,
                     installed = viewModel.installedVersion,
@@ -214,6 +161,8 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                         onAllComplete = { viewModel.completeMissionBatch() },
                         onCancel = { viewModel.cancelMissionBatch() },
                         isBlocked = batch.isBlocked,
+                        context = operationState.description.takeIf { operationState.isRunning },
+                        stopsBatch = batch.retainBrowserForResolve,
                     )
                 return@onscreen
             }
@@ -272,7 +221,7 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                         TargetDetailScreen(
                             target = current,
                             sourceCatalog = viewModel.sourceCatalog,
-                            onUpdateTarget = { viewModel.updateTarget(it) },
+                            onUpdateTarget = { shown, change -> viewModel.updateTarget(shown, change) },
                             onLaunchMission = { mission, onResult ->
                                 viewModel.launchMission(mission, onResult)
                             },
@@ -288,19 +237,40 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
             // drawn here instead: the same AzLoad, with no input handling, so taps pass through.
             if (operationState.isRunning) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        AzLoad()
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = operationState.description.ifBlank { "Working…" },
-                            color = MaterialTheme.colorScheme.onBackground,
-                            style = MaterialTheme.typography.bodyMedium,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(horizontal = 32.dp)
-                        )
-                    }
+                    LoadingCaption(operationState.description.ifBlank { "Working…" })
                 }
             }
+
+            // One-line results ("Imported 42 contacts", "No new matches").
+            val snackbar = remember { SnackbarHostState() }
+            LaunchedEffect(Unit) { viewModel.messages.collect { snackbar.showSnackbar(it) } }
+            SnackbarHost(snackbar, modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
+            }
+        }
+    }
+
+    confirmLookUp?.let { count ->
+        if (count == 0) {
+            AppDialog(
+                title = "Nothing to fill in",
+                confirm = "OK",
+                onConfirm = { confirmLookUp = null },
+                onDismiss = { confirmLookUp = null },
+                dismiss = "Close"
+            ) { Text("Every contact already has a full name and an age.") }
+        } else {
+            AppDialog(
+                title = "Fill in details for $count contact${if (count == 1) "" else "s"}?",
+                confirm = "Start",
+                onConfirm = { confirmLookUp = null; viewModel.resolveUnverifiedBatch() },
+                onDismiss = { confirmLookUp = null }
+            ) {
+                Text(
+                    "Each contact missing a full name or an age is looked up on CyberBackgroundChecks, a people-search " +
+                        "site, in the app's browser, using the name, number or email you have for them. It can take " +
+                        "a minute or more per contact, and you may be asked to solve CAPTCHAs. You can stop at any time; " +
+                        "what was found so far is kept."
+                )
             }
         }
     }

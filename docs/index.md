@@ -11,8 +11,9 @@ This documentation site provides insights into the technical foundations and des
 
 ## Project Documentation
 
-*   [**Architecture Guide**](ARCHITECTURE.html): Deep dive into our use of Clean Architecture, MVVM, Coroutines, and Dagger Hilt.
-*   [**Design Guide**](DESIGN.html): Learn about our approach to UI/UX, utilizing Jetpack Compose and Material Design 3.
+*   [**Architecture Guide**](ARCHITECTURE.html): Layers, the pipeline, storage and tests.
+*   [**Design Guide**](DESIGN.html): Theme, components and writing.
+*   [**Model Card**](MODEL_CARD.html): The on-device name classifier and what it is (and isn't) used for.
 *   [**Monitoring Guide**](MONITORING_GUIDE.html): How the daily records check, matching and contact-note recovery work.
 *   [**Privacy Policy**](PRIVACY_POLICY.html): What the app reads, stores and sends.
 
@@ -23,4 +24,4 @@ This documentation site provides insights into the technical foundations and des
 
 ## Getting Started
 
-To learn how to build the project locally, set up your development environment, and understand our automatic versioning and CI/CD pipelines, please refer to the [main README in our repository](https://github.com/HereLiesAz/CleanUnderwear/blob/main/README.md).
+To build, test and version the project, see the [main README in our repository](https://github.com/HereLiesAz/CleanUnderwear/blob/main/README.md).

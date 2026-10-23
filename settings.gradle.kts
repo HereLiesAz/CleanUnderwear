@@ -16,7 +16,11 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven { url = uri("https://jitpack.io") }
+        // JitPack builds any GitHub repo on request: only the author's own libraries come from it.
+        maven {
+            url = uri("https://jitpack.io")
+            content { includeGroupByRegex("com\\.github\\.HereLiesAz.*") }
+        }
     }
 }
 

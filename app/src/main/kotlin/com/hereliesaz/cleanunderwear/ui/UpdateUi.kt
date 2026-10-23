@@ -4,9 +4,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 import com.hereliesaz.cleanunderwear.update.UpdateChannel
@@ -21,25 +19,24 @@ fun UpdateDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Update available") },
-        text = {
-            Text(
-                when (update.channel) {
-                    UpdateChannel.PLAY -> "A newer version (${update.version}) is on Google Play. You have $installed."
-                    UpdateChannel.GITHUB -> "Version ${update.version} is out on GitHub. You have $installed."
-                }
-            )
+    AppDialog(
+        title = "Update available",
+        confirm = if (update.channel == UpdateChannel.PLAY) "Open Google Play" else "Open the release",
+        onConfirm = {
+            openUpdate(context, update, playWebUrl)
+            onDismiss()
         },
-        confirmButton = {
-            TextButton(onClick = {
-                openUpdate(context, update, playWebUrl)
-                onDismiss()
-            }) { Text(if (update.channel == UpdateChannel.PLAY) "Open Play Store" else "Open on GitHub") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Later") } }
-    )
+        onDismiss = onDismiss,
+        dismiss = "Later"
+    ) {
+        Text(
+            when (update.channel) {
+                UpdateChannel.PLAY -> "Version ${update.version} is on Google Play. You have $installed."
+                UpdateChannel.GITHUB -> "Version ${update.version} is out. You have $installed. On the release page, " +
+                    "download the file ending in .apk and open it to install; Android may ask you to allow installs from your browser."
+            }
+        )
+    }
 }
 
 /** Opens the update's page: the Play Store app (or its web listing if absent), or the GitHub release. */

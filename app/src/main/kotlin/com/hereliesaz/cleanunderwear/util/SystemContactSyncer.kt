@@ -50,6 +50,39 @@ class SystemContactSyncer @Inject constructor(@ApplicationContext private val co
     }
 
     /**
+     * Removes this app's block from every contact note, leaving the user's own note text (and
+     * deleting a note that held nothing else). Returns how many notes were changed.
+     */
+    fun removeAllBlocks(): Int {
+        val resolver = context.contentResolver
+        val projection = arrayOf(ContactsContract.Data._ID, ContactsContract.CommonDataKinds.Note.NOTE)
+        val selection = "${ContactsContract.Data.MIMETYPE} = ? AND ${ContactsContract.CommonDataKinds.Note.NOTE} LIKE ?"
+        val args = arrayOf(ContactsContract.CommonDataKinds.Note.CONTENT_ITEM_TYPE, "%[Registry Status:%")
+        val ops = ArrayList<ContentProviderOperation>()
+        resolver.query(ContactsContract.Data.CONTENT_URI, projection, selection, args, null)?.use { cursor ->
+            while (cursor.moveToNext()) {
+                val id = cursor.getString(0)
+                val rest = ContactNote.strip(cursor.getString(1).orEmpty())
+                val sel = "${ContactsContract.Data._ID} = ?"
+                ops += if (rest.isBlank()) {
+                    ContentProviderOperation.newDelete(ContactsContract.Data.CONTENT_URI).withSelection(sel, arrayOf(id)).build()
+                } else {
+                    ContentProviderOperation.newUpdate(ContactsContract.Data.CONTENT_URI).withSelection(sel, arrayOf(id))
+                        .withValue(ContactsContract.CommonDataKinds.Note.NOTE, rest).build()
+                }
+            }
+        }
+        if (ops.isEmpty()) return 0
+        return try {
+            resolver.applyBatch(ContactsContract.AUTHORITY, ops)
+            ops.size
+        } catch (e: Exception) {
+            Log.e("ContactSyncer", "Removing note blocks failed", e)
+            0
+        }
+    }
+
+    /**
      * The phone-book contact that has [phone] *and* is the same person by name. A number shared
      * by a household, or recycled to someone else the user also knows, must not carry this
      * person's status, so a number alone is not enough.
@@ -134,7 +167,12 @@ class SystemContactSyncer @Inject constructor(@ApplicationContext private val co
  */
 object ContactNote {
     const val SIGNATURE = "— CleanUnderwear"
-    private val BLOCK = Regex("""\[Registry Status: [^\]]*][\s\S]*?(?:$SIGNATURE|(?=\n\s*\n)|$)""")
+
+    /** [Target.matchRecordKey] of a possible match restored from a note: a claim waiting for the user, not a record. */
+    const val RESTORED_KEY = "note:restored"
+    // The status line, then only the lines the app writes (or older versions wrote), then the
+    // signature if signed: a line of the user's own right after an unsigned block isn't taken with it.
+    private val BLOCK = Regex("""\[Registry Status: [^\]\n]*](?:\r?\n(?:Status Since|Last Check|Records|Obit): [^\n]*)*(?:\r?\n$SIGNATURE)?""")
 
     /** The block for [target], or null when its status isn't one that belongs in a note. */
     fun block(target: Target, formatDate: (Long) -> String): String? {
@@ -160,6 +198,9 @@ object ContactNote {
         if (BLOCK.containsMatchIn(text)) return BLOCK.replaceFirst(text, Regex.escapeReplacement(block))
         return if (text.isBlank()) block else text.trimEnd() + "\n\n" + block
     }
+
+    /** [note] without the app's block: what the user wrote. */
+    fun strip(note: String): String = BLOCK.replaceFirst(note, "").trim()
 
     /** Whether [note] holds a block this app wrote (signed), as opposed to text that only looks like one. */
     fun isSigned(note: String): Boolean = BLOCK.find(note)?.value?.trimEnd()?.endsWith(SIGNATURE) == true

@@ -119,6 +119,8 @@ class UpdateChecker @Inject constructor(
 /** The latest stable release as GitHub reports it. */
 data class GitHubRelease(val version: String, val url: String) {
     companion object {
+        private const val RELEASES_PREFIX = "https://github.com/HereLiesAz/CleanUnderwear/releases/"
+
         // Not preceded by a digit or dot, so "v1.11.0.2" yields 1.11.0.2, not 11.0.2.
         private val VERSION = Regex("""(?<![\d.])\d+\.\d+\.\d+(?:\.\d+)?(?![\d.])""")
 
@@ -132,7 +134,8 @@ data class GitHubRelease(val version: String, val url: String) {
             if (o.get("draft")?.asBoolean == true || o.get("prerelease")?.asBoolean == true) return null
             val tag = o.get("tag_name")?.asString.orEmpty()
             val body = o.get("body")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
-            val url = o.get("html_url")?.asString ?: return null
+            // Only this repository's release pages are ever opened.
+            val url = o.get("html_url")?.asString?.takeIf { it.startsWith(RELEASES_PREFIX) } ?: return null
             val tagVersion = VERSION.find(tag)?.value ?: return null
             val version = (sequenceOf(tagVersion) + VERSION.findAll(body).map { it.value }
                 .filter { it == tagVersion || it.startsWith("$tagVersion.") })

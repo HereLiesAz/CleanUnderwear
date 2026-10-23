@@ -1,17 +1,6 @@
 package com.hereliesaz.cleanunderwear.data
 
-import android.Manifest
-import android.content.Context
-import android.content.pm.PackageManager
-import android.net.Uri
-import android.provider.CallLog
-import android.provider.Telephony
-import androidx.core.content.ContextCompat
 import com.hereliesaz.cleanunderwear.match.StringSimilarity
-import com.hereliesaz.cleanunderwear.util.DiagnosticLogger
-import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -63,58 +52,11 @@ interface CommsHistory {
 }
 
 /**
- * Reads the device call log and SMS inbox/outbox. Both permissions are optional and requested only
- * from the review screen: without them the review still works, minus the history signals.
+ * No device history. The call log and SMS permissions are restricted on Google Play and the app
+ * doesn't declare them, so nothing reads them: the review runs without history signals, and the
+ * code that read them is gone rather than left armed for a permission that might be re-added.
  */
 @Singleton
-class DeviceCommsHistory @Inject constructor(
-    @ApplicationContext private val context: Context
-) : CommsHistory {
-
-    fun hasAccess(): Boolean = granted(Manifest.permission.READ_CALL_LOG) || granted(Manifest.permission.READ_SMS)
-
-    /**
-     * Google Play restricts both permissions to default dialer and SMS apps, so the manifest does
-     * not declare them for now; this reports whether a build declares them again.
-     */
-    override fun requestable(): Boolean = try {
-        val info = context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_PERMISSIONS)
-        info.requestedPermissions.orEmpty().any {
-            it == Manifest.permission.READ_CALL_LOG || it == Manifest.permission.READ_SMS
-        }
-    } catch (e: Exception) {
-        false
-    }
-
-    override suspend fun load(): HistoryIndex? = withContext(Dispatchers.IO) {
-        val builder = HistoryIndex.Builder()
-        var readAnything = false
-        if (granted(Manifest.permission.READ_CALL_LOG)) {
-            readAnything = scan(CallLog.Calls.CONTENT_URI, CallLog.Calls.NUMBER, CallLog.Calls.DATE, builder) || readAnything
-        }
-        if (granted(Manifest.permission.READ_SMS)) {
-            readAnything = scan(Telephony.Sms.CONTENT_URI, Telephony.Sms.ADDRESS, Telephony.Sms.DATE, builder) || readAnything
-        }
-        if (readAnything) builder.build() else null
-    }
-
-    private fun granted(permission: String): Boolean =
-        ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
-
-    /** @return whether the provider could be queried at all. */
-    private fun scan(uri: Uri, numberColumn: String, dateColumn: String, builder: HistoryIndex.Builder): Boolean {
-        return try {
-            val cursor = context.contentResolver.query(uri, arrayOf(numberColumn, dateColumn), null, null, null)
-                ?: return false
-            cursor.use {
-                val numberIdx = it.getColumnIndexOrThrow(numberColumn)
-                val dateIdx = it.getColumnIndexOrThrow(dateColumn)
-                while (it.moveToNext()) builder.add(it.getString(numberIdx), it.getLong(dateIdx))
-            }
-            true
-        } catch (e: Exception) {
-            DiagnosticLogger.log("History scan of $uri failed: ${e.javaClass.simpleName}")
-            false
-        }
-    }
+class NoCommsHistory @Inject constructor() : CommsHistory {
+    override suspend fun load(): HistoryIndex? = null
 }
