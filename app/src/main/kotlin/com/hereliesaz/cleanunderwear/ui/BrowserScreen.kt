@@ -82,6 +82,10 @@ fun BrowserScreen(
     onAllComplete: () -> Unit,
     onCancel: () -> Unit,
     isBlocked: (String) -> Boolean = { false },
+    /** Who or what this is for ("Looking up Jane Doe (4 of 212)"); the mission label if null. */
+    context: String? = null,
+    /** Whether backing out ends a whole run of lookups, not just this page. */
+    stopsBatch: Boolean = false,
 ) {
     if (missions.isEmpty()) {
         // Defensive: nothing to do.
@@ -220,20 +224,18 @@ fun BrowserScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("${mission.label} (${currentIndex + 1}/${missions.size})") },
-                navigationIcon = {
-                    IconButton(onClick = ::cancel) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Cancel")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    titleContentColor = MaterialTheme.colorScheme.primary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.primary
-                )
+            AppTopBar(
+                title = context?.takeIf { it.isNotBlank() }
+                    ?: if (missions.size > 1) "${mission.label} (${currentIndex + 1} of ${missions.size})" else mission.label,
+                onBack = ::cancel,
+                backLabel = when {
+                    stopsBatch -> "Stop all lookups"
+                    mission.autoExtract -> "Stop"
+                    else -> "Close"
+                }
             )
-        }
+        },
+        containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -386,7 +388,8 @@ fun BrowserScreen(
                             com.hereliesaz.aznavrail.AzLoad()
                             Spacer(modifier = Modifier.height(12.dp))
                             Text(
-                                text = if (!pageReady) "Loading…" else "Working — please don't touch the screen",
+                                text = if (!pageReady) "Loading the page…" else "Reading the page. Please don't touch it.",
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                         }
@@ -402,15 +405,21 @@ fun BrowserScreen(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
-                        "This page may be blocked, have failed to load, or timed out. Solve any CAPTCHA, retry, skip, or abort.",
-                        color = MaterialTheme.colorScheme.primary
+                        "This page needs you, or didn't load. If it shows a CAPTCHA or a sign-in, complete it and " +
+                            "the lookup carries on by itself.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    AppCaption(
+                        "Try again reloads this page. Skip moves on without it." +
+                            if (stopsBatch) " Stop ends every lookup left; what was found so far is kept." else " Stop closes it."
                     )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         AzButton(
-                            text = "Retry extraction",
+                            text = "Try again",
                             onClick = {
                                 extractionGate.invalidate()
                                 automationRan = false
@@ -427,7 +436,7 @@ fun BrowserScreen(
                             shape = AzButtonShape.RECTANGLE
                         )
                         AzButton(
-                            text = "Skip search",
+                            text = "Skip",
                             onClick = {
                                 paused = false
                                 onMissionResult(mission, MissionOutcome.Blocked)
@@ -437,7 +446,7 @@ fun BrowserScreen(
                             shape = AzButtonShape.RECTANGLE
                         )
                         AzButton(
-                            text = "Abort",
+                            text = "Stop",
                             onClick = ::cancel,
                             modifier = Modifier.weight(1f),
                             shape = AzButtonShape.RECTANGLE

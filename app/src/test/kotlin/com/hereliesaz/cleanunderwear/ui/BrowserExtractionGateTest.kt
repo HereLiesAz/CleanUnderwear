@@ -22,6 +22,15 @@ class BrowserExtractionGateTest {
     }
 
     @Test
+    fun tokensAreUnguessable() {
+        val gate = BrowserExtractionGate()
+        val tokens = (1..50).map { gate.invalidate(); gate.beginExtraction()!! }
+        assertTrue(tokens.all { it.length == 32 && it.all { c -> c in '0'..'9' || c in 'a'..'f' } })
+        assertEquals(tokens.size, tokens.toSet().size)
+        assertFalse(tokens.contains("1"))
+    }
+
+    @Test
     fun navigationInvalidatesInFlightResult() {
         val gate = BrowserExtractionGate()
         val beforeNavigation = gate.beginExtraction()!!

@@ -152,8 +152,12 @@ class HtmlScraper @Inject constructor(
         }
     }
 
-    private fun sanitize(url: String): String =
-        if (!url.startsWith("http://") && !url.startsWith("https://")) "https://$url" else url
+    /** Always HTTPS: a scheme-less URL gets one, and plain http is upgraded. */
+    private fun sanitize(url: String): String = when {
+        url.startsWith("https://") -> url
+        url.startsWith("http://") -> "https://" + url.removePrefix("http://")
+        else -> "https://$url"
+    }
 
     companion object {
         private const val DESKTOP_UA =

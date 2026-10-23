@@ -28,6 +28,7 @@ import com.hereliesaz.aznavrail.AzTextBox
 import com.hereliesaz.cleanunderwear.data.TargetLite
 import com.hereliesaz.cleanunderwear.data.TargetStatus
 import com.hereliesaz.cleanunderwear.util.DiagnosticLogger
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.launch
 
 /** The contact list: search, filters, and every contact with its status. */
@@ -61,6 +62,27 @@ fun TargetListScreen(
         namelessFilter, emailOnlyFilter, hasEmailFilter, hasAddressFilter, pendingEnrichmentFilter
     )
     val filtering = filters.any { it != null }
+
+    val context = LocalContext.current
+    fun granted() = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_CONTACTS) ==
+        android.content.pm.PackageManager.PERMISSION_GRANTED
+    var contactsAllowed by remember { mutableStateOf(granted()) }
+    var askedBefore by rememberSaveable { mutableStateOf(false) }
+    val contactsPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        contactsAllowed = granted()
+        if (result[android.Manifest.permission.READ_CONTACTS] == true) viewModel.sweepContacts()
+    }
+    // Re-read when coming back from system settings.
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(lifecycle) {
+        lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) {
+            val now = granted()
+            if (now && !contactsAllowed) viewModel.sweepContacts()
+            contactsAllowed = now
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
         if (showDiagnosticLog) DiagnosticLogView(diagnosticLogs)
@@ -110,6 +132,27 @@ fun TargetListScreen(
                         Text("No contacts match.", style = MaterialTheme.typography.titleMedium)
                         AppCaption("A filter tapped once shows only those contacts, twice hides them, three times clears it.")
                         AppTextAction("Clear search and filters", { viewModel.setSearchQuery(""); viewModel.clearFilters() })
+                    } else if (!contactsAllowed) {
+                        Text("The app can't see your contacts.", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Allow access to read the people on your phone. You can still add someone by hand.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                        AppAction("Allow access to contacts", {
+                            if (askedBefore) {
+                                // Android won't ask again after a refusal; system settings can still allow it.
+                                context.startActivity(
+                                    android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                                        .setData(android.net.Uri.fromParts("package", context.packageName, null))
+                                )
+                            } else {
+                                askedBefore = true
+                                contactsPermission.launch(arrayOf(android.Manifest.permission.READ_CONTACTS, android.Manifest.permission.WRITE_CONTACTS))
+                            }
+                        })
+                        AppTextAction("Add someone by hand", { viewModel.setShowManualEntryDialog(true) })
                     } else {
                         Text("Start by importing your contacts.", style = MaterialTheme.typography.titleMedium)
                         Text(
@@ -210,6 +253,7 @@ private fun DiagnosticLogView(logs: List<DiagnosticLogger.LogEntry>) {
                     context.startActivity(android.content.Intent.createChooser(intent, "Share activity log"))
                 }) { Icon(Icons.Default.Share, contentDescription = "Share log") }
             }
+            AppCaption("Contacts' names appear here. Share it only with someone you'd show your contacts to.", Modifier.padding(horizontal = Spacing.sm))
             LazyColumn(
                 state = logListState,
                 modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = Spacing.sm)

@@ -26,14 +26,16 @@ object DiagnosticLogger {
         enum class LogLevel { INFO, DEBUG, WARN, ERROR }
     }
 
-    fun log(message: String, level: LogEntry.LogLevel = LogEntry.LogLevel.DEBUG) {
+    fun log(raw: String, level: LogEntry.LogLevel = LogEntry.LogLevel.DEBUG) {
+        val message = redact(raw)
         val entry = LogEntry(dateFormat.format(Instant.now()), message, level)
         val currentLogs = _logs.value.toMutableList()
         currentLogs.add(0, entry) // Newest first
         if (currentLogs.size > 500) currentLogs.removeAt(currentLogs.size - 1)
         _logs.value = currentLogs
         
-        // Also log to system
+        // Logcat is readable over adb and in bug reports: debug builds only.
+        if (!com.hereliesaz.cleanunderwear.BuildConfig.DEBUG) return
         when (level) {
             LogEntry.LogLevel.INFO -> android.util.Log.i("CleanUnderwear", message)
             LogEntry.LogLevel.DEBUG -> android.util.Log.d("CleanUnderwear", message)
@@ -41,6 +43,17 @@ object DiagnosticLogger {
             LogEntry.LogLevel.ERROR -> android.util.Log.e("CleanUnderwear", message)
         }
     }
+
+    /**
+     * Strips what would identify a contact's details in a shared log: URL query strings (where
+     * searches put names) and all but the last four digits of any phone-length number.
+     */
+    internal fun redact(message: String): String = message
+        .replace(Regex("""(https?://[^\s?#]+)[?#]\S*""")) { it.groupValues[1] + "?…" }
+        .replace(Regex("""(?<!\d)(\d[\d\s().-]{5,}\d)(?!\d)""")) { m ->
+            val digits = m.value.filter(Char::isDigit)
+            if (digits.length >= 7) "…" + digits.takeLast(4) else m.value
+        }
 
     fun clear() {
         _logs.value = emptyList()

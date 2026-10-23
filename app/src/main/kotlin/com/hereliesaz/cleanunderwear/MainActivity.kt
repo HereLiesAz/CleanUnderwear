@@ -1,28 +1,33 @@
 package com.hereliesaz.cleanunderwear
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
-import com.hereliesaz.cleanunderwear.ui.MainViewModel
+import com.hereliesaz.cleanunderwear.ui.AppDialog
+import com.hereliesaz.cleanunderwear.ui.AppTypography
 import com.hereliesaz.cleanunderwear.ui.CleanUnderwearApp
+import com.hereliesaz.cleanunderwear.ui.MainViewModel
+import com.hereliesaz.cleanunderwear.ui.NotificationHelper
 import com.hereliesaz.cleanunderwear.ui.SurveillanceDarkColorScheme
 import com.hereliesaz.cleanunderwear.ui.SurveillanceLightColorScheme
-import com.hereliesaz.cleanunderwear.util.GitHubCrashReporter
+import com.hereliesaz.cleanunderwear.util.CrashReport
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -30,100 +35,68 @@ class MainActivity : ComponentActivity() {
 
     private val viewModel: MainViewModel by viewModels()
 
-    private val requestPermissionsLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val contactsGranted = permissions[Manifest.permission.READ_CONTACTS] ?: false
-        if (contactsGranted) {
-            viewModel.sweepContacts()
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
-        // Initialize GitHub Crash Reporting
-        setupCrashReporting()
-
-        checkAndRequestPermissions()
         openTargetFrom(intent)
 
         setContent {
             val isDarkTheme by viewModel.isDarkTheme.collectAsState()
+            val onboarded by viewModel.isOnboardingCompleted.collectAsState()
             val colorScheme = if (isDarkTheme) SurveillanceDarkColorScheme else SurveillanceLightColorScheme
 
-            MaterialTheme(colorScheme = colorScheme) {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    LaunchedEffect(Unit) {
-                        viewModel.scheduleDailyPanopticon()
+            MaterialTheme(colorScheme = colorScheme, typography = AppTypography) {
+                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                    LaunchedEffect(Unit) { viewModel.scheduleDailyPanopticon() }
+                    // Permissions are asked for at the end of onboarding, after the app has
+                    // explained itself. Contacts are read on the first creation (not a rotation)
+                    // once onboarding is done and only if the user allowed it.
+                    LaunchedEffect(onboarded) {
+                        if (onboarded && savedInstanceState == null && contactsAllowed()) viewModel.sweepContacts()
                     }
-
                     CleanUnderwearApp(viewModel = viewModel)
+
+                    var crash by remember { mutableStateOf(if (onboarded) CrashReport.pending(this) else null) }
+                    crash?.let { report ->
+                        AppDialog(
+                            title = "The app closed unexpectedly",
+                            confirm = "Send report",
+                            onConfirm = {
+                                crash = null
+                                CrashReport.discard(this)
+                                try {
+                                    startActivity(Intent(Intent.ACTION_VIEW, CrashReport.issueUrl(report)))
+                                } catch (e: android.content.ActivityNotFoundException) {
+                                    // No browser.
+                                }
+                            },
+                            onDismiss = { crash = null; CrashReport.discard(this) },
+                            dismiss = "Don't send"
+                        ) {
+                            Text(
+                                "A report opens on GitHub in your browser, where you can read it before posting. " +
+                                    "It holds the app and Android versions and where in the code it failed; no " +
+                                    "contact names, numbers or other details."
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 
-    override fun onNewIntent(intent: android.content.Intent) {
+    override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         openTargetFrom(intent)
     }
 
+    private fun contactsAllowed() =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
+
     /** A notification names the contact it is about; open that contact. */
-    private fun openTargetFrom(intent: android.content.Intent?) {
-        val id = intent?.getIntExtra(com.hereliesaz.cleanunderwear.ui.NotificationHelper.EXTRA_TARGET_ID, -1) ?: -1
+    private fun openTargetFrom(intent: Intent?) {
+        val id = intent?.getIntExtra(NotificationHelper.EXTRA_TARGET_ID, -1) ?: -1
         if (id >= 0) viewModel.requestOpenTarget(id)
-    }
-
-    private fun setupCrashReporting() {
-        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
-        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-            // In production, you'd use a background service or WorkManager for this.
-            // For now, we attempt a quick fire-and-forget.
-            GitHubCrashReporter(this).reportCrash(throwable)
-            defaultHandler?.uncaughtException(thread, throwable)
-        }
-    }
-
-    private fun checkAndRequestPermissions() {
-        val permissions = mutableListOf(
-            Manifest.permission.READ_CONTACTS,
-            Manifest.permission.WRITE_CONTACTS
-        )
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-        }
-
-        val missingPermissions = permissions.filter {
-            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-        }
-
-        if (missingPermissions.isNotEmpty()) {
-            showPermissionRationale {
-                requestPermissionsLauncher.launch(missingPermissions.toTypedArray())
-            }
-        } else {
-            // Already have permissions, ensure contacts are swept if needed
-            viewModel.sweepContacts()
-        }
-    }
-
-    private fun showPermissionRationale(onConfirm: () -> Unit) {
-        android.app.AlertDialog.Builder(this)
-            .setTitle("Contacts & Notifications")
-            .setMessage(
-                "CleanUnderwear reads your contacts and checks their names against public arrest, " +
-                    "inmate and obituary records. To do this, contact names and locations are sent to " +
-                    "those records sites, and to people-search sites when you look up missing details. " +
-                    "Results are saved to your contacts' notes. Notifications tell you when a status " +
-                    "changes. Your contact list is never uploaded to a server of ours."
-            )
-            .setPositiveButton("Grant Access") { _, _ -> onConfirm() }
-            .setNegativeButton("Exit") { _, _ -> finish() }
-            .setCancelable(false)
-            .show()
     }
 }

@@ -542,6 +542,54 @@ class MainViewModel @Inject constructor(
         _isDarkTheme.value = enabled
     }
 
+    /** Alerts about possible deaths, and about arrests and custody; matches still show in the app. */
+    private val _notifyDeath = MutableStateFlow(prefs.getBoolean(NotificationHelper.PREF_NOTIFY_DEATH, true))
+    val notifyDeath: StateFlow<Boolean> = _notifyDeath
+    private val _notifyCustody = MutableStateFlow(prefs.getBoolean(NotificationHelper.PREF_NOTIFY_CUSTODY, true))
+    val notifyCustody: StateFlow<Boolean> = _notifyCustody
+
+    fun setNotifyDeath(on: Boolean) { prefs.edit { putBoolean(NotificationHelper.PREF_NOTIFY_DEATH, on) }; _notifyDeath.value = on }
+    fun setNotifyCustody(on: Boolean) { prefs.edit { putBoolean(NotificationHelper.PREF_NOTIFY_CUSTODY, on) }; _notifyCustody.value = on }
+
+    /** The hour of day the daily check aims for; the OS may run it later (battery, network). */
+    private val _checkHour = MutableStateFlow(prefs.getInt("check_hour", 9))
+    val checkHour: StateFlow<Int> = _checkHour
+
+    fun setCheckHour(hour: Int) {
+        prefs.edit { putInt("check_hour", hour) }
+        _checkHour.value = hour
+        scheduleDailyPanopticon(reschedule = true)
+    }
+
+    /**
+     * Signs out of every site opened in the app's browser (Facebook, Google, Instagram,
+     * WhatsApp Web, CyberBackgroundChecks): their cookies and stored data are deleted.
+     */
+    fun signOutOfSites() {
+        android.webkit.CookieManager.getInstance().removeAllCookies { removed ->
+            android.webkit.CookieManager.getInstance().flush()
+            post(if (removed) "Signed out of every site used in the app's browser." else "There were no site sign-ins to remove.")
+        }
+        android.webkit.WebStorage.getInstance().deleteAllData()
+    }
+
+    /**
+     * Deletes everything the app stored: its contact list, merge history and review decisions,
+     * the notes it wrote into phone-book contacts, and site sign-ins. Settings are kept.
+     */
+    fun deleteEverything() {
+        viewModelScope.launch {
+            pipelineCoordinator.runExclusive("delete-everything") {
+                _operationState.value = OperationState(isRunning = true, description = "Deleting…", progress = -1f)
+                val notes = withContext(Dispatchers.IO) { contactSyncer.removeAllBlocks() }
+                repository.wipeAll()
+                _operationState.value = OperationState(isRunning = false)
+                post("Deleted the app's data and its notes on $notes contact${if (notes == 1) "" else "s"}.")
+            }
+            signOutOfSites()
+        }
+    }
+
     fun setShowDiagnosticLog(enabled: Boolean) {
         prefs.edit { putBoolean("show_diagnostic_log", enabled) }
         _showDiagnosticLog.value = enabled
@@ -650,6 +698,7 @@ class MainViewModel @Inject constructor(
                     harvestContactsUseCase.processManualTargets(friends)
                     post("Read ${friends.size} Facebook friend${if (friends.size == 1) "" else "s"}.")
                 } finally {
+                    com.hereliesaz.cleanunderwear.util.WebSessions.forget(com.hereliesaz.cleanunderwear.util.WebSessions.FACEBOOK)
                     _operationState.value = OperationState(isRunning = false)
                 }
             }
@@ -841,15 +890,15 @@ class MainViewModel @Inject constructor(
         return deferred.await()
     }
 
-    fun harvestWhatsApp() = harvestInBrowser("whatsapp-harvest", BrowserMission.HarvestWhatsApp, "WhatsApp chats") {
+    fun harvestWhatsApp() = harvestInBrowser("whatsapp-harvest", BrowserMission.HarvestWhatsApp, "WhatsApp chats", com.hereliesaz.cleanunderwear.util.WebSessions.WHATSAPP) {
         whatsAppHarvester.parse(it)
     }
 
-    fun harvestInstagram() = harvestInBrowser("instagram-harvest", BrowserMission.HarvestInstagram, "Instagram followers") {
+    fun harvestInstagram() = harvestInBrowser("instagram-harvest", BrowserMission.HarvestInstagram, "Instagram followers", com.hereliesaz.cleanunderwear.util.WebSessions.INSTAGRAM) {
         instagramHarvester.parse(it)
     }
 
-    fun harvestGoogleContacts() = harvestInBrowser("google-harvest", BrowserMission.HarvestGoogleContacts, "Google Contacts") {
+    fun harvestGoogleContacts() = harvestInBrowser("google-harvest", BrowserMission.HarvestGoogleContacts, "Google Contacts", com.hereliesaz.cleanunderwear.util.WebSessions.GOOGLE) {
         googleContactsHarvester.parse(it)
     }
 
@@ -857,7 +906,7 @@ class MainViewModel @Inject constructor(
      * Opens [mission] in the visible browser, where the user signs in (or scans a QR code) if the
      * service needs it, and imports what [parse] reads from the page it hands back.
      */
-    private fun harvestInBrowser(key: String, mission: BrowserMission, what: String, parse: (String) -> List<Target>) {
+    private fun harvestInBrowser(key: String, mission: BrowserMission, what: String, hosts: List<String>, parse: (String) -> List<Target>) {
         viewModelScope.launch {
             pipelineCoordinator.runExclusive(key) {
                 try {
@@ -869,6 +918,8 @@ class MainViewModel @Inject constructor(
                     harvestContactsUseCase.processManualTargets(found)
                     post(if (found.isEmpty()) "Nothing was read from $what. If you weren't signed in, try again." else "Read ${found.size} from $what.")
                 } finally {
+                    // The sign-in was for this import only.
+                    com.hereliesaz.cleanunderwear.util.WebSessions.forget(hosts)
                     _operationState.value = OperationState(isRunning = false)
                 }
             }
@@ -911,9 +962,9 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun scheduleDailyPanopticon() {
+    fun scheduleDailyPanopticon(reschedule: Boolean = false) {
         val calendar = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, 9)
+            set(Calendar.HOUR_OF_DAY, _checkHour.value)
             set(Calendar.MINUTE, 0)
             set(Calendar.SECOND, 0)
         }
@@ -943,9 +994,10 @@ class MainViewModel @Inject constructor(
         // UPDATE rather than KEEP so existing installs pick up new constraints
         // when the build changes them, instead of being stuck on whatever
         // policy was in effect the day they first installed.
+        // A new check time needs a fresh schedule; UPDATE would keep the old start time.
         workManager.enqueueUniquePeriodicWork(
             "daily_panopticon",
-            ExistingPeriodicWorkPolicy.UPDATE,
+            if (reschedule) ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE else ExistingPeriodicWorkPolicy.UPDATE,
             periodicWorkRequest
         )
     }
