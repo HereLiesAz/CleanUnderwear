@@ -767,41 +767,32 @@ class MainViewModel @Inject constructor(
         return deferred.await()
     }
 
-    fun harvestWhatsApp() {
-        viewModelScope.launch {
-            pipelineCoordinator.runExclusive("whatsapp-harvest") {
-                try {
-                    _operationState.value = OperationState(isRunning = true, description = "Linking to WhatsApp Web...", progress = -1f)
-                    val contacts = whatsAppHarvester.harvestContacts()
-                    harvestContactsUseCase.processManualTargets(contacts)
-                } finally {
-                    _operationState.value = OperationState(isRunning = false)
-                }
-            }
-        }
+    fun harvestWhatsApp() = harvestInBrowser("whatsapp-harvest", BrowserMission.HarvestWhatsApp, "WhatsApp chats") {
+        whatsAppHarvester.parse(it)
     }
 
-    fun harvestInstagram() {
-        viewModelScope.launch {
-            pipelineCoordinator.runExclusive("instagram-harvest") {
-                try {
-                    _operationState.value = OperationState(isRunning = true, description = "Importing Instagram followers...", progress = -1f)
-                    val followers = instagramHarvester.harvestFollowers()
-                    harvestContactsUseCase.processManualTargets(followers)
-                } finally {
-                    _operationState.value = OperationState(isRunning = false)
-                }
-            }
-        }
+    fun harvestInstagram() = harvestInBrowser("instagram-harvest", BrowserMission.HarvestInstagram, "Instagram followers") {
+        instagramHarvester.parse(it)
     }
 
-    fun harvestGoogleContacts() {
+    fun harvestGoogleContacts() = harvestInBrowser("google-harvest", BrowserMission.HarvestGoogleContacts, "Google Contacts") {
+        googleContactsHarvester.parse(it)
+    }
+
+    /**
+     * Opens [mission] in the visible browser, where the user signs in (or scans a QR code) if the
+     * service needs it, and imports what [parse] reads from the page it hands back.
+     */
+    private fun harvestInBrowser(key: String, mission: BrowserMission, what: String, parse: (String) -> List<Target>) {
         viewModelScope.launch {
-            pipelineCoordinator.runExclusive("google-harvest") {
+            pipelineCoordinator.runExclusive(key) {
                 try {
-                    _operationState.value = OperationState(isRunning = true, description = "Pulling Google Contacts roster...", progress = -1f)
-                    val contacts = googleContactsHarvester.harvestContacts()
-                    harvestContactsUseCase.processManualTargets(contacts)
+                    _operationState.value = OperationState(isRunning = true, description = "Importing $what. Sign in if asked.", progress = -1f)
+                    val html = launchMissionAndAwait(mission)
+                    if (html.isNullOrBlank()) return@runExclusive
+                    val found = parse(html)
+                    com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log("Import: $what yielded ${found.size} contact(s).")
+                    harvestContactsUseCase.processManualTargets(found)
                 } finally {
                     _operationState.value = OperationState(isRunning = false)
                 }

@@ -13,7 +13,8 @@ import javax.inject.Inject
 
 /**
  * Plain-HTTP scraper for sources that render server-side and respond to a single GET / POST.
- * For JS-driven roster pages, use [WebViewScraper] instead.
+ * Pages that only render with JavaScript can't be checked unattended; they are left to the
+ * visible browser.
  */
 class HtmlScraper @Inject constructor(
     private val okHttpClient: OkHttpClient,

@@ -1,6 +1,5 @@
 package com.hereliesaz.cleanunderwear.data
 
-import com.hereliesaz.cleanunderwear.network.WebViewScraper
 import com.hereliesaz.cleanunderwear.util.DiagnosticLogger
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
@@ -8,21 +7,21 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Scrapes the WhatsApp Web chat sidebar for distinct conversation partners.
+ * Reads the WhatsApp Web chat sidebar for distinct conversation partners.
  *
- * Caveat: web.whatsapp.com requires a one-time QR linkage with the user's phone. The injection
- * script will wait until the chat list grid renders (post-link) before dumping. If the user has
- * never linked, this returns an empty list silently — by design; the user is expected to link
- * via the app's WebView surface beforehand.
+ * Runs in the visible browser ([com.hereliesaz.cleanunderwear.domain.BrowserMission.HarvestWhatsApp]):
+ * web.whatsapp.com shows its QR code there for the user to scan with their phone, and [SCRIPT]
+ * waits for the chat list to render after linking before handing the page back.
  */
 @Singleton
-class WhatsAppHarvester @Inject constructor(
-    private val scraper: WebViewScraper
-) {
-    private val INJECTION_SCRIPT = """
+class WhatsAppHarvester @Inject constructor() {
+    companion object {
+        const val URL = "https://web.whatsapp.com/"
+
+        val SCRIPT = """
         (function() {
             const start = Date.now();
-            const giveUpAfterMs = 90000;
+            const giveUpAfterMs = 240000;
 
             function listGrid() {
                 return document.querySelector('div[aria-label="Chat list"][role="grid"]')
@@ -34,7 +33,7 @@ class WhatsAppHarvester @Inject constructor(
                 const linked = !document.querySelector('canvas');
                 if (!linked || !grid) {
                     if (Date.now() - start > giveUpAfterMs) {
-                        AndroidInterface.processHtml(document.documentElement.outerHTML);
+                        window.HTMLOUT.dump(document.documentElement.outerHTML);
                         return;
                     }
                     setTimeout(poll, 1500);
@@ -45,7 +44,7 @@ class WhatsAppHarvester @Inject constructor(
                     grid.scrollTop = grid.scrollHeight;
                     const rows = grid.querySelectorAll('div[role="listitem"]');
                     if (rows.length === lastCount) {
-                        AndroidInterface.processHtml(document.documentElement.outerHTML);
+                        window.HTMLOUT.dump(document.documentElement.outerHTML);
                         return;
                     }
                     lastCount = rows.length;
@@ -56,14 +55,9 @@ class WhatsAppHarvester @Inject constructor(
             poll();
         })();
     """.trimIndent()
-
-    suspend fun harvestContacts(): List<Target> {
-        val html = scraper.scrapeWithInjection(
-            "https://web.whatsapp.com/",
-            INJECTION_SCRIPT
-        ) ?: return emptyList()
-        return parseChatListHtml(Jsoup.parse(html))
     }
+
+    fun parse(html: String): List<Target> = parseChatListHtml(Jsoup.parse(html))
 
     private fun parseChatListHtml(doc: Document): List<Target> {
         val contacts = mutableListOf<Target>()

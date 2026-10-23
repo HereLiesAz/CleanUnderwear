@@ -23,8 +23,7 @@ data class SearchResult(val records: List<CandidateRecord>, val failed: Boolean 
 }
 
 class SourceSearch @Inject constructor(
-    private val basicScraper: HtmlScraper,
-    private val stealthScraper: WebViewScraper
+    private val basicScraper: HtmlScraper
 ) {
     /**
      * Queries one source and returns every record on it that names the contact.
@@ -93,11 +92,12 @@ class SourceSearch @Inject constructor(
                     org.jsoup.Jsoup.parse(body).text()
                 }
             }
-            RenderMode.WEBVIEW -> stealthScraper.scrapeGhostTown(
-                url = fetchUrl,
-                settleMs = source.renderSettleMs,
-                readySelector = source.readySelector
-            )?.takeUnless { BotWall.detected(it.outerHtml()) }?.text()
+            // No automated source renders in a WebView; a catalog entry that asks for one can't
+            // be checked unattended, which is a failed lookup, not an empty one.
+            RenderMode.WEBVIEW -> {
+                com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log("${source.id}: WebView rendering isn't automated; not checked")
+                null
+            }
         } ?: return SearchResult.FAILED
         val released = source.releasedPattern?.let { Regex(it, RegexOption.IGNORE_CASE) }
         val custody = source.custodyPattern?.let { Regex(it, RegexOption.IGNORE_CASE) }

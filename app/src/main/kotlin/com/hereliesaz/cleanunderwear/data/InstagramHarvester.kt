@@ -1,6 +1,5 @@
 package com.hereliesaz.cleanunderwear.data
 
-import com.hereliesaz.cleanunderwear.network.WebViewScraper
 import com.hereliesaz.cleanunderwear.util.DiagnosticLogger
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
@@ -8,29 +7,29 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Scrapes the operator's Instagram following list. Relies on an existing IG session cookie in
- * WebView storage; if absent, the page redirects to login and parsing returns empty.
+ * Reads the user's Instagram followers.
  *
- * The flow:
- *   1) Land on /accounts/edit/ to discover the operator's username from the form input.
- *   2) Open the followers modal at /<me>/followers/ and scroll the list dialog until exhausted.
+ * Runs in the visible browser ([com.hereliesaz.cleanunderwear.domain.BrowserMission.HarvestInstagram]),
+ * so the user signs in there if they aren't already. [SCRIPT] is re-run after every page load:
+ *   1) on the sign-in page it waits;
+ *   2) on /accounts/edit/ it reads the user's handle from the form and goes to their followers;
+ *   3) on the followers page it scrolls the list dialog until it stops growing, then hands it back.
  */
 @Singleton
-class InstagramHarvester @Inject constructor(
-    private val scraper: WebViewScraper
-) {
-    private val DISCOVERY_SCRIPT = """
-        (function() {
-            const usernameField = document.querySelector('input[name="username"]');
-            const value = usernameField ? usernameField.value : '';
-            const html = '<meta name="ig-username" content="' + value + '">' +
-                document.documentElement.outerHTML;
-            AndroidInterface.processHtml(html);
-        })();
-    """.trimIndent()
+class InstagramHarvester @Inject constructor() {
+    companion object {
+        const val URL = "https://www.instagram.com/accounts/edit/"
 
-    private val FOLLOWERS_SCRIPT = """
+        val SCRIPT = """
         (function() {
+            var path = window.location.pathname;
+            if (path.indexOf('/accounts/edit') === 0) {
+                var field = document.querySelector('input[name="username"]');
+                var handle = field ? field.value : '';
+                if (handle) window.location.href = '/' + handle + '/followers/';
+                return;
+            }
+            if (!/\/followers\/?$/.test(path)) return;
             function findScroller() {
                 const dialog = document.querySelector('div[role="dialog"]');
                 if (!dialog) return null;
@@ -45,7 +44,7 @@ class InstagramHarvester @Inject constructor(
                 const scroller = findScroller();
                 if (!scroller) {
                     if (attempts > 30) {
-                        AndroidInterface.processHtml(document.documentElement.outerHTML);
+                        window.HTMLOUT.dump(document.documentElement.outerHTML);
                         return;
                     }
                     setTimeout(() => step(attempts + 1), 1000);
@@ -54,7 +53,7 @@ class InstagramHarvester @Inject constructor(
                 scroller.scrollTop = scroller.scrollHeight;
                 const links = scroller.querySelectorAll('a[role="link"]');
                 if (links.length === lastCount) {
-                    AndroidInterface.processHtml(document.documentElement.outerHTML);
+                    window.HTMLOUT.dump(document.documentElement.outerHTML);
                     return;
                 }
                 lastCount = links.length;
@@ -63,28 +62,9 @@ class InstagramHarvester @Inject constructor(
             step(0);
         })();
     """.trimIndent()
-
-    suspend fun harvestFollowers(): List<Target> {
-        val username = discoverUsername() ?: run {
-            DiagnosticLogger.log("Instagram Harvest: No active session; skipping.")
-            return emptyList()
-        }
-        val html = scraper.scrapeWithInjection(
-            "https://www.instagram.com/$username/followers/",
-            FOLLOWERS_SCRIPT
-        ) ?: return emptyList()
-        return parseFollowersHtml(Jsoup.parse(html))
     }
 
-    private suspend fun discoverUsername(): String? {
-        val html = scraper.scrapeWithInjection(
-            "https://www.instagram.com/accounts/edit/",
-            DISCOVERY_SCRIPT
-        ) ?: return null
-        val doc = Jsoup.parse(html)
-        val meta = doc.select("meta[name=ig-username]").firstOrNull()?.attr("content")?.trim()
-        return meta?.takeIf { it.isNotBlank() }
-    }
+    fun parse(html: String): List<Target> = parseFollowersHtml(Jsoup.parse(html))
 
     private fun parseFollowersHtml(doc: Document): List<Target> {
         val followers = mutableListOf<Target>()

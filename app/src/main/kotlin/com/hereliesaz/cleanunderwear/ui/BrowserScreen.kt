@@ -192,7 +192,7 @@ fun BrowserScreen(
     LaunchedEffect(batchId, currentIndex, paused) {
         if (!mission.autoExtract || batchComplete) return@LaunchedEffect
         if (paused) return@LaunchedEffect
-        delay(30_000L)
+        delay(mission.watchdogMs)
         if (!paused && !batchComplete) {
             DiagnosticLogger.log(
                 "BrowserScreen: mission ${currentIndex + 1} timed out (pageReady=$pageReady, automationRan=$automationRan); pausing",
