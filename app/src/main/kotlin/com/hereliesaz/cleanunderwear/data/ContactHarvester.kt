@@ -167,7 +167,16 @@ class ContactHarvester @Inject constructor(
                 status = data.status,
                 lockupUrl = data.lockupUrl,
                 obituaryUrl = data.obituaryUrl,
-                lastScrapedTimestamp = data.lastCheckTimestamp
+                lastScrapedTimestamp = data.lastCheckTimestamp,
+                lastStatusChangeTimestamp = data.statusSince,
+                lastVerificationSnippet = data.restoredFrom?.let {
+                    "Restored from this contact's note, which says ${it.name.lowercase()}. Check it and confirm again."
+                },
+                matchKind = when (data.restoredFrom) {
+                    TargetStatus.DECEASED -> "DEATH"
+                    TargetStatus.INCARCERATED -> "CUSTODY"
+                    else -> null
+                }
             )
         }
 
@@ -181,6 +190,10 @@ class ContactHarvester @Inject constructor(
         loggedNonCatalogUrls: MutableSet<String>,
     ) {
         val statusMatch = "\\[Registry Status: (.*?)\\]".toRegex().find(note)
+        // A confirmed death or custody is restored only from a block this app signed, with a
+        // record link from the catalog; any other note that merely says so (typed by hand, or
+        // from an older version) comes back as a possible match the user confirms again.
+        val trusted = com.hereliesaz.cleanunderwear.util.ContactNote.isSigned(note)
         statusMatch?.let {
             data.status = when (it.groupValues[1]) {
                 "Monitoring" -> TargetStatus.MONITORING
@@ -192,15 +205,14 @@ class ContactHarvester @Inject constructor(
             }
         }
 
+        val sinceMatch = "Status Since: (.*?)(\n|$)".toRegex().find(note)
+        sinceMatch?.let {
+            parseNoteDate(it.groupValues[1])?.let { t -> data.statusSince = t }
+        }
+
         val lastCheckMatch = "Last Check: (.*?)(\n|$)".toRegex().find(note)
         lastCheckMatch?.let {
-            val raw = it.groupValues[1]
-            try {
-                val date = java.text.SimpleDateFormat("MM/dd/yyyy", java.util.Locale.US).parse(raw)
-                data.lastCheckTimestamp = date?.time ?: 0L
-            } catch (e: Exception) {
-                DiagnosticLogger.log("Unparseable Last Check date in contact note: '$raw'")
-            }
+            parseNoteDate(it.groupValues[1])?.let { t -> data.lastCheckTimestamp = t }
         }
 
         val recordsMatch = "Records: (.*?)(\n|$)".toRegex().find(note)
@@ -222,6 +234,20 @@ class ContactHarvester @Inject constructor(
                 DiagnosticLogger.log("Ignoring non-catalog Obit URL on contact note: $url")
             }
         }
+
+        val confirmed = data.status == TargetStatus.DECEASED || data.status == TargetStatus.INCARCERATED
+        val evidence = if (data.status == TargetStatus.DECEASED) data.obituaryUrl else data.lockupUrl
+        if (confirmed && !(trusted && evidence != null)) {
+            data.restoredFrom = data.status
+            data.status = TargetStatus.POSSIBLE_MATCH
+        }
+    }
+
+    private fun parseNoteDate(raw: String): Long? = try {
+        java.text.SimpleDateFormat("MM/dd/yyyy", java.util.Locale.US).parse(raw.trim())?.time
+    } catch (e: Exception) {
+        DiagnosticLogger.log("Unparseable date in contact note: '$raw'")
+        null
     }
 
     private class ContactData(
@@ -232,8 +258,11 @@ class ContactHarvester @Inject constructor(
         val accounts: MutableSet<String> = mutableSetOf(),
         var status: TargetStatus = TargetStatus.UNKNOWN,
         var lastCheckTimestamp: Long = 0L,
+        var statusSince: Long = 0L,
         var lockupUrl: String? = null,
-        var obituaryUrl: String? = null
+        var obituaryUrl: String? = null,
+        /** A confirmed status read from an unsigned note, restored as a possible match instead. */
+        var restoredFrom: TargetStatus? = null
     )
 }
 

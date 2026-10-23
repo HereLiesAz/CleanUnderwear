@@ -68,7 +68,8 @@ class MainViewModel @Inject constructor(
     private val pipelineCoordinator: PipelineCoordinator,
     private val suspectReview: SuspectReview,
     private val alternateFinder: AlternateFinder,
-    private val updateChecker: com.hereliesaz.cleanunderwear.update.UpdateChecker
+    private val updateChecker: com.hereliesaz.cleanunderwear.update.UpdateChecker,
+    private val contactSyncer: com.hereliesaz.cleanunderwear.util.SystemContactSyncer
 ) : AndroidViewModel(application) {
 
     enum class SortOrder { NAME, STATUS, DATE }
@@ -439,20 +440,33 @@ class MainViewModel @Inject constructor(
 
     fun updateTarget(target: Target) {
         viewModelScope.launch {
-            repository.updateTarget(target)
+            val before = repository.getTargetById(target.id)
+            val changed = before != null && before.status != target.status
+            val stamped = if (changed) target.copy(lastStatusChangeTimestamp = System.currentTimeMillis()) else target
+            repository.updateTarget(stamped)
+            // A status the user just confirmed or cleared goes to the phone-book note now, not at
+            // the next check.
+            if (changed) syncNote(stamped.id)
         }
     }
 
     fun ignoreTarget(id: Int) {
         viewModelScope.launch {
             repository.ignore(id, System.currentTimeMillis())
+            syncNote(id)
         }
     }
 
     fun restoreTarget(id: Int) {
         viewModelScope.launch {
             repository.unignore(id, System.currentTimeMillis())
+            syncNote(id)
         }
+    }
+
+    private suspend fun syncNote(id: Int) {
+        val target = repository.getTargetById(id) ?: return
+        withContext(Dispatchers.IO) { contactSyncer.syncToSystem(target) }
     }
 
     /**
