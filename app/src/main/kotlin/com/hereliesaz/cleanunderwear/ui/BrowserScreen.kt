@@ -258,7 +258,7 @@ fun BrowserScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
         ) {
             Box(
                 modifier = Modifier
@@ -401,15 +401,7 @@ fun BrowserScreen(
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            com.hereliesaz.aznavrail.AzLoad()
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = if (!pageReady) "Loading the page…" else "Reading the page. Please don't touch it.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
+                        LoadingCaption(if (!pageReady) "Loading the page…" else "Reading the page. Please don't touch it.")
                     }
                 }
             }
@@ -418,8 +410,8 @@ fun BrowserScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                        .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
                     Text(
                         "This page needs you, or didn't load. If it shows a CAPTCHA or a sign-in, complete it and " +
@@ -433,7 +425,7 @@ fun BrowserScreen(
                     )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
                     ) {
                         AzButton(
                             text = "Try again",
