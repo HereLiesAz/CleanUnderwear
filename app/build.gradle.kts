@@ -106,9 +106,17 @@ android {
     }
     testOptions {
         unitTests.isReturnDefaultValues = true
+        unitTests.isIncludeAndroidResources = true
+        // Robolectric downloads its Android jars from Maven Central; a mirror can be named
+        // for networks where Central is throttled.
+        unitTests.all { test ->
+            System.getenv("ROBOLECTRIC_REPO")?.let { test.systemProperty("robolectric.dependency.repo.url", it) }
+        }
     }
     sourceSets {
         getByName("test") {
+            // Exported Room schemas, for MigrationTestHelper.
+            assets.srcDirs("$projectDir/schemas")
             // Surface main/assets on the unit-test classpath so JVM tests can
             // load sources.json via getResourceAsStream("/sources.json")
             // without reaching outside the module via a hardcoded File path.
@@ -135,6 +143,10 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.mockk)
+    // Room on the JVM: migrations against the exported schemas, and the DAO's real SQL.
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.androidx.room.testing)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

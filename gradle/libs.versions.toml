@@ -18,6 +18,8 @@ gson = "2.13.1"
 okhttp = "5.3.2"
 playAppUpdate = "2.1.0"
 mockk = "1.14.11"
+robolectric = "4.16"
+androidxTestCore = "1.6.1"
 hiltNav = "1.3.0"
 hiltWork = "1.3.0"
 litert = "2.17.0"
@@ -59,6 +61,9 @@ okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhtt
 okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp" }
 play-app-update-ktx = { group = "com.google.android.play", name = "app-update-ktx", version.ref = "playAppUpdate" }
 mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
+robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
+androidx-test-core = { group = "androidx.test", name = "core-ktx", version.ref = "androidxTestCore" }
+androidx-room-testing = { group = "androidx.room", name = "room-testing", version.ref = "room" }
 
 litert-tensorflow-ops = { group = "org.tensorflow", name = "tensorflow-lite-select-tf-ops", version.ref = "litert-ops" }
 litert = { group = "org.tensorflow", name = "tensorflow-lite", version.ref = "litert" }
