@@ -39,6 +39,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -265,8 +267,10 @@ fun BrowserScreen(
                     .fillMaxWidth()
                     .weight(1f)
             ) {
+            // See the darkening filter below: the page blurs behind it (Android 12+).
+            val darkened = mission.autoExtract && !paused
             AndroidView(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().then(if (darkened) Modifier.blur(16.dp) else Modifier),
                 factory = { context ->
                     val cookies = CookieManager.getInstance()
                     cookies.setAcceptCookie(true)
@@ -385,13 +389,13 @@ fun BrowserScreen(
                 // scrim lifts the instant the mission pauses for required
                 // interaction (captcha / login) — see [paused] — handing the
                 // live page back to the user. Browse-only missions are never
-                // darkened.
-                val darkened = mission.autoExtract && !paused
+                // darkened. Cancel at the bottom stops the lookup (the whole run, for Resolve).
                 if (darkened) {
+                    val blurs = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.75f))
+                            .background(Color.Black.copy(alpha = if (blurs) 0.6f else 0.85f))
                             .pointerInput(Unit) {
                                 awaitPointerEventScope {
                                     while (true) {
@@ -401,7 +405,14 @@ fun BrowserScreen(
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        LoadingCaption(if (!pageReady) "Loading the page…" else "Reading the page. Please don't touch it.")
+                        MaterialTheme(colorScheme = SurveillanceDarkColorScheme, typography = MaterialTheme.typography) {
+                            LoadingCaption(if (!pageReady) "Loading the page…" else "Reading the page. Please don't touch it.")
+                            AppAction(
+                                "Cancel",
+                                ::cancel,
+                                Modifier.align(Alignment.BottomCenter).padding(Spacing.lg)
+                            )
+                        }
                     }
                 }
             }
@@ -464,10 +475,10 @@ fun BrowserScreen(
                 }
             }
             // During an auto-extract mission the darkening filter over the
-            // WebView is the sole status surface ("Loading…" / "Working…") and
-            // also blocks interference — there is no bottom button to tap, by
-            // design. Browse-only missions show no bottom button either; the
-            // user dismisses via the up-arrow in the top bar when done reading.
+            // WebView is the sole status surface ("Loading…" / "Reading…") and
+            // blocks interference; its only control is Cancel. Browse-only
+            // missions show no bottom button; the user dismisses via the
+            // up-arrow in the top bar when done reading.
         }
     }
 }
