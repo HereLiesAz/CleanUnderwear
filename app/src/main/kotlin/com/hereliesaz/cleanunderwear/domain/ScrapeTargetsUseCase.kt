@@ -51,6 +51,7 @@ import javax.inject.Inject
  * changed the contact's status or dismissed records in the meantime.
  */
 class ScrapeTargetsUseCase @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
     private val repository: TargetRepository,
     private val verifier: IdentityVerifier,
     private val sourceCatalog: SourceCatalog,
@@ -61,13 +62,38 @@ class ScrapeTargetsUseCase @Inject constructor(
     private val semaphore = Semaphore(3)
     private val matchVerifier = MatchVerifier()
 
-    suspend operator fun invoke(onProgress: (Float, String) -> Unit = { _, _ -> }) = coroutineScope {
+    /** What one run did, in words a person can read. */
+    data class Summary(val checked: Int, val newMatches: Int, val incomplete: Int) {
+        fun describe(): String = when {
+            checked == 0 -> "Nothing was due for a check."
+            else -> buildString {
+                append("Checked $checked contact${if (checked == 1) "" else "s"}")
+                append(
+                    if (newMatches == 0) ". No new matches"
+                    else ". $newMatches possible match${if (newMatches == 1) "" else "es"} to review"
+                )
+                if (incomplete > 0) append("; $incomplete couldn't be fully checked and will be retried")
+                append('.')
+            }
+        }
+    }
+
+    private val newMatches = java.util.concurrent.atomic.AtomicInteger()
+    private val incomplete = java.util.concurrent.atomic.AtomicInteger()
+
+    suspend operator fun invoke(onProgress: (Float, String) -> Unit = { _, _ -> }): Summary = coroutineScope {
         val now = System.currentTimeMillis()
-        val targetsToProcess = repository.getReadyDueTargets(now)
+        newMatches.set(0)
+        incomplete.set(0)
+        // The user's Contact Limit: only the first N contacts (by when they were added) are
+        // checked at all; 0 means no limit.
+        val limit = context.getSharedPreferences("clean_underwear_prefs", android.content.Context.MODE_PRIVATE)
+            .getInt("global_limit", 0)
+        val targetsToProcess = repository.getReadyDueTargets(now, limit)
 
         if (targetsToProcess.isEmpty()) {
-            onProgress(1f, "Registry is up to date")
-            return@coroutineScope
+            onProgress(1f, "Nothing was due for a check.")
+            return@coroutineScope Summary(0, 0, 0)
         }
 
         // Survivor names in obituaries are checked against the user's other contacts.
@@ -101,7 +127,9 @@ class ScrapeTargetsUseCase @Inject constructor(
             }
         }.awaitAll()
 
-        onProgress(1f, "Daily check completed")
+        val summary = Summary(total, newMatches.get(), incomplete.get())
+        onProgress(1f, summary.describe())
+        summary
     }
 
     private suspend fun processTarget(
@@ -237,6 +265,7 @@ class ScrapeTargetsUseCase @Inject constructor(
                 target.checkFrequencyHours * 3600000L
             }
             if (inconclusive) {
+                incomplete.incrementAndGet()
                 emitStep("couldn't read ${failedSources.size} source${if (failedSources.size == 1) "" else "s"} — will retry")
                 commit(target) { current ->
                     current.copy(
@@ -282,6 +311,7 @@ class ScrapeTargetsUseCase @Inject constructor(
                 )
             } ?: return
 
+            if (newStatus == TargetStatus.POSSIBLE_MATCH && target.status != TargetStatus.POSSIBLE_MATCH) newMatches.incrementAndGet()
             if (newStatus != target.status && shouldNotify(target.status, newStatus)) {
                 emitStep("notifying status change")
                 notifications.notifyStatusChange(updatedTarget, target.status)

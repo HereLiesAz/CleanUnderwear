@@ -20,10 +20,15 @@ class ScrapingWorker @AssistedInject constructor(
     private val runPipeline: RunPipelineUseCase
 ) : CoroutineWorker(appContext, workerParams) {
 
+    companion object {
+        /** Output key: the run's summary, shown to the user when they started the check. */
+        const val SUMMARY = "summary"
+    }
+
     override suspend fun doWork(): Result {
-        runPipeline { progress, description ->
+        val summary = runPipeline { progress, description ->
             setProgressAsync(workDataOf("progress" to progress, "description" to description))
         }
-        return Result.success()
+        return Result.success(workDataOf(SUMMARY to summary.describe()))
     }
 }

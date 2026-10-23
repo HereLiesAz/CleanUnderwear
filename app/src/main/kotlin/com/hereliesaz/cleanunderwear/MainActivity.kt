@@ -46,6 +46,7 @@ class MainActivity : ComponentActivity() {
         setupCrashReporting()
 
         checkAndRequestPermissions()
+        openTargetFrom(intent)
 
         setContent {
             val isDarkTheme by viewModel.isDarkTheme.collectAsState()
@@ -64,6 +65,17 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        openTargetFrom(intent)
+    }
+
+    /** A notification names the contact it is about; open that contact. */
+    private fun openTargetFrom(intent: android.content.Intent?) {
+        val id = intent?.getIntExtra(com.hereliesaz.cleanunderwear.ui.NotificationHelper.EXTRA_TARGET_ID, -1) ?: -1
+        if (id >= 0) viewModel.requestOpenTarget(id)
     }
 
     private fun setupCrashReporting() {

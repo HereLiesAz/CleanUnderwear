@@ -22,7 +22,8 @@ class RunPipelineUseCase @Inject constructor(
 ) {
     private val phases = listOf("Deduplicating", "Triaging", "Monitoring")
 
-    suspend operator fun invoke(onProgress: (Float, String) -> Unit) {
+    /** Runs the pipeline; returns the daily check's summary for the person who asked for it. */
+    suspend operator fun invoke(onProgress: (Float, String) -> Unit): ScrapeTargetsUseCase.Summary =
         coordinator.runExclusive("auto-pipeline") {
             val pipeline = PipelineProgress(phases, onProgress)
 
@@ -37,9 +38,9 @@ class RunPipelineUseCase @Inject constructor(
             )
 
             pipeline.beginPhase("Monitoring")
-            scrape { sub, desc -> pipeline.emit(sub, desc) }
+            val summary = scrape { sub, desc -> pipeline.emit(sub, desc) }
 
-            pipeline.completeAll("Pipeline complete")
+            pipeline.completeAll(summary.describe())
+            summary
         }
-    }
 }

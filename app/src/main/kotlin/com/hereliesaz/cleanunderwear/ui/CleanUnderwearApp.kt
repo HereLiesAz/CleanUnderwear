@@ -220,6 +220,14 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
 
             val startDestination = if (isOnboardingCompleted) "targetList" else "onboarding"
 
+            val openTarget by viewModel.openTarget.collectAsState()
+            LaunchedEffect(openTarget, isOnboardingCompleted) {
+                val id = openTarget ?: return@LaunchedEffect
+                if (!isOnboardingCompleted) return@LaunchedEffect
+                navController.navigate("targetDetail/$id") { launchSingleTop = true }
+                viewModel.consumeOpenTarget()
+            }
+
             Box(modifier = Modifier.fillMaxSize()) {
             NavHost(navController = navController, startDestination = startDestination) {
                 composable("onboarding") {
@@ -268,6 +276,9 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                             onLaunchMission = { mission, onResult ->
                                 viewModel.launchMission(mission, onResult)
                             },
+                            onLookUp = { viewModel.resolveOne(it) },
+                            onArchive = { viewModel.ignoreTarget(it) },
+                            onRestore = { viewModel.restoreTarget(it) },
                             onNavigateBack = { navController.popBackStack() }
                         )
                     }

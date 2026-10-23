@@ -82,7 +82,7 @@ class TargetRepositoryTest {
         override suspend fun getTargetsByMonitorability(state: MonitorabilityState): List<Target> =
             targets.filter { it.monitorabilityState == state }
 
-        override suspend fun getReadyDueTargets(now: Long): List<Target> = targets.filter {
+        override suspend fun getReadyDueTargets(now: Long, limit: Int): List<Target> = targets.filter {
             it.monitorabilityState == MonitorabilityState.READY &&
                 it.status != TargetStatus.IGNORED &&
                 it.nextScheduledCheck <= now

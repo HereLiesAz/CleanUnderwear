@@ -23,15 +23,15 @@ interface TargetDao {
 
     @Query(
         "SELECT id, display_name, phone_number, area_code, status, email, " +
-            "last_status_change_timestamp, last_scraped_timestamp " +
+            "last_status_change_timestamp, last_scraped_timestamp, match_kind, monitorability_state " +
             "FROM targets ORDER BY display_name ASC"
     )
     fun getAllTargetsLite(): Flow<List<TargetLite>>
 
     @Query(
         """
-        SELECT id, display_name, phone_number, area_code, status, email, 
-               last_status_change_timestamp, last_scraped_timestamp
+        SELECT id, display_name, phone_number, area_code, status, email,
+               last_status_change_timestamp, last_scraped_timestamp, match_kind, monitorability_state
         FROM targets 
         WHERE (display_name LIKE '%' || :query || '%' ESCAPE '\' OR phone_number LIKE '%' || :query || '%' ESCAPE '\' OR email LIKE '%' || :query || '%' ESCAPE '\')
         AND (:showIgnored = 1 OR status != 'IGNORED')
@@ -79,7 +79,7 @@ interface TargetDao {
 
     @Query(
         "SELECT id, display_name, phone_number, area_code, status, email, " +
-            "last_status_change_timestamp, last_scraped_timestamp " +
+            "last_status_change_timestamp, last_scraped_timestamp, match_kind, monitorability_state " +
             "FROM targets ORDER BY display_name ASC LIMIT :limit OFFSET :offset"
     )
     suspend fun getTargetsPaged(limit: Int, offset: Int): List<TargetLite>
@@ -112,16 +112,22 @@ interface TargetDao {
     )
     suspend fun getTargetsByMonitorability(state: MonitorabilityState): List<Target>
 
+    /**
+     * Contacts due a check. With [limit] > 0 only the first [limit] monitorable contacts (by when
+     * they were added) are ever checked, the user's Contact Limit; 0 means all of them.
+     */
     @Query(
         "SELECT * FROM targets " +
             "WHERE monitorability_state = 'READY' " +
             "AND status != 'IGNORED' " +
             "AND next_scheduled_check <= :now " +
+            "AND (:limit <= 0 OR id IN (SELECT id FROM targets WHERE monitorability_state = 'READY' " +
+            "AND status != 'IGNORED' ORDER BY id ASC LIMIT :limit)) " +
             // Longest-waiting first, so a run cut short by the OS picks up where it stopped
             // instead of re-checking the start of the alphabet every day.
             "ORDER BY next_scheduled_check ASC, id ASC"
     )
-    suspend fun getReadyDueTargets(now: Long): List<Target>
+    suspend fun getReadyDueTargets(now: Long, limit: Int = 0): List<Target>
 
     @Query("SELECT * FROM targets WHERE status = :status ORDER BY display_name ASC")
     fun getTargetsByStatus(status: TargetStatus): Flow<List<Target>>

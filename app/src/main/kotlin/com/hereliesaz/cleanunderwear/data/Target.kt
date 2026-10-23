@@ -165,7 +165,11 @@ data class TargetLite(
     @ColumnInfo(name = "last_status_change_timestamp")
     val lastStatusChangeTimestamp: Long,
     @ColumnInfo(name = "last_scraped_timestamp")
-    val lastScrapedTimestamp: Long
+    val lastScrapedTimestamp: Long,
+    @ColumnInfo(name = "match_kind")
+    val matchKind: String? = null,
+    @ColumnInfo(name = "monitorability_state")
+    val monitorabilityState: MonitorabilityState = MonitorabilityState.READY
 )
 
 /**

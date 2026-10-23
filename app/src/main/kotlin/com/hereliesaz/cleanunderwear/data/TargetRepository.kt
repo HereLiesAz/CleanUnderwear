@@ -38,7 +38,7 @@ interface TargetRepository {
     fun observeTargetById(id: Int): Flow<Target?>
     suspend fun getTargetsByIds(ids: List<Int>): List<Target>
     suspend fun getTargetsByMonitorability(state: MonitorabilityState): List<Target>
-    suspend fun getReadyDueTargets(now: Long): List<Target>
+    suspend fun getReadyDueTargets(now: Long, limit: Int = 0): List<Target>
 
     // Legacy — only safe for small datasets.
     fun getAllTargets(): Flow<List<Target>>
@@ -113,8 +113,8 @@ class OfflineTargetRepository(
     override suspend fun getTargetsByMonitorability(state: MonitorabilityState): List<Target> =
         withContext(Dispatchers.IO) { targetDao.getTargetsByMonitorability(state) }
 
-    override suspend fun getReadyDueTargets(now: Long): List<Target> =
-        withContext(Dispatchers.IO) { targetDao.getReadyDueTargets(now) }
+    override suspend fun getReadyDueTargets(now: Long, limit: Int): List<Target> =
+        withContext(Dispatchers.IO) { targetDao.getReadyDueTargets(now, limit) }
 
     override fun getAllTargets(): Flow<List<Target>> = targetDao.getAllTargets()
     override fun getTargetsByStatus(status: TargetStatus): Flow<List<Target>> =

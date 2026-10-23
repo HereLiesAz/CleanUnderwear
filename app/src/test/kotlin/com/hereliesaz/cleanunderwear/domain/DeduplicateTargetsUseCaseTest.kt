@@ -61,7 +61,7 @@ class DeduplicateTargetsUseCaseTest {
         override suspend fun getTargetById(id: Int): Target? = throw NotImplementedError()
         override fun observeTargetById(id: Int): Flow<Target?> = throw NotImplementedError()
         override suspend fun getTargetsByMonitorability(state: MonitorabilityState): List<Target> = throw NotImplementedError()
-        override suspend fun getReadyDueTargets(now: Long): List<Target> = throw NotImplementedError()
+        override suspend fun getReadyDueTargets(now: Long, limit: Int): List<Target> = throw NotImplementedError()
         override fun getAllTargets(): Flow<List<Target>> = throw NotImplementedError()
         override fun getTargetsByStatus(status: TargetStatus): Flow<List<Target>> = throw NotImplementedError()
         override suspend fun updateMonitorabilityState(id: Int, state: MonitorabilityState) = throw NotImplementedError()
