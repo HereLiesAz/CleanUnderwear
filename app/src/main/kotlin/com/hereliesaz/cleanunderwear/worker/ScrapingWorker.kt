@@ -10,8 +10,8 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 
 /**
- * The nocturnal dragnet. Runs the full pipeline (dedup → triage → enrich → monitor) and streams
- * granular progress to whoever is observing this WorkRequest.
+ * The daily check. Runs the pipeline (dedup → triage → scrape; enrichment is user-started and
+ * never runs here) and streams progress to whoever is observing this WorkRequest.
  */
 @HiltWorker
 class ScrapingWorker @AssistedInject constructor(
