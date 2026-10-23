@@ -7,7 +7,7 @@ This document details the internal logic of the CleanUnderwear daily records-che
 ### `HtmlScraper` (the daily check)
 - **Method**: OkHttp + Jsoup, with a desktop browser `User-Agent`, over https.
 - **Sources**: every automatable (non-`MANUAL_LANDING`) entry in `sources.json`: rosters, court searches, obituary indexes, Google News and the BOP locator. Each search is bounded by a 60-second call timeout.
-- **Failures**: a failed request or a bot wall (`BotWall`: captcha, Cloudflare, an empty page) is recorded as unread on the contact, not as "no match", and retried within six hours.
+- **Failures**: a failed request or a bot wall (`BotWall`: captcha, Cloudflare, an empty page) is recorded as unread on the contact, not as "no match". A pending match it might have cleared stays, and is checked again within six hours; a contact with no pending match is checked as usual, so a site that is always down can't hold it at "Not checked yet". A status restored from a note waits for the user, whatever a later check finds.
 
 ### Visible browser (imports and people-search)
 Imports (Facebook, WhatsApp, Instagram, Google Contacts) and every CyberBackgroundChecks lookup run in the app's own visible `BrowserScreen`, where the user can sign in or solve a challenge. Each mission has a watchdog; a page that never settles offers retry, skip or abort.
@@ -35,7 +35,7 @@ Every Resolve and alternates search logs one line, `CYBG parse <mode>: …`: whi
 
 Because human names are ambiguous, no record is taken on its name alone:
 
-1. **BOP** (`IdentityVerifier`): the locator's JSON must carry the contact's exact first name and surname and show current custody. Nicknames are not expanded, so a common nickname can't widen a national search. A capped or captcha'd response is a failed lookup.
+1. **BOP** (`IdentityVerifier`): the locator's JSON must carry the contact's exact first name and surname, show current custody, and agree on a middle name or age the app knows from Fill in details; a name-only hit is never raised. A common name that fills the locator's 100 rows is searched again with that middle name or age. Nicknames are not expanded, so a common nickname can't widen a national search. A capped or captcha'd response is a failed lookup.
 2. **Everything else** (`RecordExtractor` → `MatchVerifier`): each record naming the contact becomes a candidate with its middle name, age, birth year, place and, for obituaries, the survivors it names. Agreeing facts raise the score; a confidently different age or middle name rejects it; a name alone stays below a weak match.
 3. **Evidence**: the text around the match is stored as `lastVerificationSnippet`, with the confidence, the reasons and the record's link, and shown to the user to confirm or dismiss. A dismissed record (`matchRecordKey`) is not raised again.
 

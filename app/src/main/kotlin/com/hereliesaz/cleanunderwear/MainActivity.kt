@@ -39,7 +39,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
-        openTargetFrom(intent)
+        // Only on a fresh start: after a rotation the intent is the same, and the user may have left that contact.
+        if (savedInstanceState == null) openTargetFrom(intent)
 
         setContent {
             val isDarkTheme by viewModel.isDarkTheme.collectAsState()

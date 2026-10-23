@@ -31,7 +31,7 @@ private val PAGES = listOf(
     Page(
         "Matches can be wrong",
         "Many people share a name. A record that resembles someone you know is often someone else. The app shows you " +
-            "why it thinks a record fits, and nothing is ever recorded about a contact until you confirm it."
+            "why it thinks a record fits, and no death or arrest is recorded about a contact until you confirm it."
     ),
     Page(
         "This can bring sad news",
@@ -42,7 +42,8 @@ private val PAGES = listOf(
         "Your data",
         "Your contact list stays on your phone. To check someone, their name is sent to the records and news sites " +
             "being searched; looking up missing details sends their name, number or email to a people-search site. " +
-            "A status you confirm is written into that contact's note, which syncs with your contacts account."
+            "Each checked contact's note gets a short line from the app: that they're checked daily, or a status " +
+            "you confirmed. Notes sync with your contacts account; a possible match is never written there."
     )
 )
 

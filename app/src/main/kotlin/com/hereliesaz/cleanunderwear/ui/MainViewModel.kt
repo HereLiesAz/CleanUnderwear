@@ -46,6 +46,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
@@ -234,10 +235,12 @@ class MainViewModel @Inject constructor(
      * One-line results for the user ("Imported 42 contacts", "Nothing was due for a check"),
      * shown briefly once an operation ends so it never just goes quiet.
      */
-    private val _messages = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 8)
-    val messages: kotlinx.coroutines.flow.SharedFlow<String> = _messages
+    // A channel, not a SharedFlow: a message posted while no screen is collecting (the browser
+    // covers the list during a lookup) waits for the next collector instead of being dropped.
+    private val _messages = kotlinx.coroutines.channels.Channel<String>(capacity = 16, onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
+    val messages: kotlinx.coroutines.flow.Flow<String> = _messages.receiveAsFlow()
 
-    private fun post(message: String) { _messages.tryEmit(message) }
+    private fun post(message: String) { _messages.trySend(message) }
 
     private val _operationState = MutableStateFlow(OperationState())
     val operationState: StateFlow<OperationState> = _operationState
@@ -301,7 +304,8 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             _updateState.value = _updateState.value.copy(checking = true)
             val result = updateChecker.check()
-            prefs.edit { putLong("last_update_check", now) }
+            // A failed check (offline, rate-limited) doesn't count: the next launch tries again.
+            if (result !is com.hereliesaz.cleanunderwear.update.UpdateResult.Failed) prefs.edit { putLong("last_update_check", now) }
             val available = result as? com.hereliesaz.cleanunderwear.update.UpdateResult.Available
             val dismissed = prefs.getString("dismissed_update", null)
             val prompt = available?.takeIf { manual || "${it.channel}:${it.version}" != dismissed }
@@ -462,15 +466,29 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun updateTarget(target: Target) {
+    /**
+     * Applies the user's [change] to the contact as it is now, not to the copy on screen ([shown]),
+     * so a daily check or lookup that wrote it meanwhile isn't undone. A verdict on a match (one
+     * that changes the status) is refused if the match itself changed since the user saw it.
+     */
+    fun updateTarget(shown: Target, change: (Target) -> Target) {
         viewModelScope.launch {
-            val before = repository.getTargetById(target.id)
-            val changed = before != null && before.status != target.status
-            val stamped = if (changed) target.copy(lastStatusChangeTimestamp = System.currentTimeMillis()) else target
-            repository.updateTarget(stamped)
+            val verdict = change(shown).status != shown.status
+            val written = repository.inTransaction {
+                val current = repository.getTargetById(shown.id) ?: return@inTransaction null
+                val matchMoved = current.status != shown.status ||
+                    current.matchRecordKey != shown.matchRecordKey ||
+                    current.lastVerificationSnippet != shown.lastVerificationSnippet
+                if (verdict && matchMoved) return@inTransaction null
+                val next = change(current)
+                val stamped = if (next.status != current.status) next.copy(lastStatusChangeTimestamp = System.currentTimeMillis()) else next
+                repository.updateTarget(stamped)
+                stamped.takeIf { it.status != current.status }
+            }
+            if (verdict && written == null) post("${shown.displayName} changed while you were looking. Check it again.")
             // A status the user just confirmed or cleared goes to the phone-book note now, not at
             // the next check.
-            if (changed) syncNote(stamped.id)
+            written?.let { syncNote(it.id) }
         }
     }
 
@@ -835,6 +853,12 @@ class MainViewModel @Inject constructor(
                     // conflicting card (e.g. a recycled phone number returning a
                     // stranger) is NOT written into the registry or the user's
                     // system contacts — we keep it UNVERIFIED and record why.
+                    // Judged against the contact as it is now: the user may have spent minutes in
+                    // the browser, and a check or an edit may have written it meanwhile.
+                    val id = target.id
+                    repository.inTransaction {
+                    @Suppress("NAME_SHADOWING")
+                    val target = repository.getTargetById(id) ?: return@inTransaction
                     val enrichment = cbcEnricher.enrich(target, collected)
                     if (enrichment.verified) {
                         filled++
@@ -861,6 +885,7 @@ class MainViewModel @Inject constructor(
                         // An unconfirmed card on an already-monitored contact is
                         // simply not used; the contact keeps monitoring as before.
                         repository.updateTarget(target.copy(enrichmentProvenance = enrichment.target.enrichmentProvenance))
+                    }
                     }
                 }
 

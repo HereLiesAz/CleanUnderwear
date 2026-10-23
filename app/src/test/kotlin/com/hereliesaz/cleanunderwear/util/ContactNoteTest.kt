@@ -45,4 +45,13 @@ class ContactNoteTest {
     fun handTypedTextIsNotSigned() {
         assertFalse(ContactNote.isSigned("[Registry Status: Deceased]\nObit: https://x"))
     }
+
+    @Test
+    fun theUsersLineAfterAnUnsignedBlockIsKept() {
+        val note = "[Registry Status: Monitoring]\nLast Check: 01/02/2025\nCall after 6pm"
+        assertEquals("Call after 6pm", ContactNote.strip(note))
+        val merged = ContactNote.merge(note, "[Registry Status: Deceased]\n${ContactNote.SIGNATURE}")
+        assertTrue(merged.contains("Call after 6pm"))
+        assertFalse(merged.contains("Monitoring"))
+    }
 }

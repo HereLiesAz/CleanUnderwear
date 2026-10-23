@@ -172,6 +172,7 @@ class ContactHarvester @Inject constructor(
                 lastVerificationSnippet = data.restoredFrom?.let {
                     "Restored from this contact's note, which says ${it.name.lowercase()}. Check it and confirm again."
                 },
+                matchRecordKey = data.restoredFrom?.let { com.hereliesaz.cleanunderwear.util.ContactNote.RESTORED_KEY },
                 matchKind = when (data.restoredFrom) {
                     TargetStatus.DECEASED -> "DEATH"
                     TargetStatus.INCARCERATED -> "CUSTODY"

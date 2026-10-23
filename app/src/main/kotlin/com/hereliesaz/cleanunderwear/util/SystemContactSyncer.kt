@@ -167,7 +167,12 @@ class SystemContactSyncer @Inject constructor(@ApplicationContext private val co
  */
 object ContactNote {
     const val SIGNATURE = "— CleanUnderwear"
-    private val BLOCK = Regex("""\[Registry Status: [^\]]*][\s\S]*?(?:$SIGNATURE|(?=\n\s*\n)|$)""")
+
+    /** [Target.matchRecordKey] of a possible match restored from a note: a claim waiting for the user, not a record. */
+    const val RESTORED_KEY = "note:restored"
+    // The status line, then only the lines the app writes (or older versions wrote), then the
+    // signature if signed: a line of the user's own right after an unsigned block isn't taken with it.
+    private val BLOCK = Regex("""\[Registry Status: [^\]\n]*](?:\r?\n(?:Status Since|Last Check|Records|Obit): [^\n]*)*(?:\r?\n$SIGNATURE)?""")
 
     /** The block for [target], or null when its status isn't one that belongs in a note. */
     fun block(target: Target, formatDate: (Long) -> String): String? {

@@ -39,7 +39,7 @@ import java.util.Date
 fun TargetDetailScreen(
     target: Target,
     sourceCatalog: SourceCatalog,
-    onUpdateTarget: (Target) -> Unit,
+    onUpdateTarget: (shown: Target, change: (Target) -> Target) -> Unit,
     onLaunchMission: (BrowserMission, (String?) -> Unit) -> Unit,
     onLookUp: (Int) -> Unit,
     onArchive: (Int) -> Unit,
@@ -93,7 +93,7 @@ fun TargetDetailScreen(
                     evidenceUrl?.let { url -> AppAction("Open the record", { openUrl(context, url) }) }
                     Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm), modifier = Modifier.fillMaxWidth()) {
                         AppAction("It's $name", { confirming = Verdict.CONFIRM }, Modifier.weight(1f))
-                        AppAction("Not them", { onUpdateTarget(dismissed(target, evidenceUrl)) }, Modifier.weight(1f))
+                        AppAction("Not them", { onUpdateTarget(target) { dismissed(it, evidenceUrl) } }, Modifier.weight(1f))
                     }
                 }
             }
@@ -140,7 +140,7 @@ fun TargetDetailScreen(
             AppSection("Details")
             target.phoneNumber?.let {
                 DetailRow("Phone", if (target.phoneIsStale) "$it (you marked this number out of date)" else it)
-                if (target.phoneIsStale) AppTextAction("This number is current after all", { onUpdateTarget(target.copy(stalePhone = null)) })
+                if (target.phoneIsStale) AppTextAction("This number is current after all", { onUpdateTarget(target) { it.copy(stalePhone = null) } })
             }
             target.email?.let { DetailRow("Email", it) }
             target.residenceInfo?.takeIf { it.isNotBlank() }?.let { DetailRow("Address", it) }
@@ -168,7 +168,7 @@ fun TargetDetailScreen(
                 selectedOption = frequencies[target.checkFrequencyHours] ?: "Daily",
                 onOptionSelected = { label ->
                     val hours = frequencies.entries.first { it.value == label }.key
-                    onUpdateTarget(target.copy(checkFrequencyHours = hours))
+                    onUpdateTarget(target) { it.copy(checkFrequencyHours = hours) }
                 }
             )
             target.enrichmentProvenance?.let { AppCaption("Details lookup: $it") }
@@ -253,7 +253,7 @@ fun TargetDetailScreen(
                 confirm = if (death) "Mark as deceased" else "Mark as in custody",
                 onConfirm = {
                     confirming = null
-                    onUpdateTarget(target.copy(status = if (death) TargetStatus.DECEASED else TargetStatus.INCARCERATED))
+                    onUpdateTarget(target) { it.copy(status = if (death) TargetStatus.DECEASED else TargetStatus.INCARCERATED) }
                 },
                 onDismiss = { confirming = null }
             ) {
@@ -265,7 +265,7 @@ fun TargetDetailScreen(
             confirm = "Undo",
             onConfirm = {
                 confirming = null
-                onUpdateTarget(dismissed(target, (if (target.matchKind == "DEATH") target.obituaryUrl else target.lockupUrl)))
+                onUpdateTarget(target) { dismissed(it, if (it.matchKind == "DEATH") it.obituaryUrl else it.lockupUrl) }
             },
             onDismiss = { confirming = null }
         ) {

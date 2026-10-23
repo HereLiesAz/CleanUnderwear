@@ -15,12 +15,12 @@ CleanUnderwear helps you keep the contacts you already have up to date, and tell
 ## 2. What is stored, and where
 - The app keeps its list of contacts (the Registry), their status, the records links and the matching text it found in a database on your device. It is not encrypted beyond Android's own app sandbox. Android backup and device transfer exclude it.
 - When a contact's status settles (checked daily, or a status you confirmed: in custody, deceased or archived), the app writes that status, the date it was set and, for a confirmed status, the record link into a signed block in that contact's **Notes** field (`WRITE_CONTACTS`). Your own note text is kept. A possible match is never written. Contact notes sync with whatever account the contact belongs to, such as Google Contacts.
-- Sign-ins you make in the app's browser (cookies) are kept in the app until you sign out in Settings.
+- Sign-ins you make for an import (Facebook, WhatsApp, Instagram, Google) are deleted from the app's browser when that import ends. A sign-in to a people-search site stays until you sign out in Settings.
 - When contacts are merged as duplicates, the app keeps a copy of the merged-away entry (and the score that justified the merge) in the same database, so a wrong merge can be reviewed and undone.
 - There is no CleanUnderwear server and no user account.
 
 ## 3. What leaves your device
-To look someone up, the app has to send their details to the site being searched. The automatic searches send only a contact's first and last name. Location is never in the request, but it decides which sites are asked: the state and county sources for the states a contact is tied to by ZIP code, phone area code or address. So which sites receive a name says roughly where the contact lives.
+To look someone up, the app has to send their details to the site being searched. The automatic searches send a contact's first and last name; when a common name fills the federal inmate locator's 100 results, it is asked again with the contact's middle name or approximate age, if known. Location is never in the request, but it decides which sites are asked: the state and county sources for the states a contact is tied to by ZIP code, phone area code or address. So which sites receive a name says roughly where the contact lives.
 - **Federal inmate search** (daily, automatic): each US contact's name is sent to the Federal Bureau of Prisons inmate locator.
 - **State prison searches** (daily, automatic): the public inmate search of each state the contact is tied to.
 - **County jail rosters** (daily, automatic): the online jail rosters of counties in those states.

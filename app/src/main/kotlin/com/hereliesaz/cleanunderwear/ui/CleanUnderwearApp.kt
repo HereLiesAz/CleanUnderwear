@@ -221,7 +221,7 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                         TargetDetailScreen(
                             target = current,
                             sourceCatalog = viewModel.sourceCatalog,
-                            onUpdateTarget = { viewModel.updateTarget(it) },
+                            onUpdateTarget = { shown, change -> viewModel.updateTarget(shown, change) },
                             onLaunchMission = { mission, onResult ->
                                 viewModel.launchMission(mission, onResult)
                             },

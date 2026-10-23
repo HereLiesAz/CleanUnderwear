@@ -77,7 +77,7 @@ object NewsFeed {
         val kind = classify(item.title) ?: classifyLink(item.link) ?: return@flatMap emptyList()
         // "Judge John Smith sentenced…", "Sheriff John Smith says…": the contact's name in an
         // official role isn't the subject of the arrest or death.
-        if (namedInRole("${item.title}. ${item.description}", first, last)) return@flatMap emptyList()
+        if (namedInRole("${item.title}. ${item.description}", first, last, kind)) return@flatMap emptyList()
         val tooOld = kind == EventKind.ARREST && item.published != null &&
             item.published.isBefore(now.minusDays(ARREST_LOOKBACK_DAYS))
         if (tooOld) return@flatMap emptyList()
@@ -113,14 +113,27 @@ object NewsFeed {
         return if (OBIT_LINK.any { it in l }) EventKind.DEATH else null
     }
 
-    /** Whether every mention of the name in [text] is preceded by an official title. */
-    internal fun namedInRole(text: String, first: String, last: String): Boolean {
+    /**
+     * Whether every mention of the name in [text] is someone other than the item's subject.
+     *
+     * Arrest: an official title before the name ("Judge John Smith sentenced…"), or a funeral
+     * the name belongs to ("…arrested at the funeral of John Smith"). Death: the person who
+     * dies can hold any title ("Longtime coach John Smith dies") and a funeral for them is
+     * their notice, so only a titled speaker counts ("Sheriff John Smith said the man died").
+     */
+    internal fun namedInRole(text: String, first: String, last: String, kind: EventKind = EventKind.ARREST): Boolean {
         val name = Regex("(?i)\\b${Regex.escape(first)}\\b(?:\\s+[A-Za-z.'-]+){0,2}?\\s+\\b${Regex.escape(last)}\\b")
         val mentions = name.findAll(text).toList()
         if (mentions.isEmpty()) return false
         return mentions.all { m ->
-            val before = text.substring(0, m.range.first).trimEnd().lowercase()
-            ROLES.any { before.endsWith(it) } || FUNERAL_OF.containsMatchIn(before.takeLast(40))
+            // Leading space: the title may open the text ("Judge John Smith…").
+            val before = " " + text.substring(0, m.range.first).trimEnd().lowercase()
+            val titled = ROLES.any { before.endsWith(it) }
+            if (kind == EventKind.DEATH) {
+                titled && SPEAKS.containsMatchIn(text.substring(m.range.last + 1).take(40).lowercase())
+            } else {
+                titled || FUNERAL_OF.containsMatchIn(before.takeLast(40))
+            }
         }
     }
 
@@ -146,6 +159,7 @@ object NewsFeed {
         "coach", "pastor", "rev.", "reverend", "dr.", "spokesman", "spokeswoman", "trooper"
     ).map { " $it" }
     private val FUNERAL_OF = Regex("(?:funeral|memorial|services?) (?:of|for)\\s*$|attend(?:s|ed)? (?:the )?funeral")
+    private val SPEAKS = Regex("^[,\\s]*(?:\\([^)]*\\)\\s*)?(?:says|said|told|confirmed|announced|reported|stated)\\b")
     private val PUBLISHER_PLACE = Regex("\\|\\s*([A-Za-z.' -]+?),\\s*([A-Za-z]{2})\\s*$")
     private val OBITUARY = Regex("\\b(obituary|obituaries|obit|passed away|death notice|funeral|memorial|celebration of life|in loving memory)\\b")
     private val ARREST = Regex("\\b(arrest|arrested|arrests|booked|booking|charged|indicted|jailed|jail|custody|mugshot|sentenced|convicted)\\b")

@@ -143,4 +143,24 @@ class ScrapeTargetsUseCaseTest {
         assertEquals(TargetStatus.IGNORED, repo.getTargetById(id)!!.status)
         verify(exactly = 0) { notifications.notifyStatusChange(any(), any()) }
     }
+
+    @Test
+    fun aSiteThatNeverAnswersDoesNotHoldANewContactUnchecked() = runBlocking {
+        val id = seed(TargetStatus.UNKNOWN)
+        answer(SearchResult.FAILED)
+        useCase().invoke()
+        val t = repo.getTargetById(id)!!
+        assertEquals(TargetStatus.MONITORING, t.status)
+        assertNotNull(t.unreadSources)
+        verify(exactly = 0) { notifications.notifyStatusChange(any(), any()) }
+    }
+
+    @Test
+    fun aStatusRestoredFromANoteWaitsForTheUser() = runBlocking {
+        val id = seed(TargetStatus.POSSIBLE_MATCH, { it.copy(matchRecordKey = com.hereliesaz.cleanunderwear.util.ContactNote.RESTORED_KEY) })
+        answer(SearchResult(emptyList()))
+        useCase().invoke()
+        assertEquals(TargetStatus.POSSIBLE_MATCH, repo.getTargetById(id)!!.status)
+        verify(exactly = 0) { notifications.notifyStatusChange(any(), any()) }
+    }
 }
