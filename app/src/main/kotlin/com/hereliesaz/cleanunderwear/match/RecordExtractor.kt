@@ -25,8 +25,12 @@ object RecordExtractor {
         sourceLabel: String,
         evidenceUrl: String?
     ): List<CandidateRecord> {
-        val firstQ = Regex.escape(firstName)
-        val lastQ = Regex.escape(lastName)
+        // Match on accent-folded text (same length, so offsets carry over to the original).
+        val original = text
+        @Suppress("NAME_SHADOWING")
+        val text = StringSimilarity.foldDiacritics(text)
+        val firstQ = Regex.escape(StringSimilarity.foldDiacritics(firstName))
+        val lastQ = Regex.escape(StringSimilarity.foldDiacritics(lastName))
         // "First [middle tokens] Last" (up to 2 middle tokens) or "Last, First".
         // The inverted form captures no middle name: on rosters the next token is
         // as often a column ("SMITH, JOHN  Booked …") as a middle name, and a
@@ -66,14 +70,25 @@ object RecordExtractor {
                 birthYear = birthYear ?: bornYear(window) ?: if (kind == EventKind.CUSTODY) rosterBirthYear(after) else null,
                 city = place?.city,
                 state = place?.state,
-                relatives = if (kind == EventKind.DEATH) survivors(after, lastName) else emptyList(),
-                recordKey = evidenceUrl,
+                relatives = if (kind == EventKind.DEATH) survivors(after) else emptyList(),
+                inferredRelatives = if (kind == EventKind.DEATH) inferredSurvivors(after, lastName) else emptyList(),
+                eventYear = deathYear,
+                recordKey = personKey(sourceId, firstName, middleOf(hit.groupValues.getOrNull(1)), lastName, birthYear ?: age(after), place?.city),
                 evidenceUrl = evidenceUrl,
-                snippet = "..." + window.replace(Regex("\\s+"), " ").trim() + "..."
+                snippet = "..." + original.substring(start, end).replace(Regex("\\s+"), " ").trim() + "..."
             )
         }
         return out
     }
+
+    /**
+     * A key for one person on one source: their name, age or birth year, and town as the source
+     * gives them. Stable across runs, and different for a different person of the same name, so
+     * dismissing one record doesn't hide the next one.
+     */
+    fun personKey(sourceId: String, first: String, middle: String?, last: String, ageOrBirth: Int?, city: String?): String =
+        listOf(sourceId, first, middle.orEmpty(), last, ageOrBirth?.toString().orEmpty(), city.orEmpty())
+            .joinToString("|") { StringSimilarity.foldDiacritics(it).trim().lowercase() }
 
     /** A single alphabetic middle token or initial; anything longer is noise. */
     internal fun middleOf(raw: String?): String? {
@@ -171,25 +186,36 @@ object RecordExtractor {
         "(?i)\\b(?:wife|husband|spouse|son|daughter|sons|daughters|brother|sister|mother|father|children|grandchildren)\\b[,:]?\\s+([A-Z][a-z]+)\\b(?!\\s+[A-Z][a-z])"
     )
 
-    /**
-     * Names from "survived by …" clauses. Full names are kept as written; a bare
-     * first name after a relation word ("his wife, Mary") is completed with the
-     * deceased's surname, the usual convention in obituaries.
-     */
-    internal fun survivors(after: String, lastName: String): List<String> {
-        val clause = SURVIVED_BY.findAll(after).joinToString(" ") { it.groupValues[1] }
-        if (clause.isBlank()) return emptyList()
+    /** Full names from "survived by …" clauses, as written. */
+    internal fun survivors(after: String): List<String> {
+        val clause = survivorClause(after) ?: return emptyList()
         val names = linkedSetOf<String>()
         FULL_NAME.findAll(clause).forEach { m ->
             val n = m.groupValues[1].replace(Regex("\\s+\\([A-Z][a-z]+\\)"), "")
             if (n.split(' ').first().lowercase() !in NOT_NAME) names += n
         }
-        RELATION_FIRST.findAll(clause).forEach { m ->
-            val first = m.groupValues[1]
-            if (first.lowercase() !in NOT_NAME) names += "$first $lastName"
-        }
         return names.toList()
     }
+
+    /**
+     * Survivors named by first name only after a relation word ("his wife, Mary"), completed
+     * with the deceased's surname, the usual convention in obituaries. Kept apart from
+     * [survivors]: the surname is our guess, not the record's.
+     */
+    internal fun inferredSurvivors(after: String, lastName: String): List<String> {
+        val clause = survivorClause(after) ?: return emptyList()
+        val full = survivors(after).toSet()
+        return RELATION_FIRST.findAll(clause)
+            .map { it.groupValues[1] }
+            .filter { it.lowercase() !in NOT_NAME }
+            .map { "$it $lastName" }
+            .filter { it !in full }
+            .distinct()
+            .toList()
+    }
+
+    private fun survivorClause(after: String): String? =
+        SURVIVED_BY.findAll(after).joinToString(" ") { it.groupValues[1] }.takeIf { it.isNotBlank() }
 
     private val NOT_MIDDLE = setOf("jr", "sr", "ii", "iii", "iv", "the", "and", "of", "was", "is")
     private val NOT_PLACE = setOf("the", "his", "her", "their", "a", "an", "this", "custody", "jail", "prison")
@@ -220,5 +246,20 @@ object UsStates {
         val t = s?.trim()?.trimEnd('.') ?: return null
         if (t.length == 2 && t.uppercase() in CODES) return t.uppercase()
         return NAMES[t.lowercase()]
+    }
+
+    /**
+     * The state in an address ("City, Region, Zip", or a street line first). Reads the parts
+     * after the first from the end: a whole part that is a state ("Texas", "TX"), or a part
+     * shaped "ST 12345". A city that starts with a state's name ("Kansas City, MO 64101",
+     * "Washington Court House, OH") is never read as that state.
+     */
+    fun fromAddress(residence: String?): String? {
+        val parts = residence?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() } ?: return null
+        for (part in parts.drop(1).reversed()) {
+            code(part)?.let { return it }
+            Regex("^([A-Za-z .]+?)\\s+\\d{5}(?:-\\d{4})?$").find(part)?.groupValues?.get(1)?.let { code(it) }?.let { return it }
+        }
+        return null
     }
 }

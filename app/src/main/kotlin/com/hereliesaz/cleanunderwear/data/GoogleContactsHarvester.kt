@@ -1,6 +1,5 @@
 package com.hereliesaz.cleanunderwear.data
 
-import com.hereliesaz.cleanunderwear.network.WebViewScraper
 import com.hereliesaz.cleanunderwear.util.DiagnosticLogger
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
@@ -8,18 +7,20 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Scrapes contacts.google.com for the operator's contact list.
+ * Reads the user's contact list from contacts.google.com.
  *
- * Requires an active Google session cookie in WebView storage (the user must have signed in to
- * a Google account in this WebView surface previously). When unauthenticated, contacts.google.com
- * redirects to accounts.google.com and parsing yields no rows — handled by returning empty.
+ * Runs in the visible browser ([com.hereliesaz.cleanunderwear.domain.BrowserMission.HarvestGoogleContacts]),
+ * so the user signs in there when Google redirects to its sign-in page. [SCRIPT] is re-run after
+ * every page load and only reads once it is back on contacts.google.com.
  */
 @Singleton
-class GoogleContactsHarvester @Inject constructor(
-    private val scraper: WebViewScraper
-) {
-    private val INJECTION_SCRIPT = """
+class GoogleContactsHarvester @Inject constructor() {
+    companion object {
+        const val URL = "https://contacts.google.com/"
+
+        val SCRIPT = """
         (function() {
+            if (window.location.hostname !== 'contacts.google.com') return;
             function rowsContainer() {
                 return document.querySelector('main [role="grid"]')
                     || document.querySelector('[role="main"] [role="grid"]')
@@ -30,7 +31,7 @@ class GoogleContactsHarvester @Inject constructor(
                 const grid = rowsContainer();
                 if (!grid) {
                     if (attempts > 60) {
-                        AndroidInterface.processHtml(document.documentElement.outerHTML);
+                        window.HTMLOUT.dump(document.documentElement.outerHTML);
                         return;
                     }
                     setTimeout(() => step(attempts + 1), 1000);
@@ -40,7 +41,7 @@ class GoogleContactsHarvester @Inject constructor(
                 grid.scrollTop = grid.scrollHeight;
                 const rows = grid.querySelectorAll('[role="row"]');
                 if (rows.length === lastCount) {
-                    AndroidInterface.processHtml(document.documentElement.outerHTML);
+                    window.HTMLOUT.dump(document.documentElement.outerHTML);
                     return;
                 }
                 lastCount = rows.length;
@@ -49,14 +50,9 @@ class GoogleContactsHarvester @Inject constructor(
             step(0);
         })();
     """.trimIndent()
-
-    suspend fun harvestContacts(): List<Target> {
-        val html = scraper.scrapeWithInjection(
-            "https://contacts.google.com/",
-            INJECTION_SCRIPT
-        ) ?: return emptyList()
-        return parseContactsHtml(Jsoup.parse(html))
     }
+
+    fun parse(html: String): List<Target> = parseContactsHtml(Jsoup.parse(html))
 
     private fun parseContactsHtml(doc: Document): List<Target> {
         val targets = mutableListOf<Target>()

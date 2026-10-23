@@ -160,14 +160,18 @@ class SuspectReview @Inject constructor(
         if (record.state != MergeState.ACTIVE) return false
 
         val absorbed = TargetSnapshot.fromJson(record.absorbedJson).copy(id = 0)
-        val survivor = repository.getTargetById(record.survivorId)
-        val restoredSurvivor = survivor?.let { TargetSnapshot.revert(it, record.changesJson) }
+        // Survivor, restored row and ledger in one transaction, so an interrupted split can't
+        // leave the restored row without its ledger entry marked (and a second split copy it).
+        repository.inTransaction {
+            val survivor = repository.getTargetById(record.survivorId)
+            val restoredSurvivor = survivor?.let { TargetSnapshot.revert(it, record.changesJson) }
 
-        if (restoredSurvivor != null) repository.updateTarget(restoredSurvivor)
-        repository.insertTarget(absorbed)
+            if (restoredSurvivor != null) repository.updateTarget(restoredSurvivor)
+            repository.insertTarget(absorbed)
 
-        val a = MergeSignature.of(restoredSurvivor ?: absorbed)
-        ledger.markSplit(ledgerId, a, MergeSignature.of(absorbed))
+            val a = MergeSignature.of(restoredSurvivor ?: absorbed)
+            ledger.markSplit(ledgerId, a, MergeSignature.of(absorbed))
+        }
         DiagnosticLogger.log("Split merge #$ledgerId: restored \"${absorbed.displayName}\"")
         return true
     }
@@ -201,7 +205,7 @@ class SuspectReview @Inject constructor(
         repository.updateTarget(
             target.copy(
                 phoneNumber = phone,
-                areaCode = StringSimilarity.normalizePhone(phone)?.take(3) ?: target.areaCode
+                areaCode = StringSimilarity.nanpAreaCode(phone) ?: target.areaCode
             )
         )
         decide(case, "ADOPTED")

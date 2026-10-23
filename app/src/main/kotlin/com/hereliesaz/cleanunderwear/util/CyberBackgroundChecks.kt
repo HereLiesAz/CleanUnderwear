@@ -4,12 +4,22 @@ object CyberBackgroundChecks {
     private const val BASE_URL = "https://www.cyberbackgroundchecks.com"
 
     fun getNameSearchUrl(name: String): String {
-        val parts = name.split(" ").filter { it.isNotBlank() }
+        // Given name and surname only: titles, suffixes and notes ("Dr", "Jr", "(work)") would
+        // narrow the search to nobody.
+        val parts = com.hereliesaz.cleanunderwear.network.NameValidator.tokenize(name)
         if (parts.isEmpty()) return "$BASE_URL/name"
-        
-        val slug = parts.joinToString("-").lowercase()
+        val slug = listOf(parts.first(), parts.last()).distinct().joinToString("-") { slug(it) }
         return "$BASE_URL/name/$slug"
     }
+
+    /** A path segment: accents folded, anything but letters, digits and hyphens dropped. */
+    private fun slug(s: String): String =
+        com.hereliesaz.cleanunderwear.match.StringSimilarity.foldDiacritics(s.trim())
+            .lowercase()
+            .replace(Regex("[\\s.]+"), "-")
+            .replace(Regex("[^a-z0-9-]"), "")
+            .replace(Regex("-+"), "-")
+            .trim('-')
 
     fun getPhoneSearchUrl(phone: String): String {
         var digits = phone.filter { it.isDigit() }
@@ -108,7 +118,6 @@ object CyberBackgroundChecks {
             else -> "" to parts[0]
         }
 
-        fun slug(s: String) = s.trim().replace(Regex("\\s+"), "-").lowercase()
         val path = buildString {
             slug(street).takeIf { it.isNotEmpty() }?.let { append("/").append(it) }
             slug(city).takeIf { it.isNotEmpty() }?.let { append("/").append(it) }

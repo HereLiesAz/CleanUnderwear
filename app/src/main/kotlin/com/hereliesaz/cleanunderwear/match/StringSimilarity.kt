@@ -52,16 +52,57 @@ object StringSimilarity {
         return (m / a.length + m / b.length + (m - t) / m) / 3.0
     }
 
-    /** Strip to a comparable 10-digit phone, dropping a leading US "1". */
+    /**
+     * A comparable phone key: the last ten digits, or all of them for an 8-9 digit number. Taking
+     * the tail drops whatever prefix differs between formats (a US "1", a "+49" country code, a
+     * trunk "0"), so "+1 555…" and "(555) …", or "0151 1234 5678" and "+49 151 1234 5678", agree,
+     * while two numbers that differ anywhere in their subscriber part stay apart.
+     */
     fun normalizePhone(raw: String?): String? {
         if (raw.isNullOrBlank()) return null
-        var digits = raw.filter { it.isDigit() }
-        while (digits.length >= 11 && digits.startsWith("1")) digits = digits.substring(1)
-        return digits.takeIf { it.length >= 10 }?.take(10)
+        val digits = raw.filter { it.isDigit() }
+        return when {
+            digits.length >= 10 -> digits.takeLast(10)
+            digits.length >= 8 -> digits
+            else -> null
+        }
+    }
+
+    /**
+     * The North American area code of [raw], or null when it isn't a NANP number: a "+"-prefixed
+     * number with a country code other than 1, or one that isn't 10 digits (11 with a leading 1).
+     */
+    fun nanpAreaCode(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        val trimmed = raw.trim()
+        if (trimmed.startsWith("+") && !trimmed.startsWith("+1")) return null
+        if (trimmed.startsWith("00")) return null
+        val digits = trimmed.filter { it.isDigit() }
+        val national = when {
+            digits.length == 10 -> digits
+            digits.length == 11 && digits.startsWith("1") -> digits.substring(1)
+            else -> return null
+        }
+        return national.take(3).takeIf { it[0] in '2'..'9' }
     }
 
     fun normalizeEmail(raw: String?): String? =
         raw?.trim()?.lowercase()?.takeIf { it.contains("@") && it.isNotBlank() }
+
+    /**
+     * [s] with accents removed, one character for one ("José" → "Jose"), so offsets into the
+     * folded text are offsets into the original. Rosters are mostly unaccented capitals while
+     * phone books keep the accents; both sides are folded before comparing.
+     */
+    fun foldDiacritics(s: String): String {
+        if (s.all { it.code < 128 }) return s
+        val out = StringBuilder(s.length)
+        for (c in s) {
+            val base = if (c.code < 128) c else java.text.Normalizer.normalize(c.toString(), java.text.Normalizer.Form.NFD)[0]
+            out.append(base)
+        }
+        return out.toString()
+    }
 
     /** Lowercased letter/hyphen/apostrophe token, for name comparison. */
     fun normalizeNameToken(raw: String?): String? =

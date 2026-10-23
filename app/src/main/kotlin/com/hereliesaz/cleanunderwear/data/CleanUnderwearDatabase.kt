@@ -12,8 +12,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  */
 @Database(
     entities = [Target::class, MergeRecord::class, SuspectDecision::class],
-    version = 14,
-    exportSchema = false
+    version = 15,
+    exportSchema = true
 )
 abstract class CleanUnderwearDatabase : RoomDatabase() {
     abstract fun targetDao(): TargetDao
@@ -252,18 +252,35 @@ abstract class CleanUnderwearDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * What an ignored contact was before it was ignored, so restoring it doesn't throw away a
+         * confirmed status; which sources the last check couldn't read, so the user can see a
+         * check was incomplete rather than clean; and the record behind the current match, so
+         * "Not a match" dismisses that record only.
+         */
+        val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE targets ADD COLUMN status_before_ignore TEXT")
+                database.execSQL("ALTER TABLE targets ADD COLUMN unread_sources TEXT")
+                database.execSQL("ALTER TABLE targets ADD COLUMN match_record_key TEXT")
+            }
+        }
+
+        val ALL_MIGRATIONS = arrayOf(
+            MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
+            MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
+            MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14,
+            MIGRATION_14_15
+        )
+
         fun getDatabase(context: Context): CleanUnderwearDatabase {
             return Instance ?: synchronized(this) {
-                Room.databaseBuilder(
+                Instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     CleanUnderwearDatabase::class.java,
                     "cleanunderwear_database"
                 )
-                .addMigrations(
-                    MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
-                    MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
-                    MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14
-                )
+                .addMigrations(*ALL_MIGRATIONS)
                 .build()
                 .also { Instance = it }
             }

@@ -82,7 +82,7 @@ class TargetRepositoryTest {
         override suspend fun getTargetsByMonitorability(state: MonitorabilityState): List<Target> =
             targets.filter { it.monitorabilityState == state }
 
-        override suspend fun getReadyDueTargets(now: Long): List<Target> = targets.filter {
+        override suspend fun getReadyDueTargets(now: Long, limit: Int): List<Target> = targets.filter {
             it.monitorabilityState == MonitorabilityState.READY &&
                 it.status != TargetStatus.IGNORED &&
                 it.nextScheduledCheck <= now
@@ -100,6 +100,28 @@ class TargetRepositoryTest {
         override suspend fun updateMonitorabilityStateBatch(ids: List<Int>, state: MonitorabilityState) {
             targets.replaceAll {
                 if (it.id in ids) it.copy(monitorabilityState = state) else it
+            }
+        }
+
+        override suspend fun ignore(id: Int, timestamp: Long) {
+            targets.replaceAll {
+                if (it.id != id) it
+                else it.copy(
+                    statusBeforeIgnore = if (it.status == TargetStatus.IGNORED) it.statusBeforeIgnore else it.status,
+                    status = TargetStatus.IGNORED,
+                    lastStatusChangeTimestamp = timestamp
+                )
+            }
+        }
+
+        override suspend fun unignore(id: Int, timestamp: Long) {
+            targets.replaceAll {
+                if (it.id != id || it.status != TargetStatus.IGNORED) it
+                else it.copy(
+                    status = it.statusBeforeIgnore ?: TargetStatus.UNKNOWN,
+                    statusBeforeIgnore = null,
+                    lastStatusChangeTimestamp = timestamp
+                )
             }
         }
 

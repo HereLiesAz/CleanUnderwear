@@ -36,8 +36,9 @@ class StalePhoneTest {
 
     @Test
     fun enrichment_replacesAStaleNumber_andFollowsItsAreaCode() {
-        val card = BrowserMission.CbcByName("Dana Reyes") to Findings("Dana Reyes", null, "2255550909")
-        val outcome = enricher.enrich(stale, listOf(card))
+        // The name card has to show something else of hers, here the town on her address.
+        val card = BrowserMission.CbcByName("Dana Reyes") to Findings("Dana Reyes", "12 Elm St, Baton Rouge, LA", "2255550909")
+        val outcome = enricher.enrich(stale.copy(residenceInfo = "Baton Rouge, LA"), listOf(card))
         assertTrue(outcome.verified)
         assertEquals("2255550909", outcome.target.phoneNumber)
         assertEquals("225", outcome.target.areaCode)

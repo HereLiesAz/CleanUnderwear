@@ -10,64 +10,19 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Decides whether a target's name appears in a fetched roster/locator page.
- *
- * The matcher requires *both* a first and a last token to appear in proximity
- * with word-boundary anchors, so a contact named "B" never matches the letter
- * "B" inside "Bob" on some unrelated booking page.
+ * Verifies a contact against the Federal BOP inmate locator's JSON, and holds the
+ * corroboration helpers (age from a DOB, middle-name agreement) the pipeline shares.
  */
 @Singleton
 class IdentityVerifier @Inject constructor() {
-    fun verifyIdentity(documentText: String, targetName: String): VerificationResult {
-        return when (val v = NameValidator.validate(targetName)) {
-            is NameValidator.Result.Skip -> VerificationResult(
-                isMatch = false,
-                snippet = null,
-                skipped = true,
-                skipReason = v.reason
-            )
-            is NameValidator.Result.Ok -> matchProximity(documentText, v.first, v.last)
-        }
-    }
-
-    private fun matchProximity(
-        documentText: String,
-        firstName: String,
-        lastName: String
-    ): VerificationResult {
-        // Nickname expansion was removed to tighten matching: only the exact
-        // first name is accepted, so a nickname like "Bill" no longer matches
-        // "William" and widens the candidate set.
-        val firstNameCandidates = listOf(firstName)
-            .filter { NameValidator.isAcceptableToken(it) }
-
-        val lastQ = Regex.escape(lastName)
-        for (firstAlt in firstNameCandidates) {
-            val firstQ = Regex.escape(firstAlt)
-            // "First [up to 3 intervening tokens] Last"
-            val proximity = Regex("(?i)\\b$firstQ\\b(?:\\s+\\S+){0,3}\\s+\\b$lastQ\\b")
-            // "Last, First"
-            val inverted = Regex("(?i)\\b$lastQ\\b\\s*,\\s*\\b$firstQ\\b")
-
-            val match = proximity.find(documentText) ?: inverted.find(documentText)
-            if (match != null) {
-                return VerificationResult(
-                    isMatch = true,
-                    snippet = extractSnippet(documentText, match.value, match.range.first)
-                )
-            }
-        }
-        return VerificationResult(isMatch = false, snippet = null)
-    }
-
     /**
      * Verifies a target against the Federal Bureau of Prisons inmate-locator
      * JSON API (`bop.gov/PublicInfo/execute/inmateloc?...&output=json`).
      *
      * The BOP API returns records in `{"InmateLocator":[{...}]}` shape with
      * `nameFirst` / `nameLast` as *separate* compact (no-whitespace) fields, so
-     * the text-proximity matcher in [verifyIdentity] cannot match it — names are
-     * emitted last-then-first with punctuation between them. This path parses the
+     * text matching cannot read it — names are emitted last-then-first with
+     * punctuation between them. This path parses the
      * JSON structurally and matches on the discrete name fields instead.
      *
      * It also enforces *current custody*: the locator returns released inmates
@@ -90,13 +45,19 @@ class IdentityVerifier @Inject constructor() {
 
         val records = try {
             val root = JsonParser.parseString(jsonBody)
-            if (!root.isJsonObject) return VerificationResult(isMatch = false, snippet = null)
+            if (!root.isJsonObject) return VerificationResult.fetchFailed()
+            // The locator answers a bot check with an empty list and this flag set.
+            val captcha = root.asJsonObject.entrySet()
+                .firstOrNull { it.key.equals("Captcha", ignoreCase = true) }?.value
+            if (captcha?.isJsonPrimitive == true && captcha.asJsonPrimitive.isBoolean && captcha.asBoolean) {
+                return VerificationResult.fetchFailed()
+            }
             inmateArray(root.asJsonObject)
         } catch (e: Exception) {
-            // Malformed body (HTML error page, captcha wall, truncated JSON):
-            // treat as a clean miss, not a crash — the queue keeps moving.
-            return VerificationResult(isMatch = false, snippet = null)
-        } ?: return VerificationResult(isMatch = false, snippet = null)
+            // Malformed body (HTML error page, captcha wall, truncated JSON): a failed
+            // lookup, not a clean miss — the queue keeps moving, the contact's state stands.
+            return VerificationResult.fetchFailed()
+        } ?: return VerificationResult.fetchFailed()
 
         // Exact first name only — nickname expansion is deliberately not applied
         // here, to keep the national BOP search from widening on common nicknames.
@@ -141,30 +102,17 @@ class IdentityVerifier @Inject constructor() {
             // — before treating the record as a possible match.
             if (!corro.corroborated) continue
 
-            // Strictest gate: facility-state agreement. The contact's resolved
-            // state must equal the facility's state. Either side unknown ⇒ we
-            // cannot establish agreement ⇒ skip (a false negative is preferred
-            // to a false positive here). NOTE: federal inmates are often held
-            // out-of-state, so this can suppress genuine matches by design.
+            // Facility state is evidence, not a gate: federal inmates are routinely held out of
+            // state, so a different state only counts against the match in MatchVerifier.
             val recFacl = stringField(record, "faclName")
             val recFaclCode = stringField(record, "faclCode")
             val facilityState = BopFacilityCatalog.stateFor(recFaclCode, recFacl)
-            val contactState = corroboration.state?.trim()?.takeIf { it.isNotBlank() }
-            if (facilityState == null || contactState == null ||
-                !facilityState.equals(contactState, ignoreCase = true)
-            ) {
-                // Surface catalog gaps: a current, name+corroborator-matching
-                // record dropped *solely* because the facility's state couldn't
-                // be resolved is a match we would have shown if BopFacilityCatalog
-                // knew this facility. Log it so the gap is fixable, not silent.
-                if (facilityState == null && contactState != null) {
-                    DiagnosticLogger.log(
-                        "BOP: dropped corroborated '${name.first} ${name.last}' — unresolved " +
-                            "facility state (faclCode='$recFaclCode', faclName='$recFacl')",
-                        DiagnosticLogger.LogEntry.LogLevel.WARN
-                    )
-                }
-                continue
+            if (facilityState == null) {
+                DiagnosticLogger.log(
+                    "BOP: unresolved facility state for a corroborated '${name.first} ${name.last}' " +
+                        "(faclCode='$recFaclCode', faclName='$recFacl')",
+                    DiagnosticLogger.LogEntry.LogLevel.WARN
+                )
             }
 
             val facility = recFacl.ifBlank { "a federal facility" }
@@ -202,7 +150,7 @@ class IdentityVerifier @Inject constructor() {
                 )
             )
         }
-        return VerificationResult(isMatch = false, snippet = null)
+        return VerificationResult(isMatch = false, snippet = null, capped = records.size() >= BOP_RESULT_CAP)
     }
 
     private data class CorroborationResult(
@@ -272,6 +220,9 @@ class IdentityVerifier @Inject constructor() {
         return null
     }
 
+    /** The BOP locator never returns more than this many rows, sorted by inmate number. */
+    private val BOP_RESULT_CAP = 100
+
     /** Case-insensitively locate the `InmateLocator` array in the BOP payload. */
     private fun inmateArray(root: JsonObject): JsonArray? {
         root.entrySet().firstOrNull { it.key.equals("InmateLocator", ignoreCase = true) }
@@ -286,16 +237,6 @@ class IdentityVerifier @Inject constructor() {
 
     private fun tokensOf(value: String): List<String> =
         value.lowercase().split(Regex("[^a-z']+")).filter { it.isNotBlank() }
-
-    private fun extractSnippet(fullText: String, match: String, matchIndex: Int = -1): String {
-        val idx = if (matchIndex >= 0) matchIndex else fullText.indexOf(match, ignoreCase = true)
-        if (idx == -1) return match
-
-        val start = (idx - 100).coerceAtLeast(0)
-        val end = (idx + match.length + 100).coerceAtMost(fullText.length)
-
-        return "..." + fullText.substring(start, end).replace("\n", " ").trim() + "..."
-    }
 
     data class VerificationResult(
         val isMatch: Boolean,
@@ -315,10 +256,14 @@ class IdentityVerifier @Inject constructor() {
          */
         val basis: String? = null,
         /** Structured record for [com.hereliesaz.cleanunderwear.match.MatchVerifier], when the source yields one. */
-        val record: CandidateRecord? = null
+        val record: CandidateRecord? = null,
+        /** The source couldn't be read (network error, error status, bot wall), so this says nothing. */
+        val failed: Boolean = false,
+        /** The source returned as many rows as it ever does, so a match may lie past the cut. */
+        val capped: Boolean = false
     ) {
         companion object {
-            fun fetchFailed() = VerificationResult(isMatch = false, snippet = null)
+            fun fetchFailed() = VerificationResult(isMatch = false, snippet = null, failed = true)
         }
     }
 

@@ -1,0 +1,318 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 15,
+    "identityHash": "5f7e9dc05153bb0f870d64b422e90871",
+    "entities": [
+      {
+        "tableName": "targets",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `display_name` TEXT NOT NULL, `phone_number` TEXT, `area_code` TEXT, `jurisdiction` TEXT, `status` TEXT NOT NULL, `last_scraped_timestamp` INTEGER NOT NULL, `source_account` TEXT, `residence_info` TEXT, `lockup_url` TEXT, `obituary_url` TEXT, `check_frequency_hours` INTEGER NOT NULL, `next_scheduled_check` INTEGER NOT NULL, `last_status_change_timestamp` INTEGER NOT NULL, `last_verification_snippet` TEXT, `email` TEXT, `monitorability_state` TEXT NOT NULL, `enrichment_provenance` TEXT, `middle_name` TEXT, `date_of_birth` TEXT, `dismissed_match_keys` TEXT, `match_confidence` REAL, `match_kind` TEXT, `match_reasons` TEXT, `stale_phone` TEXT, `status_before_ignore` TEXT, `unread_sources` TEXT, `match_record_key` TEXT)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayName",
+            "columnName": "display_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "phoneNumber",
+            "columnName": "phone_number",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "areaCode",
+            "columnName": "area_code",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "jurisdiction",
+            "columnName": "jurisdiction",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastScrapedTimestamp",
+            "columnName": "last_scraped_timestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceAccount",
+            "columnName": "source_account",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "residenceInfo",
+            "columnName": "residence_info",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lockupUrl",
+            "columnName": "lockup_url",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "obituaryUrl",
+            "columnName": "obituary_url",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "checkFrequencyHours",
+            "columnName": "check_frequency_hours",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nextScheduledCheck",
+            "columnName": "next_scheduled_check",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastStatusChangeTimestamp",
+            "columnName": "last_status_change_timestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastVerificationSnippet",
+            "columnName": "last_verification_snippet",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "email",
+            "columnName": "email",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "monitorabilityState",
+            "columnName": "monitorability_state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "enrichmentProvenance",
+            "columnName": "enrichment_provenance",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "middleName",
+            "columnName": "middle_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "dateOfBirth",
+            "columnName": "date_of_birth",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "dismissedMatchKeys",
+            "columnName": "dismissed_match_keys",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "matchConfidence",
+            "columnName": "match_confidence",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "matchKind",
+            "columnName": "match_kind",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "matchReasons",
+            "columnName": "match_reasons",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "stalePhone",
+            "columnName": "stale_phone",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "statusBeforeIgnore",
+            "columnName": "status_before_ignore",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "unreadSources",
+            "columnName": "unread_sources",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "matchRecordKey",
+            "columnName": "match_record_key",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "merge_ledger",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `survivor_id` INTEGER NOT NULL, `absorbed_json` TEXT NOT NULL, `changes_json` TEXT NOT NULL, `absorbed_name` TEXT NOT NULL, `absorbed_phone` TEXT, `absorbed_email` TEXT, `probability` REAL NOT NULL, `weight_bits` REAL NOT NULL, `best_case_bits` REAL NOT NULL, `contributions` TEXT NOT NULL, `origin` TEXT NOT NULL, `merged_at` INTEGER NOT NULL, `state` TEXT NOT NULL, `veto_a` TEXT, `veto_b` TEXT)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "survivorId",
+            "columnName": "survivor_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "absorbedJson",
+            "columnName": "absorbed_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "changesJson",
+            "columnName": "changes_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "absorbedName",
+            "columnName": "absorbed_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "absorbedPhone",
+            "columnName": "absorbed_phone",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "absorbedEmail",
+            "columnName": "absorbed_email",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "probability",
+            "columnName": "probability",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "weightBits",
+            "columnName": "weight_bits",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bestCaseBits",
+            "columnName": "best_case_bits",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contributions",
+            "columnName": "contributions",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "origin",
+            "columnName": "origin",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mergedAt",
+            "columnName": "merged_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "vetoA",
+            "columnName": "veto_a",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "vetoB",
+            "columnName": "veto_b",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_merge_ledger_survivor_id",
+            "unique": false,
+            "columnNames": [
+              "survivor_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_merge_ledger_survivor_id` ON `${TABLE_NAME}` (`survivor_id`)"
+          }
+        ]
+      },
+      {
+        "tableName": "suspect_decisions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`suspect_key` TEXT NOT NULL, `decision` TEXT NOT NULL, `decided_at` INTEGER NOT NULL, PRIMARY KEY(`suspect_key`))",
+        "fields": [
+          {
+            "fieldPath": "key",
+            "columnName": "suspect_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "decision",
+            "columnName": "decision",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "decidedAt",
+            "columnName": "decided_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "suspect_key"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '5f7e9dc05153bb0f870d64b422e90871')"
+    ]
+  }
+}

@@ -43,14 +43,24 @@ class FacebookHarvester @Inject constructor() {
     }
 
     private fun parseFriendsDocument(doc: Document): List<Target> {
-        val friends = mutableListOf<Target>()
+        // Keyed by profile link: one entry per account, so two friends with the
+        // same name stay two people while a repeated row is counted once.
+        val friends = linkedMapOf<String, Target>()
 
         // mbasic friend rows are anchors whose href points at the user's
         // profile and whose text is the friend's display name. We exclude
         // navigation chrome by ignoring known noise links.
         val noise = setOf(
             "Friends", "Mutual friends", "Followers", "Following",
-            "See all", "See more", "Edit profile", "Home", "Menu"
+            "See all", "See more", "Edit profile", "Home", "Menu",
+            "Messages", "Notifications", "Marketplace", "Groups", "Watch", "Events", "Pages",
+            "Settings", "Bookmarks", "Search", "Log out", "Logout", "Help", "Saved", "Memories"
+        )
+        // Single-segment paths that are Facebook's own pages, not a friend's profile.
+        val reservedPaths = setOf(
+            "home.php", "messages", "notifications", "marketplace", "groups", "watch", "events",
+            "pages", "settings", "bookmarks", "search", "help", "friends", "menu", "login", "logout.php",
+            "saved", "memories", "gaming", "reel", "stories", "privacy", "policies"
         )
         val elements = doc.select("a[href]")
 
@@ -61,19 +71,24 @@ class FacebookHarvester @Inject constructor() {
                 href.matches(Regex("^/[A-Za-z0-9._-]+(?:/)?(?:\\?[A-Za-z0-9._%=&-]*)?$")) ||
                 href.contains("/friends/?profile_id=")
             if (!looksLikeProfile) continue
+            val firstSegment = href.trimStart('/').substringBefore('?').substringBefore('/').lowercase()
+            if (!href.contains("profile.php") && firstSegment in reservedPaths) continue
 
             val name = element.text().trim()
             if (name.isBlank() || name in noise) continue
             if (name.length < 2) continue
 
-            friends += Target(
-                displayName = name,
-                sourceAccount = "Meta (Facebook)",
-                status = TargetStatus.UNKNOWN
+            friends.putIfAbsent(
+                href.substringBefore('#').trimEnd('/'),
+                Target(
+                    displayName = name,
+                    sourceAccount = "Meta (Facebook)",
+                    status = TargetStatus.UNKNOWN
+                )
             )
         }
 
-        val deduped = friends.distinctBy { it.displayName }
+        val deduped = friends.values.toList()
         DiagnosticLogger.log("Facebook Harvest: parsed ${deduped.size} friends from visible session.")
         return deduped
     }

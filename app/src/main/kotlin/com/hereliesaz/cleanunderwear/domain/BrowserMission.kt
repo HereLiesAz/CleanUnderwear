@@ -58,6 +58,13 @@ sealed class BrowserMission {
     open val drillToFirstResult: Boolean = false
 
     /**
+     * How long the screen waits for [extractionScript] to hand back a page before unmasking and
+     * offering retry / skip / abort. Imports that wait for the user to sign in (or scan a QR
+     * code) get minutes, not seconds.
+     */
+    open val watchdogMs: Long = 30_000L
+
+    /**
      * Browse-only mission: open [initialUrl] in the in-app WebView, no
      * automation, no extraction. Used for the doxray identity-correlation
      * chips that must run through the user's WebView session (CBC and
@@ -98,10 +105,37 @@ sealed class BrowserMission {
         override val extractionScript: String = DRILL_TO_FIRST_RESULT_SCRIPT
     }
 
+    /** WhatsApp Web: the user scans its QR code with their phone here, then the chat list is read. */
+    object HarvestWhatsApp : BrowserMission() {
+        override val initialUrl: String = com.hereliesaz.cleanunderwear.data.WhatsAppHarvester.URL
+        override val label: String = "Import WhatsApp chats"
+        override val extractionScript: String = com.hereliesaz.cleanunderwear.data.WhatsAppHarvester.SCRIPT
+        override val watchdogMs: Long = 300_000L
+    }
+
+    /** Instagram: the user signs in here if needed; the script walks to their followers list. */
+    object HarvestInstagram : BrowserMission() {
+        override val initialUrl: String = com.hereliesaz.cleanunderwear.data.InstagramHarvester.URL
+        override val label: String = "Import Instagram followers"
+        override val extractionScript: String = com.hereliesaz.cleanunderwear.data.InstagramHarvester.SCRIPT
+        override val drillToFirstResult: Boolean = true
+        override val watchdogMs: Long = 300_000L
+    }
+
+    /** Google Contacts: the user signs in to Google here if needed, then the list is read. */
+    object HarvestGoogleContacts : BrowserMission() {
+        override val initialUrl: String = com.hereliesaz.cleanunderwear.data.GoogleContactsHarvester.URL
+        override val label: String = "Import Google Contacts"
+        override val extractionScript: String = com.hereliesaz.cleanunderwear.data.GoogleContactsHarvester.SCRIPT
+        override val drillToFirstResult: Boolean = true
+        override val watchdogMs: Long = 300_000L
+    }
+
     object HarvestFacebookFriends : BrowserMission() {
         override val initialUrl: String = "https://mbasic.facebook.com/me/friends"
-        override val label: String = "Harvest Facebook friends"
+        override val label: String = "Import Facebook friends"
         override val extractionScript: String = FACEBOOK_HARVEST_SCRIPT
+        override val watchdogMs: Long = 300_000L
     }
 }
 
@@ -118,10 +152,17 @@ sealed class BrowserMission {
  */
 private val DRILL_TO_FIRST_RESULT_SCRIPT = """
 (function(){
+  // A result card's own link first. Only if no card carries one, a person link in the page
+  // body, skipping header/nav/footer so a "People search" menu item never wins.
   var firstLink = document.querySelector(
-    '.person-card a[href], .result-card a[href], .search-result a[href],' +
-    ' [data-result-card] a[href], a[href*="/person"], a[href*="/people"]'
+    '.person-card a[href], .result-card a[href], .search-result a[href], [data-result-card] a[href]'
   );
+  if (!firstLink) {
+    var links = document.querySelectorAll('a[href*="/person"], a[href*="/people"]');
+    for (var i = 0; i < links.length; i++) {
+      if (!links[i].closest('header, nav, footer, [role="navigation"]')) { firstLink = links[i]; break; }
+    }
+  }
   var hasList = document.querySelector(
     '.person-card, .result-card, .search-result, [data-result-card]'
   );
@@ -153,17 +194,19 @@ private val DRILL_TO_FIRST_RESULT_SCRIPT = """
 private val FACEBOOK_HARVEST_SCRIPT = """
 (function(){
   var collected = document.documentElement.outerHTML;
+  // Every page fetched once, and a hard page cap, so a "more" link that keeps pointing at a
+  // page already seen ends the walk instead of looping.
+  var visited = {};
+  visited[window.location.pathname + window.location.search] = true;
+  var pages = 0;
   function nextBatch() {
     var more = document.querySelector('a[href*="/friends"]:not([href*="profile"])');
-    if (!more) {
+    var href = more ? more.getAttribute('href') : null;
+    if (!href || visited[href] || ++pages > 50) {
       window.HTMLOUT.dump(collected);
       return;
     }
-    var href = more.getAttribute('href');
-    if (!href || href === window.location.pathname) {
-      window.HTMLOUT.dump(collected);
-      return;
-    }
+    visited[href] = true;
     fetch(href, { credentials: 'include' })
       .then(function(r){ return r.text(); })
       .then(function(html){

@@ -85,7 +85,23 @@ data class Target(
      * the mark lapses by itself the moment [phoneNumber] changes (see [phoneIsStale]).
      */
     @ColumnInfo(name = "stale_phone")
-    val stalePhone: String? = null
+    val stalePhone: String? = null,
+    /** The status this contact had when the user ignored it; restored on un-ignore. */
+    @ColumnInfo(name = "status_before_ignore")
+    val statusBeforeIgnore: TargetStatus? = null,
+    /**
+     * Comma-separated labels of the sources the last check couldn't read (error, timeout, bot
+     * wall). Null when every source answered: the check was complete.
+     */
+    @ColumnInfo(name = "unread_sources")
+    val unreadSources: String? = null,
+    /**
+     * Identifies the record behind the current match on its source (an inmate or case number,
+     * or the person's name, age and town there), so "Not a match" dismisses that record and
+     * not every future result from the source.
+     */
+    @ColumnInfo(name = "match_record_key")
+    val matchRecordKey: String? = null
 ) {
     /** True while [phoneNumber] is still the number the user marked stale. */
     val phoneIsStale: Boolean
@@ -149,7 +165,11 @@ data class TargetLite(
     @ColumnInfo(name = "last_status_change_timestamp")
     val lastStatusChangeTimestamp: Long,
     @ColumnInfo(name = "last_scraped_timestamp")
-    val lastScrapedTimestamp: Long
+    val lastScrapedTimestamp: Long,
+    @ColumnInfo(name = "match_kind")
+    val matchKind: String? = null,
+    @ColumnInfo(name = "monitorability_state")
+    val monitorabilityState: MonitorabilityState = MonitorabilityState.READY
 )
 
 /**

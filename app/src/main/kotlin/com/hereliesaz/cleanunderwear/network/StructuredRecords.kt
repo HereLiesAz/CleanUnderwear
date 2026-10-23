@@ -5,6 +5,7 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonParser
 import com.hereliesaz.cleanunderwear.match.CandidateRecord
 import com.hereliesaz.cleanunderwear.match.EventKind
+import com.hereliesaz.cleanunderwear.match.StringSimilarity
 import com.hereliesaz.cleanunderwear.match.UsStates
 import org.jsoup.Jsoup
 
@@ -76,6 +77,20 @@ object StructuredRecords {
         }.toList()
     }
 
+    /**
+     * Whether the oldest record on a regex-records page is still inside [Source.maxAgeDays], so
+     * the next page (sorted newest first) may hold more. A page with no dated records ends it.
+     */
+    fun reachesIntoWindow(html: String, source: Source): Boolean {
+        val days = source.maxAgeDays ?: return true
+        val recordRe = source.recordRegex?.let { Regex(it, setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)) } ?: return false
+        val dateRe = source.fieldRegexes["date"]?.let { Regex(it, setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)) } ?: return false
+        val oldest = recordRe.findAll(html)
+            .mapNotNull { m -> dateRe.find(m.value)?.groupValues?.lastOrNull()?.let(::parseDate) }
+            .minOrNull() ?: return false
+        return !oldest.isBefore(today().minusDays(days.toLong()))
+    }
+
     fun fromTable(
         html: String,
         source: Source,
@@ -130,8 +145,9 @@ object StructuredRecords {
         val recFirst = row["first"] ?: parsed?.first ?: return null
         val recLast = row["last"] ?: parsed?.third ?: return null
         val recMiddle = row["middle"] ?: parsed?.second
-        if (!recFirst.substringBefore(' ').equals(first, ignoreCase = true)) return null
-        if (recLast.split(' ', '-').none { it.equals(last, ignoreCase = true) }) return null
+        val fold = StringSimilarity::foldDiacritics
+        if (!fold(recFirst.substringBefore(' ')).equals(fold(first), ignoreCase = true)) return null
+        if (fold(recLast).split(' ', '-').none { it.equals(fold(last), ignoreCase = true) }) return null
 
         // With a status field configured, only it decides (an empty release date
         // means still held); without one, the whole row's text does.
@@ -166,6 +182,8 @@ object StructuredRecords {
             row["facility"],
             id?.let { "#$it" }
         ).joinToString(" · ")
+        // A link to the record itself, when the source's rows carry one, beats the search page.
+        val recordUrl = row["url"]?.let { absolute(it, source.urlTemplate) } ?: evidenceUrl
         return CandidateRecord(
             sourceId = source.id,
             sourceLabel = source.label,
@@ -177,11 +195,24 @@ object StructuredRecords {
             birthYear = birthYear,
             city = row["city"],
             state = UsStates.code(row["state"]),
-            recordKey = id?.let { "${source.id}:$it" } ?: evidenceUrl,
-            evidenceUrl = evidenceUrl,
+            recordKey = id?.let { "${source.id}:$it" }
+                ?: com.hereliesaz.cleanunderwear.match.RecordExtractor.personKey(
+                    source.id, recFirst, recMiddle, recLast, birthYear ?: age, row["city"]
+                ),
+            evidenceUrl = recordUrl,
             snippet = snippet
         )
     }
+
+    /** [href] made absolute against the scheme and host of [base]. */
+    internal fun absolute(href: String, base: String): String {
+        if (href.startsWith("http://") || href.startsWith("https://")) return href
+        val origin = Regex("^(https?://[^/]+)").find(base)?.value ?: return href
+        return origin + (if (href.startsWith("/")) href else "/$href")
+    }
+
+    /** Generational suffixes, which rosters print where a middle name would go ("SMITH, JOHN JR"). */
+    private val NAME_SUFFIXES = setOf("jr", "sr", "ii", "iii", "iv", "v")
 
     /** Overridable clock for tests. */
     internal var today: () -> java.time.LocalDate = { java.time.LocalDate.now() }
@@ -209,11 +240,14 @@ object StructuredRecords {
     internal fun splitName(name: String, lastFirst: Boolean = false): Triple<String, String?, String>? {
         if (name.contains(',')) {
             val lastPart = name.substringBefore(',').trim()
-            val rest = name.substringAfter(',').trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+            val rest = name.substringAfter(',').trim().split(Regex("\\s+"))
+                .filter { it.isNotEmpty() && it.trimEnd('.').lowercase() !in NAME_SUFFIXES }
             if (lastPart.isEmpty() || rest.isEmpty()) return null
             return Triple(rest[0], rest.getOrNull(1), lastPart)
         }
-        val tokens = name.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        val tokens = name.trim().split(Regex("\\s+"))
+            .filter { it.isNotEmpty() }
+            .filterIndexed { i, t -> i == 0 || t.trimEnd('.').lowercase() !in NAME_SUFFIXES }
         if (tokens.size < 2) return null
         if (lastFirst) return Triple(tokens[1], tokens.getOrNull(2), tokens[0])
         return Triple(tokens.first(), tokens.getOrNull(1)?.takeIf { tokens.size > 2 }, tokens.last())

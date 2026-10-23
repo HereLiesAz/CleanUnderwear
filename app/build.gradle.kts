@@ -50,6 +50,12 @@ configurations.configureEach {
     }
 }
 
+// Room writes each schema version here (committed), so migrations can be tested against the
+// exact shape every released version had.
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 android {
     namespace = "com.hereliesaz.cleanunderwear"
     compileSdk = 37
@@ -178,16 +184,12 @@ dependencies {
     ksp(libs.androidx.hilt.compiler)
 
     // Networking
-    implementation(libs.retrofit)
-    implementation(libs.retrofit.converter.gson)
+    implementation(libs.gson)
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
 
     // In-app update check for Play installs (UpdateChecker)
     implementation(libs.play.app.update.ktx)
-
-    // Image Loading
-    implementation(libs.coil.compose)
 
     // On-Device AI
     implementation(libs.litert)

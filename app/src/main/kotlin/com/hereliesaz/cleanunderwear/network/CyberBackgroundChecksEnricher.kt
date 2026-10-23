@@ -3,6 +3,7 @@ package com.hereliesaz.cleanunderwear.network
 import com.hereliesaz.cleanunderwear.data.Target
 import com.hereliesaz.cleanunderwear.data.isStalePhone
 import com.hereliesaz.cleanunderwear.domain.BrowserMission
+import com.hereliesaz.cleanunderwear.match.StringSimilarity
 import com.hereliesaz.cleanunderwear.util.DiagnosticLogger
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
@@ -125,8 +126,7 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
         val dob = root
             .selectFirst(DOB_SELECTORS)
             ?.text()?.trim()?.takeIf { it.isNotBlank() }
-            ?: Regex("(?:Age|DOB|Born)[:\\s]+([0-9/]{1,10}|\\d{1,3})", RegexOption.IGNORE_CASE)
-                .find(root.text())?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
+            ?: DOB_TEXT.find(root.text())?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
 
         // Structured data (schema.org Person, as JSON-LD or microdata) doesn't drift with the
         // site's CSS, so it fills whatever the class selectors missed. A page can carry several
@@ -143,7 +143,7 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
         val finalName = cardName ?: structured?.name?.let { naturalOrder(it) }
         val finalAddress = address ?: structured?.address
         val finalPhone = phone ?: structured?.phone
-        val finalDob = dob ?: structured?.dob
+        val finalDob = (dob ?: structured?.dob)?.let(::pinAge)
 
         // Middle name is the token(s) between first and last of the parsed name.
         val middleName = finalName?.let { middleFrom(it) }
@@ -337,9 +337,24 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
             return EnrichmentOutcome(target.copy(enrichmentProvenance = prov), verified = false, provenance = prov)
         }
 
-        val consensus = consensusFindings(results)
-        val modes = results.map { modeLabel(it.first) }.distinct().joinToString("+")
-        val (verified, basis) = verifySamePerson(target, results, consensus)
+        // A card naming someone else (a recycled number's new owner) is set aside before the
+        // consensus, so it can neither verify the merge nor contribute a field to it.
+        val (usable, strangers) = if (NameValidator.isVerifiable(target.displayName)) {
+            val tokens = NameValidator.tokenize(target.displayName)
+            results.partition { (_, f) -> f.name == null || nameConsistent(tokens, f.name) }
+        } else {
+            results to emptyList()
+        }
+        if (usable.isEmpty()) {
+            val prov = results.map { modeLabel(it.first) }.distinct().joinToString("+") +
+                " · NOT merged (name conflict: card '${strangers.first().second.name}' ≠ ${target.displayName})"
+            DiagnosticLogger.log("CYBG enrich(rejected): ${target.displayName} [$prov]")
+            return EnrichmentOutcome(target.copy(enrichmentProvenance = prov), verified = false, provenance = prov)
+        }
+        val consensus = consensusFindings(usable)
+        val modes = usable.map { modeLabel(it.first) }.distinct().joinToString("+")
+        val (verified, rawBasis) = verifySamePerson(target, usable, consensus)
+        val basis = if (strangers.isEmpty()) rawBasis else "$rawBasis; ignored ${strangers.size} card(s) naming someone else"
 
         return if (verified) {
             val nameWasPlaceholder = isPlaceholderName(target.displayName)
@@ -431,12 +446,19 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
             val targetTokens = NameValidator.tokenize(target.displayName)
             val consistent = candidateNames.filter { nameConsistent(targetTokens, it) }
             val conflicting = candidateNames.filter { !nameConsistent(targetTokens, it) }
+            // A name search returns whoever the site ranks first among everyone with that name,
+            // so a name-only card needs something else of the contact's on it as well.
+            val nameSearchOnly = results.all { it.first is BrowserMission.CbcByName }
             return when {
-                consistent.isNotEmpty() -> true to "name match: ${consistent.first()}"
-                candidateNames.isEmpty() && keyedByUniqueId ->
-                    true to "phone/email lookup, card carried no conflicting name"
                 conflicting.isNotEmpty() ->
                     false to "name conflict: card '${conflicting.first()}' ≠ ${target.displayName}"
+                consistent.isNotEmpty() && !nameSearchOnly -> true to "name match: ${consistent.first()}"
+                consistent.isNotEmpty() && results.any { corroborates(target, it.second) } ->
+                    true to "name match: ${consistent.first()}, plus a matching phone or place"
+                consistent.isNotEmpty() ->
+                    false to "name-only card; nothing else on it matches ${target.displayName}"
+                candidateNames.isEmpty() && keyedByUniqueId ->
+                    true to "phone/email lookup, card carried no conflicting name"
                 else -> false to "uncorroborated"
             }
         }
@@ -451,29 +473,49 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
     }
 
     /**
-     * Two names are consistent if they share the same last name and a
-     * compatible first name, case-insensitively. First names match when they
-     * are equal, when one is a prefix of the other ("Jon" / "Jonathan"), or
-     * when one side is a single-letter initial sharing that letter ("J" / "John").
+     * Whether a name-search card carries something of [target]'s beyond the name: the same
+     * phone number, the same area code, or the city/ZIP the contact's address names.
+     */
+    private fun corroborates(target: Target, f: Findings): Boolean {
+        val phone = StringSimilarity.normalizePhone(f.phone)
+        if (phone != null && phone == StringSimilarity.normalizePhone(target.usablePhone)) return true
+        val cardArea = StringSimilarity.nanpAreaCode(f.phone)
+        if (cardArea != null && (cardArea == target.areaCode || cardArea == StringSimilarity.nanpAreaCode(target.phoneNumber))) return true
+        val address = f.address?.lowercase() ?: return false
+        val known = target.residenceInfo?.lowercase()?.split(',')?.map { it.trim() }?.filter { it.length >= 3 }.orEmpty()
+        return known.any { part -> part.none(Char::isDigit) && Regex("\\b${Regex.escape(part)}\\b").containsMatchIn(address) } ||
+            Regex("\\b\\d{5}\\b").findAll(target.residenceInfo.orEmpty()).any { it.value in address }
+    }
+
+    /**
+     * Two names are consistent if they share the same last name and a compatible first name,
+     * case- and accent-insensitively. First names match when they are equal, or when one side
+     * is a single-letter initial sharing that letter ("J" / "John").
      *
-     * Deliberately NOT a bare first-initial match: "James Smith" and
-     * "John Smith" share the initial 'J' and the surname but are different
-     * people, and merging them would defeat the whole point of verify-before-merge.
+     * A short form also matches its long form when the long one adds three or more letters
+     * ("Jon" / "Jonathan", "Ron" / "Ronald"), but not one or two ("Eric" / "Erica",
+     * "Don" / "Donna" are different people). Never a bare first-initial match between two
+     * full names: "James Smith" and "John Smith"
+     * share the initial and the surname but are different people, and merging them would
+     * defeat the whole point of verify-before-merge.
      */
     private fun nameConsistent(targetTokens: List<String>, candidate: String): Boolean {
         val cand = NameValidator.tokenize(naturalOrder(candidate))
         if (targetTokens.size < 2 || cand.size < 2) return false
-        val tFirst = targetTokens.first().lowercase()
-        val tLast = targetTokens.last().lowercase()
-        val cFirst = cand.first().lowercase()
-        val cLast = cand.last().lowercase()
+        fun norm(s: String) = StringSimilarity.foldDiacritics(s).lowercase()
+        val tFirst = norm(targetTokens.first())
+        val tLast = norm(targetTokens.last())
+        val cFirst = norm(cand.first())
+        val cLast = norm(cand.last())
         val lastMatch = tLast == cLast
         val firstMatch = tFirst == cFirst ||
-            tFirst.startsWith(cFirst) ||
-            cFirst.startsWith(tFirst) ||
+            longForm(tFirst, cFirst) || longForm(cFirst, tFirst) ||
             ((tFirst.length == 1 || cFirst.length == 1) && tFirst.firstOrNull() == cFirst.firstOrNull())
         return lastMatch && firstMatch
     }
+
+    private fun longForm(short: String, long: String): Boolean =
+        short.length >= 3 && long.length - short.length >= 3 && long.startsWith(short)
 
     /**
      * The number a merge should leave on [target]: the existing one, filled from [found] only when
@@ -488,9 +530,9 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
 
     /** Area code that follows the number [adoptPhone] chose; unchanged unless a stale number was replaced. */
     private fun areaCodeFor(target: Target, found: String?): String? {
-        val digits = found?.filter { it.isDigit() }?.takeLast(10)
-        return if (target.phoneIsStale && adoptPhone(target, found) != target.phoneNumber) digits?.take(3)
-        else target.areaCode ?: digits?.take(3)
+        val area = StringSimilarity.nanpAreaCode(found)
+        return if (target.phoneIsStale && adoptPhone(target, found) != target.phoneNumber) area
+        else target.areaCode ?: area
     }
 
     /** Whether [candidate], a name read off a lookup card, is plausibly the same person as [displayName]. */
@@ -519,10 +561,17 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
      * which the viewmodel records as a per-search miss without halting the
      * whole queue.
      */
-    fun looksLikeBlock(html: String): Boolean {
-        if (html.isBlank()) return true
-        val lower = html.lowercase()
-        return BLOCK_MARKERS.any { it in lower }
+    fun looksLikeBlock(html: String): Boolean = BotWall.suspected(html)
+
+    /**
+     * A bare age ("45", "Age 45") is true only on the day it was read; stored as-is it would be
+     * taken as the current age for years. Pin it to a birth year ("~1981") instead. Dates and
+     * years pass through unchanged.
+     */
+    internal fun pinAge(dob: String, currentYear: Int = java.time.Year.now().value): String {
+        if (Regex("(19|20)\\d{2}").containsMatchIn(dob)) return dob
+        val age = Regex("\\b(\\d{1,3})\\b").find(dob)?.groupValues?.get(1)?.toIntOrNull() ?: return dob
+        return if (age in 1..120) "~${currentYear - age}" else dob
     }
 
     data class Findings(
@@ -545,16 +594,16 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
         const val DOB_SELECTORS =
             ".dob, .date-of-birth, .born, .age, [data-dob], [itemprop=birthDate]"
         const val MAX_JSON_DEPTH = 8
+
+        /**
+         * "Age 45", "DOB 03/14/1961", "Born 1961": whole words only ("Page 1", "Usage 5" are
+         * not ages), and an age must be adult-plausible so a stray digit isn't stored as one.
+         */
+        val DOB_TEXT = Regex(
+            "\\b(?:Age|DOB|Born)\\b[:\\s]+(\\d{1,2}/\\d{1,2}/\\d{4}|(?:19|20)\\d{2}|(?:1[89]|[2-9]\\d|1[01]\\d)\\b)",
+            RegexOption.IGNORE_CASE
+        )
         val CLASS_HINT = Regex("name|addr|phone|age|dob|birth|person|result|card|resident", RegexOption.IGNORE_CASE)
 
-        private val BLOCK_MARKERS = listOf(
-            "captcha",
-            "are you a robot",
-            "verify you are human",
-            "unusual traffic",
-            "access denied",
-            "cf-browser-verification",
-            "/cdn-cgi/challenge",
-        )
     }
 }

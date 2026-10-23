@@ -170,7 +170,9 @@ fun BrowserScreen(
         if (!mission.autoExtract || batchComplete) return@LaunchedEffect
         if (paused || !pageReady) return@LaunchedEffect
         if (!mission.drillToFirstResult && automationRan) return@LaunchedEffect
-        delay(1200L)
+        // Wait for the page to settle rather than a fixed beat: a slow SPA would otherwise be
+        // dumped empty and read as "nothing found".
+        awaitRenderedContent(webView)
         if (!paused && !batchComplete && pageReady) {
             val token = extractionGate.beginExtraction() ?: return@LaunchedEffect
             val script = extractionGate.tagScript(
@@ -190,7 +192,7 @@ fun BrowserScreen(
     LaunchedEffect(batchId, currentIndex, paused) {
         if (!mission.autoExtract || batchComplete) return@LaunchedEffect
         if (paused) return@LaunchedEffect
-        delay(30_000L)
+        delay(mission.watchdogMs)
         if (!paused && !batchComplete) {
             DiagnosticLogger.log(
                 "BrowserScreen: mission ${currentIndex + 1} timed out (pageReady=$pageReady, automationRan=$automationRan); pausing",
@@ -456,5 +458,25 @@ private class HtmlDumpInterface(private val onResult: (String?, String?) -> Unit
     @JavascriptInterface
     fun dumpTagged(token: String?, html: String?) {
         onResult(token, html)
+    }
+}
+
+/**
+ * Suspends until [webView]'s page has finished loading and holds some text, polling every
+ * 400 ms, for at most about six seconds; then returns either way (the extraction script and
+ * the parser cope with a thin page, and the watchdog covers a dead one).
+ */
+private suspend fun awaitRenderedContent(webView: android.webkit.WebView?) {
+    delay(600L)
+    repeat(14) {
+        val ready = webView?.let { wv ->
+            kotlinx.coroutines.suspendCancellableCoroutine<Boolean> { cont ->
+                wv.evaluateJavascript(
+                    "(document.readyState === 'complete' && document.body && document.body.innerText.length > 200)"
+                ) { result -> if (cont.isActive) cont.resumeWith(Result.success(result == "true")) }
+            }
+        } ?: return
+        if (ready) return
+        delay(400L)
     }
 }

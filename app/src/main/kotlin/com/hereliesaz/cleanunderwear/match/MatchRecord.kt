@@ -54,7 +54,7 @@ data class MatchRecord(
                 phone = phone,
                 email = email,
                 address = address,
-                areaCode = areaCode ?: StringSimilarity.normalizePhone(phone)?.take(3),
+                areaCode = areaCode ?: StringSimilarity.nanpAreaCode(phone),
                 dob = dob
             )
         }

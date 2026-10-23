@@ -50,8 +50,9 @@ class RecordExtractorTest {
             "John Smith, 80, of Gretna died. He is survived by his wife, Mary; his son Peter Jones; " +
                 "and many grandchildren. Services will be held Friday."
         ).single()
-        assertTrue(r.relatives.contains("Mary Smith"))
+        assertTrue(r.inferredRelatives.contains("Mary Smith"))
         assertTrue(r.relatives.contains("Peter Jones"))
+        assertTrue("Mary Smith" !in r.relatives)
     }
 
     @Test

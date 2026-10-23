@@ -67,6 +67,9 @@ class MatchVerifier(
         /** Per survivor who is also one of the user's contacts. */
         val survivorKnown: Double = 5.0,
         val survivorCap: Double = 10.0,
+        /** Per first-name-only survivor whose guessed surname makes them one of the user's contacts. */
+        val inferredSurvivorKnown: Double = 1.0,
+        val inferredSurvivorCap: Double = 2.0,
         /** Per additional independent source reporting the same event kind. */
         val corroboratingSource: Double = 3.0,
         val corroborationCap: Double = 6.0,
@@ -110,8 +113,9 @@ class MatchVerifier(
 
     /** A different initial, or a different full middle name, means a different person. */
     private fun middleName(contact: ContactProfile, candidate: CandidateRecord): Signal {
-        val c = contact.middleName?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: return Signal()
-        val r = candidate.middleName?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: return Signal()
+        // First middle token only: "Ann Marie" and "ANN" are the same middle name.
+        val c = contact.middleName?.firstToken() ?: return Signal()
+        val r = candidate.middleName?.firstToken() ?: return Signal()
         val bothFull = c.length > 1 && r.length > 1
         return when {
             c.first() != r.first() || (bothFull && c != r) ->
@@ -121,17 +125,23 @@ class MatchVerifier(
         }
     }
 
+    private fun String.firstToken(): String? =
+        StringSimilarity.foldDiacritics(trim()).split(Regex("[\\s.]+")).firstOrNull()?.lowercase()?.takeIf { it.isNotEmpty() }
+
     /**
-     * Compares birth years, so an obituary's age-at-death and the contact's
-     * current age line up regardless of when each was recorded.
+     * Compares birth years, so an obituary's age-at-death and the contact's current age line up
+     * regardless of when each was recorded: a record's age is taken as of its [CandidateRecord.eventYear].
      */
     private fun age(contact: ContactProfile, candidate: CandidateRecord): Signal {
         val c = contact.birthYear ?: contact.age?.let { currentYear - it }
-        val r = candidate.birthYear ?: candidate.age?.let { currentYear - it }
+        val r = recordBirthYear(candidate)
         if (c == null || r == null) return Signal(reason = "Age unknown on ${if (c == null) "contact" else "record"}")
         if (abs(c - r) > config.ageTolerance + 1) return Signal(reason = "Age differs (born ~$r vs ~$c)", rejects = true)
         return Signal(config.ageAgree, "Age matches (born ~$r)")
     }
+
+    private fun recordBirthYear(r: CandidateRecord): Int? =
+        r.birthYear ?: r.age?.let { (r.eventYear ?: currentYear) - it }
 
     /** People move, so a different state counts against only mildly. */
     private fun location(contact: ContactProfile, candidate: CandidateRecord): Signal {
@@ -151,14 +161,18 @@ class MatchVerifier(
 
     /** Survivors the user also knows: the strongest signal an obituary carries. */
     private fun survivors(contact: ContactProfile, candidate: CandidateRecord): Signal {
-        if (candidate.relatives.isEmpty() || contact.otherContactNames.isEmpty()) return Signal()
+        if (contact.otherContactNames.isEmpty()) return Signal()
         val known = contact.otherContactNames.map { it.lowercase() }.toSet()
         val hits = candidate.relatives.filter { it.lowercase() in known }
-        if (hits.isEmpty()) return Signal()
-        return Signal(
-            (hits.size * config.survivorKnown).coerceAtMost(config.survivorCap),
-            "Survivors include your contacts: ${hits.joinToString()}"
-        )
+        val guessed = candidate.inferredRelatives.filter { it.lowercase() in known && it !in hits }
+        if (hits.isEmpty() && guessed.isEmpty()) return Signal()
+        val bits = (hits.size * config.survivorKnown).coerceAtMost(config.survivorCap) +
+            (guessed.size * config.inferredSurvivorKnown).coerceAtMost(config.inferredSurvivorCap)
+        val reason = buildList {
+            if (hits.isNotEmpty()) add("Survivors include your contacts: ${hits.joinToString()}")
+            if (guessed.isNotEmpty()) add("Survivors may include your contacts: ${guessed.joinToString()} (first name only)")
+        }.joinToString("; ")
+        return Signal(bits, reason)
     }
 
     /**
@@ -171,12 +185,12 @@ class MatchVerifier(
         val firstPass = candidates.map { verify(contact, it) }
             .filter { it.tier != MatchTier.REJECTED }
         return firstPass.map { v ->
-            // Another source corroborates only if its record describes the same
-            // event about plausibly the same person: same kind, and agreeing on a
-            // fact beyond the name. Two name-only obituaries for two John Smiths
-            // must not vouch for each other.
-            val others = firstPass
-                .filter { it !== v && it.candidate.kind == v.candidate.kind }
+            // Another source corroborates only if both records stand on their own as this
+            // contact (each agrees with the contact beyond the name) and describe the same
+            // event: same kind, same place, no conflicting age. Two obituaries for two John
+            // Smiths of similar age in different towns must not vouch for each other.
+            val others = if (!supported(v)) emptyList() else firstPass
+                .filter { it !== v && it.candidate.kind == v.candidate.kind && supported(it) }
                 .filter { sameEvent(v.candidate, it.candidate) }
                 .map { it.candidate.sourceId }
                 .distinct()
@@ -184,12 +198,18 @@ class MatchVerifier(
         }.filter { it.tier != MatchTier.INSUFFICIENT }.sortedByDescending { it.confidence }
     }
 
+    /** A first-pass verification that rests on something beyond the name. */
+    private fun supported(v: Verification): Boolean = v.reasons.any {
+        it.startsWith("Age matches") || it.startsWith("Middle") && it.endsWith("matches") ||
+            it.startsWith("Same city") || it.startsWith("Survivors include")
+    }
+
     private fun sameEvent(a: CandidateRecord, b: CandidateRecord): Boolean {
-        val aBirth = a.birthYear ?: a.age?.let { currentYear - it }
-        val bBirth = b.birthYear ?: b.age?.let { currentYear - it }
-        val birthAgrees = aBirth != null && bBirth != null && abs(aBirth - bBirth) <= config.ageTolerance + 1
         val cityAgrees = a.city != null && a.city.equals(b.city, ignoreCase = true)
-        return birthAgrees || cityAgrees
+        val aBirth = recordBirthYear(a)
+        val bBirth = recordBirthYear(b)
+        val ageConflicts = aBirth != null && bBirth != null && abs(aBirth - bBirth) > config.ageTolerance + 1
+        return cityAgrees && !ageConflicts
     }
 
     private fun rejected(candidate: CandidateRecord, reasons: List<String>) =

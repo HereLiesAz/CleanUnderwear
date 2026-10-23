@@ -1,18 +1,14 @@
 package com.hereliesaz.cleanunderwear.data
 
-import com.hereliesaz.cleanunderwear.network.WebViewScraper
-import io.mockk.mockk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
  * Parser tests reach into private parse methods via reflection. We exercise the Jsoup branches
- * only — the live WebViewScraper is out of scope for unit tests.
+ * only — the live browser sessions are out of scope for unit tests.
  */
 class HarvesterParseTest {
-
-    private val scraperStub: WebViewScraper = mockk(relaxed = true)
 
     @Test
     fun facebook_mbasicFriendsRows_extractDisplayNames() {
@@ -48,7 +44,7 @@ class HarvesterParseTest {
             </body></html>
         """.trimIndent()
 
-        val targets = invokeParse(WhatsAppHarvester(scraperStub), "parseChatListHtml", html)
+        val targets = invokeParse(WhatsAppHarvester(), "parseChatListHtml", html)
 
         val names = targets.map { it.displayName }.toSet()
         assertTrue("Alice missing: $names", "Alice" in names)
@@ -78,7 +74,7 @@ class HarvesterParseTest {
             </body></html>
         """.trimIndent()
 
-        val targets = invokeParse(InstagramHarvester(scraperStub), "parseFollowersHtml", html)
+        val targets = invokeParse(InstagramHarvester(), "parseFollowersHtml", html)
 
         val sources = targets.map { it.sourceAccount }.toSet()
         assertTrue("alice handle missed: $sources", "Meta (Instagram: @alice)" in sources)
@@ -107,7 +103,7 @@ class HarvesterParseTest {
             </body></html>
         """.trimIndent()
 
-        val targets = invokeParse(GoogleContactsHarvester(scraperStub), "parseContactsHtml", html)
+        val targets = invokeParse(GoogleContactsHarvester(), "parseContactsHtml", html)
 
         assertEquals(2, targets.size)
         val alice = targets.first { it.displayName == "Alice Wonderland" }

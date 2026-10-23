@@ -61,7 +61,7 @@ class DeduplicateTargetsUseCaseTest {
         override suspend fun getTargetById(id: Int): Target? = throw NotImplementedError()
         override fun observeTargetById(id: Int): Flow<Target?> = throw NotImplementedError()
         override suspend fun getTargetsByMonitorability(state: MonitorabilityState): List<Target> = throw NotImplementedError()
-        override suspend fun getReadyDueTargets(now: Long): List<Target> = throw NotImplementedError()
+        override suspend fun getReadyDueTargets(now: Long, limit: Int): List<Target> = throw NotImplementedError()
         override fun getAllTargets(): Flow<List<Target>> = throw NotImplementedError()
         override fun getTargetsByStatus(status: TargetStatus): Flow<List<Target>> = throw NotImplementedError()
         override suspend fun updateMonitorabilityState(id: Int, state: MonitorabilityState) = throw NotImplementedError()
@@ -94,6 +94,46 @@ class DeduplicateTargetsUseCaseTest {
 
         assertEquals(1, merged)
         assertEquals(1, repo.store.size)
+    }
+
+    @Test
+    fun confirmedStatusSurvivesAFresherCopy() = runTest {
+        // The re-harvested copy has more fields, but the confirmed status and the dismissed
+        // false positive live on the old row; neither may be lost.
+        val repo = FakeRepository(
+            listOf(
+                Target(
+                    id = 1, displayName = "Jane Doe", phoneNumber = "555-123-4567",
+                    status = TargetStatus.DECEASED, dismissedMatchKeys = "bop:123", dateOfBirth = "1960"
+                ),
+                Target(
+                    id = 2, displayName = "Jane Doe", phoneNumber = "555-123-4567",
+                    status = TargetStatus.UNKNOWN, residenceInfo = "Austin, TX", email = "jane@example.com"
+                )
+            )
+        )
+        val ledger = FakeLedger()
+
+        DeduplicateTargetsUseCase(repo, ledger = ledger).invoke()
+
+        val survivor = repo.store.single()
+        assertEquals(TargetStatus.DECEASED, survivor.status)
+        assertEquals("bop:123", survivor.dismissedMatchKeys)
+        assertEquals("1960", survivor.dateOfBirth)
+        assertEquals("Austin, TX", survivor.residenceInfo)
+        assertEquals(1, ledger.records.size)
+    }
+
+    @Test
+    fun countryCodeFormatting_landsInOneBlock() = runTest {
+        val repo = FakeRepository(
+            listOf(
+                Target(id = 1, displayName = "John Smith", phoneNumber = "+1 555-123-4567"),
+                Target(id = 2, displayName = "John Smith", phoneNumber = "(555) 123-4567")
+            )
+        )
+
+        assertEquals(1, DeduplicateTargetsUseCase(repo).invoke())
     }
 
     @Test

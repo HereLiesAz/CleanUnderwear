@@ -41,8 +41,17 @@ import javax.inject.Inject
  * rejected records are dropped. Nothing is ever set to INCARCERATED or
  * DECEASED without the user confirming, and a status the user confirmed is
  * never overwritten.
+ *
+ * A source that couldn't be read (network error, error status, bot wall) is
+ * not evidence of absence: when no match turns up and any source failed, the
+ * contact keeps its status and evidence and is re-checked sooner.
+ *
+ * Each result is written onto the row as it stands when the lookup finishes,
+ * not the snapshot read when the run started, and is dropped if the user
+ * changed the contact's status or dismissed records in the meantime.
  */
 class ScrapeTargetsUseCase @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
     private val repository: TargetRepository,
     private val verifier: IdentityVerifier,
     private val sourceCatalog: SourceCatalog,
@@ -53,13 +62,38 @@ class ScrapeTargetsUseCase @Inject constructor(
     private val semaphore = Semaphore(3)
     private val matchVerifier = MatchVerifier()
 
-    suspend operator fun invoke(onProgress: (Float, String) -> Unit = { _, _ -> }) = coroutineScope {
+    /** What one run did, in words a person can read. */
+    data class Summary(val checked: Int, val newMatches: Int, val incomplete: Int) {
+        fun describe(): String = when {
+            checked == 0 -> "Nothing was due for a check."
+            else -> buildString {
+                append("Checked $checked contact${if (checked == 1) "" else "s"}")
+                append(
+                    if (newMatches == 0) ". No new matches"
+                    else ". $newMatches possible match${if (newMatches == 1) "" else "es"} to review"
+                )
+                if (incomplete > 0) append("; $incomplete couldn't be fully checked and will be retried")
+                append('.')
+            }
+        }
+    }
+
+    private val newMatches = java.util.concurrent.atomic.AtomicInteger()
+    private val incomplete = java.util.concurrent.atomic.AtomicInteger()
+
+    suspend operator fun invoke(onProgress: (Float, String) -> Unit = { _, _ -> }): Summary = coroutineScope {
         val now = System.currentTimeMillis()
-        val targetsToProcess = repository.getReadyDueTargets(now)
+        newMatches.set(0)
+        incomplete.set(0)
+        // The user's Contact Limit: only the first N contacts (by when they were added) are
+        // checked at all; 0 means no limit.
+        val limit = context.getSharedPreferences("clean_underwear_prefs", android.content.Context.MODE_PRIVATE)
+            .getInt("global_limit", 0)
+        val targetsToProcess = repository.getReadyDueTargets(now, limit)
 
         if (targetsToProcess.isEmpty()) {
-            onProgress(1f, "Registry is up to date")
-            return@coroutineScope
+            onProgress(1f, "Nothing was due for a check.")
+            return@coroutineScope Summary(0, 0, 0)
         }
 
         // Survivor names in obituaries are checked against the user's other contacts.
@@ -93,7 +127,9 @@ class ScrapeTargetsUseCase @Inject constructor(
             }
         }.awaitAll()
 
-        onProgress(1f, "Daily check completed")
+        val summary = Summary(total, newMatches.get(), incomplete.get())
+        onProgress(1f, summary.describe())
+        summary
     }
 
     private suspend fun processTarget(
@@ -105,12 +141,13 @@ class ScrapeTargetsUseCase @Inject constructor(
         try {
             // A status the user confirmed stands until they change it.
             if (target.status == TargetStatus.INCARCERATED || target.status == TargetStatus.DECEASED) {
-                repository.updateTarget(
-                    target.copy(
+                commit(target) { current ->
+                    current.copy(
                         lastScrapedTimestamp = now,
-                        nextScheduledCheck = now + (target.checkFrequencyHours * 3600000L)
+                        nextScheduledCheck = now + (current.checkFrequencyHours * 3600000L)
                     )
-                )
+                }
+                contactSyncer.syncToSystem(target)
                 return
             }
             // Pre-flight: even though Triage already filters unverifiable names
@@ -118,14 +155,14 @@ class ScrapeTargetsUseCase @Inject constructor(
             val nameResult = NameValidator.validate(target.displayName)
             if (nameResult !is NameValidator.Result.Ok) {
                 emitStep("name not verifiable — skipping (${(nameResult as NameValidator.Result.Skip).reason})")
-                repository.updateTarget(
-                    target.copy(
+                commit(target) { current ->
+                    current.copy(
                         status = TargetStatus.UNVERIFIED,
                         monitorabilityState = MonitorabilityState.NEEDS_ENRICHMENT,
                         lastScrapedTimestamp = now,
-                        nextScheduledCheck = now + (target.checkFrequencyHours * 3600000L)
+                        nextScheduledCheck = now + (current.checkFrequencyHours * 3600000L)
                     )
-                )
+                }
                 return
             }
             val firstName = nameResult.first
@@ -133,19 +170,9 @@ class ScrapeTargetsUseCase @Inject constructor(
 
             // Every state the contact is tied to: resolved locale, the phone's
             // area code, and the state written in their address.
-            val tiedStates = listOfNotNull(
-                sourceCatalog.resolveStateForAreaCode(target.areaCode),
-                stateOf(target.residenceInfo)
-            )
-            val lockupSources = (
-                sourceCatalog.lockupSourcesFor(target.areaCode, target.residenceInfo) +
-                    tiedStates.flatMap { sourceCatalog.stateLockupSources(it) }
-                )
-                .distinctBy { it.id }
-                .filter { it.kind != SourceKind.MANUAL_LANDING }
-            val obituarySources = sourceCatalog
-                .obituarySourcesFor(target.areaCode, target.residenceInfo)
-                .filter { it.kind != SourceKind.MANUAL_LANDING }
+            val plan = sourceCatalog.searchPlan(target.areaCode, target.residenceInfo)
+            val lockupSources = plan.lockup.filter { it.kind != SourceKind.MANUAL_LANDING }
+            val obituarySources = plan.obituary.filter { it.kind != SourceKind.MANUAL_LANDING }
 
             // Honesty gate (defensive — Triage already routes contacts with no
             // automatable source to NO_AUTOMATED_SOURCE before they reach the
@@ -157,13 +184,13 @@ class ScrapeTargetsUseCase @Inject constructor(
             // automatable source for its area.
             if (lockupSources.isEmpty() && obituarySources.isEmpty()) {
                 emitStep("no automated source for area ${target.areaCode ?: "?"} — manual check required")
-                repository.updateTarget(
-                    target.copy(
+                commit(target) { current ->
+                    current.copy(
                         monitorabilityState = MonitorabilityState.NO_AUTOMATED_SOURCE,
                         lastScrapedTimestamp = now,
-                        nextScheduledCheck = now + (target.checkFrequencyHours * 3600000L)
+                        nextScheduledCheck = now + (current.checkFrequencyHours * 3600000L)
                     )
-                )
+                }
                 return
             }
 
@@ -185,20 +212,26 @@ class ScrapeTargetsUseCase @Inject constructor(
 
             // Gather every candidate from every automatable source, then verify.
             val candidates = mutableListOf<CandidateRecord>()
+            val failedSources = mutableListOf<String>()
             if (lockupSources.isEmpty()) {
                 emitStep("no automated lockup source for area ${target.areaCode ?: "?"}")
             }
-            for (source in lockupSources) {
+            val searches = lockupSources.map { it to EventKind.CUSTODY } + obituarySources.map { it to EventKind.DEATH }
+            for ((source, kind) in searches) {
+                // Dismissals made before per-record keys were stored the source's search URL;
+                // those still skip the source. Newer ones name the record and filter below.
                 val evidenceUrl = SourceUrlBuilder.buildEvidenceUrl(source, firstName, lastName)
                 if (evidenceUrl in dismissedKeys) continue
                 emitStep("checking ${source.label}")
-                candidates += sourceSearch.search(source, EventKind.CUSTODY, firstName, lastName, corroboration, dismissedKeys)
+                val result = sourceSearch.search(source, kind, firstName, lastName, corroboration, dismissedKeys)
+                candidates += result.records
+                if (result.failed) failedSources += source.label
             }
-            for (source in obituarySources) {
-                val evidenceUrl = SourceUrlBuilder.buildEvidenceUrl(source, firstName, lastName)
-                if (evidenceUrl in dismissedKeys) continue
-                emitStep("checking ${source.label}")
-                candidates += sourceSearch.search(source, EventKind.DEATH, firstName, lastName, corroboration, dismissedKeys)
+            if (failedSources.isNotEmpty()) {
+                DiagnosticLogger.log(
+                    "${target.displayName}: couldn't read ${failedSources.joinToString()}",
+                    DiagnosticLogger.LogEntry.LogLevel.WARN
+                )
             }
 
             emitStep("verifying ${candidates.size} record${if (candidates.size == 1) "" else "s"}")
@@ -208,13 +241,41 @@ class ScrapeTargetsUseCase @Inject constructor(
                 middleName = target.middleName,
                 age = verifier.approxAge(target.dateOfBirth),
                 city = cityOf(target.residenceInfo),
-                state = stateOf(target.residenceInfo) ?: locale.state,
+                state = UsStates.fromAddress(target.residenceInfo) ?: locale.state,
                 otherContactNames = allNames - target.displayName.trim()
             )
-            val best = matchVerifier.verifyAll(
+            val verified = matchVerifier.verifyAll(
                 profile,
                 candidates.filter { it.recordKey == null || it.recordKey !in dismissedKeys }
-            ).firstOrNull()
+            )
+            val best = verified.firstOrNull()
+            val suppressed = candidates.size - verified.size
+            if (suppressed > 0) {
+                // Records naming the contact that verification set aside (a confident conflict, or
+                // nothing beyond the name): logged, so "no match" and "match hidden" can be told apart.
+                DiagnosticLogger.log("${target.displayName}: $suppressed record(s) naming them were set aside by verification")
+            }
+
+            // No match, but a source couldn't be read: that's not a clean "nothing found", so the
+            // contact keeps its status and evidence and is looked at again sooner.
+            val inconclusive = best == null && failedSources.isNotEmpty()
+            val nextCheck = now + if (inconclusive) {
+                minOf(target.checkFrequencyHours, RETRY_HOURS) * 3600000L
+            } else {
+                target.checkFrequencyHours * 3600000L
+            }
+            if (inconclusive) {
+                incomplete.incrementAndGet()
+                emitStep("couldn't read ${failedSources.size} source${if (failedSources.size == 1) "" else "s"} — will retry")
+                commit(target) { current ->
+                    current.copy(
+                        lastScrapedTimestamp = now,
+                        nextScheduledCheck = nextCheck,
+                        unreadSources = failedSources.joinToString(", ")
+                    )
+                }
+                return
+            }
 
             val newStatus = when (best?.tier) {
                 MatchTier.STRONG -> TargetStatus.POSSIBLE_MATCH
@@ -229,43 +290,32 @@ class ScrapeTargetsUseCase @Inject constructor(
                 )
             }
             val isDeath = best?.candidate?.kind == EventKind.DEATH
-            val discoveredLockupUrl = best?.candidate?.evidenceUrl?.takeIf { !isDeath }
-            val discoveredObitUrl = best?.candidate?.evidenceUrl?.takeIf { isDeath }
-            val verificationSnippet = best?.candidate?.snippet
-
-            var statusChangeTimestamp = target.lastStatusChangeTimestamp
-            if (newStatus != target.status && target.status != TargetStatus.UNKNOWN) {
-                // Weak matches are shown in the app but never notified, nor is a
-                // weak match clearing back to monitoring.
-                val silent = newStatus == TargetStatus.WEAK_MATCH ||
-                    (target.status == TargetStatus.WEAK_MATCH && newStatus == TargetStatus.MONITORING)
-                if (!silent) {
-                    emitStep("notifying status change")
-                    notifications.notifyStatusChange(
-                        target.copy(status = newStatus, matchKind = best?.candidate?.kind?.name),
-                        target.status
-                    )
-                }
-                statusChangeTimestamp = now
-            }
 
             emitStep("persisting findings")
-            // Preserve any prior catalog-derived URL on this target (it may
-            // already point to a verified evidence page from a previous run);
-            // only overwrite when the current run produced a fresh match.
-            val updatedTarget = target.copy(
-                status = newStatus,
-                lastScrapedTimestamp = now,
-                lockupUrl = discoveredLockupUrl,
-                obituaryUrl = discoveredObitUrl,
-                nextScheduledCheck = now + (target.checkFrequencyHours * 3600000L),
-                lastStatusChangeTimestamp = statusChangeTimestamp,
-                lastVerificationSnippet = verificationSnippet,
-                matchConfidence = best?.confidence,
-                matchKind = best?.candidate?.kind?.name,
-                matchReasons = best?.reasons?.joinToString("\n")
-            )
-            repository.updateTarget(updatedTarget)
+            // A match replaces the evidence, whatever else failed. With no match, every source was
+            // read: the record is gone (released, or never there), so old evidence goes with it.
+            val updatedTarget = commit(target) { current ->
+                current.copy(
+                    status = newStatus,
+                    lastScrapedTimestamp = now,
+                    lockupUrl = best?.candidate?.evidenceUrl?.takeIf { !isDeath },
+                    obituaryUrl = best?.candidate?.evidenceUrl?.takeIf { isDeath },
+                    nextScheduledCheck = nextCheck,
+                    lastStatusChangeTimestamp = if (newStatus != current.status) now else current.lastStatusChangeTimestamp,
+                    lastVerificationSnippet = best?.candidate?.snippet,
+                    matchConfidence = best?.confidence,
+                    matchKind = best?.candidate?.kind?.name,
+                    matchReasons = best?.reasons?.joinToString("\n"),
+                    matchRecordKey = best?.candidate?.recordKey,
+                    unreadSources = failedSources.takeIf { it.isNotEmpty() }?.joinToString(", ")
+                )
+            } ?: return
+
+            if (newStatus == TargetStatus.POSSIBLE_MATCH && target.status != TargetStatus.POSSIBLE_MATCH) newMatches.incrementAndGet()
+            if (newStatus != target.status && shouldNotify(target.status, newStatus)) {
+                emitStep("notifying status change")
+                notifications.notifyStatusChange(updatedTarget, target.status)
+            }
 
             emitStep("syncing back to system contacts")
             contactSyncer.syncToSystem(updatedTarget)
@@ -277,15 +327,42 @@ class ScrapeTargetsUseCase @Inject constructor(
         }
     }
 
+    /**
+     * Applies [change] to the row as it is now. Skips (returning null) if the contact was deleted
+     * or the user changed its status or dismissed records since [snapshot] was read; their action
+     * wins over this run's, and the next run starts from it.
+     */
+    private suspend fun commit(snapshot: Target, change: (Target) -> Target): Target? {
+        val current = repository.getTargetById(snapshot.id) ?: return null
+        if (current.status != snapshot.status || current.dismissedMatchKeys != snapshot.dismissedMatchKeys) {
+            DiagnosticLogger.log("${snapshot.displayName}: changed during the check; keeping the user's change")
+            return null
+        }
+        return change(current).also { repository.updateTarget(it) }
+    }
+
+    /**
+     * Strong matches and a strong match clearing are notified; weak matches, and a weak match
+     * clearing, are only shown in the app. A contact's first check (or first since its name became
+     * checkable) settling into monitoring is routine and silent; a first check that finds a strong
+     * match is not.
+     */
+    private fun shouldNotify(old: TargetStatus, new: TargetStatus): Boolean = when {
+        new == TargetStatus.WEAK_MATCH -> false
+        old == TargetStatus.WEAK_MATCH && new == TargetStatus.MONITORING -> false
+        (old == TargetStatus.UNKNOWN || old == TargetStatus.UNVERIFIED) && new == TargetStatus.MONITORING -> false
+        else -> true
+    }
+
+    private companion object {
+        /** Upper bound on the wait before re-checking a contact whose sources couldn't all be read. */
+        const val RETRY_HOURS = 6
+    }
+
     /** City from residenceInfo ("City, Region, Zip"); null when it holds only one part. */
     private fun cityOf(residence: String?): String? {
         val parts = residence?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() } ?: return null
         return parts.firstOrNull()?.takeIf { parts.size >= 2 && it.none(Char::isDigit) }
     }
-
-    /** State from the parts after the city, so a city named "Washington" isn't read as WA. */
-    private fun stateOf(residence: String?): String? =
-        residence?.split(',')?.map { it.trim() }?.drop(1)
-            ?.firstNotNullOfOrNull { UsStates.code(it) ?: UsStates.code(it.split(' ').first()) }
 
 }

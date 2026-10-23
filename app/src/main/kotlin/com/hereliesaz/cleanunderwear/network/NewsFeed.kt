@@ -74,7 +74,10 @@ object NewsFeed {
         sourceLabel: String,
         now: ZonedDateTime = ZonedDateTime.now()
     ): List<CandidateRecord> = parse(xml).flatMap { item ->
-        val kind = classify(item.title) ?: return@flatMap emptyList()
+        val kind = classify(item.title) ?: classifyLink(item.link) ?: return@flatMap emptyList()
+        // "Judge John Smith sentenced…", "Sheriff John Smith says…": the contact's name in an
+        // official role isn't the subject of the arrest or death.
+        if (namedInRole("${item.title}. ${item.description}", first, last)) return@flatMap emptyList()
         val tooOld = kind == EventKind.ARREST && item.published != null &&
             item.published.isBefore(now.minusDays(ARREST_LOOKBACK_DAYS))
         if (tooOld) return@flatMap emptyList()
@@ -89,13 +92,35 @@ object NewsFeed {
             sourceLabel = "$publisher (via $sourceLabel)",
             evidenceUrl = item.link
         ).take(1).map { c ->
+            // An age in a news item is the age when it was written.
+            val dated = c.copy(eventYear = c.eventYear ?: item.published?.year)
             // Funeral-home publishers often carry their town ("Wilson's Funeral
             // Home | Ava, IL"); use it when the headline names no place.
-            if (c.city == null && c.state == null && publisherPlace != null) {
-                c.copy(city = publisherPlace.first, state = publisherPlace.second)
+            if (dated.city == null && dated.state == null && publisherPlace != null) {
+                dated.copy(city = publisherPlace.first, state = publisherPlace.second)
             } else {
-                c
+                dated
             }
+        }
+    }
+
+    /**
+     * Obituary pages whose headline is only the name ("John Louis Smith - The Press Democrat")
+     * still say what they are in their address.
+     */
+    internal fun classifyLink(link: String): EventKind? {
+        val l = link.lowercase()
+        return if (OBIT_LINK.any { it in l }) EventKind.DEATH else null
+    }
+
+    /** Whether every mention of the name in [text] is preceded by an official title. */
+    internal fun namedInRole(text: String, first: String, last: String): Boolean {
+        val name = Regex("(?i)\\b${Regex.escape(first)}\\b(?:\\s+[A-Za-z.'-]+){0,2}?\\s+\\b${Regex.escape(last)}\\b")
+        val mentions = name.findAll(text).toList()
+        if (mentions.isEmpty()) return false
+        return mentions.all { m ->
+            val before = text.substring(0, m.range.first).trimEnd().lowercase()
+            ROLES.any { before.endsWith(it) } || FUNERAL_OF.containsMatchIn(before.takeLast(40))
         }
     }
 
@@ -113,6 +138,14 @@ object NewsFeed {
         null
     }
 
+    private val OBIT_LINK = listOf("/obituar", "/obit/", "legacy.com", "/tributes/", "dignitymemorial.com", "/memorials/")
+    private val ROLES = listOf(
+        "judge", "sheriff", "deputy", "officer", "detective", "sgt.", "sergeant", "lt.", "captain",
+        "attorney", "prosecutor", "district attorney", "da", "lawyer", "chief", "mayor", "senator",
+        "rep.", "representative", "governor", "councilman", "councilwoman", "commissioner",
+        "coach", "pastor", "rev.", "reverend", "dr.", "spokesman", "spokeswoman", "trooper"
+    ).map { " $it" }
+    private val FUNERAL_OF = Regex("(?:funeral|memorial|services?) (?:of|for)\\s*$|attend(?:s|ed)? (?:the )?funeral")
     private val PUBLISHER_PLACE = Regex("\\|\\s*([A-Za-z.' -]+?),\\s*([A-Za-z]{2})\\s*$")
     private val OBITUARY = Regex("\\b(obituary|obituaries|obit|passed away|death notice|funeral|memorial|celebration of life|in loving memory)\\b")
     private val ARREST = Regex("\\b(arrest|arrested|arrests|booked|booking|charged|indicted|jailed|jail|custody|mugshot|sentenced|convicted)\\b")
