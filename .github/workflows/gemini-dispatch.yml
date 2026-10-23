@@ -104,7 +104,8 @@ jobs:
             } else if (request.startsWith("@gemini-cli /triage")) {
               core.setOutput('command', 'triage');
             } else if (request.startsWith("@gemini-cli /approve")) {
-              core.setOutput('command', 'approve');
+              // Plan execution was removed; answer with the failure comment instead of nothing.
+              core.setOutput('command', 'fallthrough');
             } else if (request.startsWith("@gemini-cli")) {
               const additionalContext = request.replace(/^@gemini-cli/, '').trim();
               core.setOutput('command', 'invoke');
@@ -167,27 +168,12 @@ jobs:
       additional_context: '${{ needs.dispatch.outputs.additional_context }}'
     secrets: 'inherit'
 
-  plan-execute:
-    needs: 'dispatch'
-    if: |-
-      ${{ needs.dispatch.outputs.command == 'approve' }}
-    uses: './.github/workflows/gemini-plan-execute.yml'
-    permissions:
-      contents: 'write'
-      id-token: 'write'
-      issues: 'write'
-      pull-requests: 'write'
-    with:
-      additional_context: '${{ needs.dispatch.outputs.additional_context }}'
-    secrets: 'inherit'
-
   fallthrough:
     needs:
       - 'dispatch'
       - 'review'
       - 'triage'
       - 'invoke'
-      - 'plan-execute'
     if: |-
       ${{ always() && !cancelled() && (failure() || needs.dispatch.outputs.command == 'fallthrough') }}
     runs-on: 'ubuntu-latest'
