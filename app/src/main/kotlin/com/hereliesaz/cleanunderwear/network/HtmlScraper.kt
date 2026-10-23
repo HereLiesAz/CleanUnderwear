@@ -19,46 +19,10 @@ class HtmlScraper @Inject constructor(
     private val okHttpClient: OkHttpClient,
     private val verifier: IdentityVerifier
 ) {
-    suspend fun scrapeMugshots(url: String, targetName: String): IdentityVerifier.VerificationResult =
-        withContext(Dispatchers.IO) {
-            try {
-                val request = Request.Builder()
-                    .url(sanitize(url))
-                    .header("User-Agent", DESKTOP_UA)
-                    .build()
-                fetch(request, targetName)
-            } catch (e: Exception) {
-                Log.e("HtmlScraper", "Failed to fetch $url", e)
-                IdentityVerifier.VerificationResult.fetchFailed()
-            }
-        }
-
-    suspend fun scrapePost(
-        url: String,
-        formFields: Map<String, String>,
-        targetName: String
-    ): IdentityVerifier.VerificationResult = withContext(Dispatchers.IO) {
-        try {
-            val body = FormBody.Builder().apply {
-                formFields.forEach { (k, v) -> add(k, v) }
-            }.build()
-
-            val request = Request.Builder()
-                .url(sanitize(url))
-                .header("User-Agent", DESKTOP_UA)
-                .post(body)
-                .build()
-            fetch(request, targetName)
-        } catch (e: Exception) {
-            Log.e("HtmlScraper", "Failed to POST $url", e)
-            IdentityVerifier.VerificationResult.fetchFailed()
-        }
-    }
-
     /**
      * Fetches a JSON inmate-locator endpoint (currently the Federal BOP API) and
      * verifies the target structurally via [IdentityVerifier.verifyBopInmateJson].
-     * Unlike [scrapeMugshots] this must NOT run the body through Jsoup — the
+     * This must NOT run the body through Jsoup — the
      * compact JSON would be flattened into unsearchable text and the discrete
      * name fields lost.
      */
@@ -67,6 +31,25 @@ class HtmlScraper @Inject constructor(
         targetName: String,
         corroboration: IdentityVerifier.Corroboration = IdentityVerifier.Corroboration(),
         dismissedKeys: Set<String> = emptySet()
+    ): IdentityVerifier.VerificationResult {
+        val first = fetchBop(url, targetName, corroboration, dismissedKeys)
+        if (first.isMatch || !first.capped) return first
+        // The locator stops at 100 rows ordered by inmate number, so a common name's newer
+        // inmates fall past the cut. Narrow by what enrichment knows and ask again.
+        val narrowing = corroboration.middleName?.trim()?.takeIf { it.isNotEmpty() }
+            ?.let { "&nameMiddle=" + java.net.URLEncoder.encode(it, "UTF-8") }
+            ?: verifier.approxAge(corroboration.dob)?.let { "&age=$it" }
+            // Nothing to narrow by also means nothing to corroborate a hit with, and an
+            // uncorroborated BOP hit is never surfaced, so the cut loses nothing.
+            ?: return first
+        return fetchBop(url + narrowing, targetName, corroboration, dismissedKeys)
+    }
+
+    private suspend fun fetchBop(
+        url: String,
+        targetName: String,
+        corroboration: IdentityVerifier.Corroboration,
+        dismissedKeys: Set<String>
     ): IdentityVerifier.VerificationResult =
         withContext(Dispatchers.IO) {
             try {
@@ -166,14 +149,6 @@ class HtmlScraper @Inject constructor(
             Log.e("HtmlScraper", "Failed to fetch body", e)
             null
         }
-    }
-
-    private fun fetch(request: Request, targetName: String): IdentityVerifier.VerificationResult {
-        val response = okHttpClient.newCall(request).execute()
-        if (!response.isSuccessful) return IdentityVerifier.VerificationResult.fetchFailed()
-        val html = response.body.string()
-        val document = Jsoup.parse(html)
-        return verifier.verifyIdentity(document.text(), targetName)
     }
 
     private fun sanitize(url: String): String =

@@ -3,6 +3,7 @@ package com.hereliesaz.cleanunderwear.network
 import com.hereliesaz.cleanunderwear.match.CandidateRecord
 import com.hereliesaz.cleanunderwear.match.EventKind
 import com.hereliesaz.cleanunderwear.match.RecordExtractor
+import com.hereliesaz.cleanunderwear.match.StringSimilarity
 import javax.inject.Inject
 
 /**
@@ -41,6 +42,11 @@ class SourceSearch @Inject constructor(
     ): SearchResult {
         @Suppress("NAME_SHADOWING")
         val kind = source.eventKind ?: kind
+        // Rosters store names unaccented; search and compare on the folded form.
+        @Suppress("NAME_SHADOWING")
+        val first = StringSimilarity.foldDiacritics(first)
+        @Suppress("NAME_SHADOWING")
+        val last = StringSimilarity.foldDiacritics(last)
         val fetchUrl = try {
             SourceUrlBuilder.buildFetchUrl(source, first, last)
         } catch (e: IllegalArgumentException) {

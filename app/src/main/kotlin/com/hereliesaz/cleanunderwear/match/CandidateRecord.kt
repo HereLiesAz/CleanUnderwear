@@ -19,7 +19,11 @@ enum class EventKind { CUSTODY, ARREST, DEATH }
  *
  * @param recordKey stable id for "not a match" dismissal (inmate number, or
  *   the evidence URL when the source has no id).
- * @param relatives names listed as survivors / family ("survived by …").
+ * @param relatives full names listed as survivors / family ("survived by …").
+ * @param inferredRelatives survivors named by first name only ("his wife, Mary"), completed with
+ *   the deceased's surname. A guess, so it counts for far less than a name the record spells out.
+ * @param eventYear the year of the event [age] refers to (an obituary's death year, a news
+ *   item's publication year). Null means "about now".
  */
 data class CandidateRecord(
     val sourceId: String,
@@ -33,6 +37,8 @@ data class CandidateRecord(
     val city: String? = null,
     val state: String? = null,
     val relatives: List<String> = emptyList(),
+    val inferredRelatives: List<String> = emptyList(),
+    val eventYear: Int? = null,
     val recordKey: String? = null,
     val evidenceUrl: String? = null,
     val snippet: String? = null

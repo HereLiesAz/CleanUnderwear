@@ -9,106 +9,6 @@ class IdentityVerifierTest {
 
     private val verifier = IdentityVerifier()
 
-    @Test
-    fun verifyIdentity_exactMatch_returnsTrue() {
-        val documentText = "John Doe was arrested on Tuesday."
-        assertTrue(verifier.verifyIdentity(documentText, "John Doe").isMatch)
-    }
-
-    @Test
-    fun verifyIdentity_lastFirstMatch_returnsTrue() {
-        val documentText = "Doe, John"
-        assertTrue(verifier.verifyIdentity(documentText, "John Doe").isMatch)
-    }
-
-    @Test
-    fun verifyIdentity_middleNameMatch_returnsTrue() {
-        val documentText = "John Robert Doe"
-        assertTrue(verifier.verifyIdentity(documentText, "John Doe").isMatch)
-    }
-
-    @Test
-    fun verifyIdentity_caseInsensitive_returnsTrue() {
-        val documentText = "JOHN DOE"
-        assertTrue(verifier.verifyIdentity(documentText, "John Doe").isMatch)
-    }
-
-    @Test
-    fun verifyIdentity_noMatch_returnsFalse() {
-        val documentText = "Jane Doe was arrested."
-        assertFalse(verifier.verifyIdentity(documentText, "John Doe").isMatch)
-    }
-
-    @Test
-    fun verifyIdentity_singleTokenName_skipsWithReason() {
-        val result = verifier.verifyIdentity("B was here", "B")
-        assertFalse("Single-letter name must never match", result.isMatch)
-        assertTrue(result.skipped)
-        assertEquals("mononym", result.skipReason)
-    }
-
-    @Test
-    fun verifyIdentity_mononymAcrossDocument_neverMatches() {
-        val documentText = "Madonna performed yesterday."
-        val result = verifier.verifyIdentity(documentText, "Madonna")
-        assertFalse(result.isMatch)
-        assertTrue(result.skipped)
-    }
-
-    @Test
-    fun verifyIdentity_shortToken_skips() {
-        val result = verifier.verifyIdentity("Jo Smith was arrested", "Jo Smith")
-        assertFalse(result.isMatch)
-        assertTrue(result.skipped)
-        assertEquals("first_token_unacceptable", result.skipReason)
-    }
-
-    @Test
-    fun verifyIdentity_stopwordAsFirstName_skips() {
-        val result = verifier.verifyIdentity(
-            "Search results: Smith, John was booked.",
-            "Search Smith"
-        )
-        assertFalse(result.isMatch)
-        assertTrue(result.skipped)
-    }
-
-    @Test
-    fun verifyIdentity_proximityRequired_distantTokensDoNotMatch() {
-        val documentText = buildString {
-            append("John ")
-            repeat(50) { append("filler ") }
-            append("Doe was the topic.")
-        }
-        val result = verifier.verifyIdentity(documentText, "John Doe")
-        assertFalse("First and last 50 tokens apart must not match", result.isMatch)
-    }
-
-    @Test
-    fun verifyIdentity_wordBoundary_singleLetterDoesNotMatchInsideOtherName() {
-        // Confirms the underlying bug fix: "B Smith" must not match because "B"
-        // alone is unverifiable and skipped before regex even runs. Also confirms
-        // that even if a longer token were checked, \b boundaries prevent
-        // partial-word matches like "B" -> "Bob".
-        val result = verifier.verifyIdentity("Bob Smith and Jane Doe", "B Smith")
-        assertFalse(result.isMatch)
-        assertTrue(result.skipped)
-    }
-
-    @Test
-    fun verifyIdentity_lastFirstWithStopword_skips() {
-        val result = verifier.verifyIdentity("Doe, Inmate", "Inmate Doe")
-        assertFalse(result.isMatch)
-        assertTrue(result.skipped)
-    }
-
-    @Test
-    fun verifyIdentity_hyphenatedName_matches() {
-        val documentText = "Mary-Jane Watson reported missing."
-        val result = verifier.verifyIdentity(documentText, "Mary-Jane Watson")
-        assertTrue(result.isMatch)
-    }
-
     // ---- verifyBopInmateJson (Federal BOP inmate-locator API) ----
 
     private fun bopJson(vararg records: String): String =
@@ -149,12 +49,8 @@ class IdentityVerifierTest {
     @Test
     fun bop_namesAreLastThenFirstInJson_stillMatches() {
         // Regression guard: the API emits nameLast before nameFirst with no
-        // whitespace between them, which the text-proximity matcher cannot see.
+        // whitespace between them; the structured parse must still read it.
         val json = bopJson(inmate(first = "JOHN", last = "SMITH"))
-        assertFalse(
-            "control: text proximity cannot match the compact JSON",
-            verifier.verifyIdentity(json, "John Smith").isMatch
-        )
         assertTrue(verifier.verifyBopInmateJson(json, "John Smith", corro()).isMatch)
     }
 
@@ -207,10 +103,13 @@ class IdentityVerifierTest {
     }
 
     @Test
-    fun bop_malformedJson_isCleanMissNotCrash() {
-        assertFalse(verifier.verifyBopInmateJson("<html>403 Forbidden</html>", "John Smith").isMatch)
-        assertFalse(verifier.verifyBopInmateJson("", "John Smith").isMatch)
-        assertFalse(verifier.verifyBopInmateJson("{truncated", "John Smith").isMatch)
+    fun bop_malformedJson_isAFailedLookupNotACleanMiss() {
+        // An error page or truncated body says nothing about the contact.
+        for (body in listOf("<html>403 Forbidden</html>", "", "{truncated")) {
+            val r = verifier.verifyBopInmateJson(body, "John Smith")
+            assertFalse(r.isMatch)
+            assertTrue(r.failed)
+        }
     }
 
     @Test
@@ -314,12 +213,13 @@ class IdentityVerifierTest {
     }
 
     @Test
-    fun bop_facilityStateMismatch_notSurfaced() {
-        // Corroborated by middle + age, but the contact resolves to CA while the
-        // facility (USP ATLANTA) is in GA → suppressed by the agreement gate.
+    fun bop_facilityStateMismatch_isSurfacedWithTheFacilityState() {
+        // Federal inmates are often held out of state: a different facility state is evidence
+        // for MatchVerifier to weigh, not a reason to hide a corroborated record.
         val json = bopJson(inmate(first = "JOHN", last = "SMITH"))
         val result = verifier.verifyBopInmateJson(json, "John Smith", corro(state = "CA"))
-        assertFalse(result.isMatch)
+        assertTrue(result.isMatch)
+        assertEquals("GA", result.record?.state)
     }
 
     @Test
@@ -332,20 +232,24 @@ class IdentityVerifierTest {
     }
 
     @Test
-    fun bop_facilityStateUnknown_notSurfaced() {
-        // Facility not in BopFacilityCatalog → cannot establish agreement →
-        // not surfaced, even when fully corroborated.
+    fun bop_facilityStateUnknown_stillSurfaced() {
         val json = bopJson(inmate(first = "JOHN", last = "SMITH", facl = "FCI NOWHERELAND"))
         val result = verifier.verifyBopInmateJson(json, "John Smith", corro(state = "GA"))
-        assertFalse(result.isMatch)
+        assertTrue(result.isMatch)
+        assertEquals(null, result.record?.state)
     }
 
     @Test
-    fun bop_contactStateUnknown_notSurfaced() {
-        // Contact geography unresolved → no agreement possible → not surfaced.
+    fun bop_contactStateUnknown_stillSurfaced() {
         val json = bopJson(inmate(first = "JOHN", last = "SMITH"))
         val result = verifier.verifyBopInmateJson(json, "John Smith", corro(state = null))
-        assertFalse(result.isMatch)
+        assertTrue(result.isMatch)
+    }
+
+    @Test
+    fun bop_captchaFlag_isAFailedLookup() {
+        val result = verifier.verifyBopInmateJson("""{"Captcha":true,"InmateLocator":[]}""", "John Smith", corro())
+        assertTrue(result.failed)
     }
 
     @Test

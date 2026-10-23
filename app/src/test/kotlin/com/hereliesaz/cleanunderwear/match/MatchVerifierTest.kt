@@ -80,13 +80,44 @@ class MatchVerifierTest {
         val results = verifier.verifyAll(
             c,
             listOf(
-                rec(age = 45, state = "LA", source = "news"),
-                rec(age = 45, state = "LA", source = "obits"),
+                rec(age = 45, city = "Gretna", state = "LA", source = "news"),
+                rec(age = 45, city = "Gretna", state = "LA", source = "obits"),
                 rec(age = 90, source = "other")
             )
         )
         assertEquals(2, results.size)
         assertTrue(results.all { it.corroboratingSources.isNotEmpty() })
         assertEquals(MatchTier.STRONG, results.first().tier)
+    }
+
+    @Test
+    fun `two similar-age obituaries from different towns do not corroborate`() {
+        val c = ContactProfile("John", "Smith", age = 62)
+        val results = verifier.verifyAll(
+            c,
+            listOf(
+                rec(age = 61, city = "Houston", source = "news:a"),
+                rec(age = 63, city = "Tulsa", source = "news:b")
+            )
+        )
+        assertTrue(results.none { it.corroboratingSources.isNotEmpty() })
+        assertTrue(results.none { it.tier == MatchTier.STRONG })
+    }
+
+    @Test
+    fun `age at death is read as of the year it was reported`() {
+        val v = MatchVerifier(currentYear = 2026)
+        val c = ContactProfile("John", "Smith", age = 52)
+        // "John Smith, 52" in a 2019 obituary was born ~1967; today's 52-year-old was born 1974.
+        val r = rec(age = 52).copy(eventYear = 2019)
+        assertEquals(MatchTier.REJECTED, v.verify(c, r).tier)
+    }
+
+    @Test
+    fun `a guessed survivor surname counts far less than a spelled-out one`() {
+        val c = ContactProfile("John", "Smith", age = 80, otherContactNames = setOf("Mary Smith"))
+        val spelled = verifier.verify(c, rec(age = 80, relatives = listOf("Mary Smith")))
+        val guessed = verifier.verify(c, rec(age = 80).copy(inferredRelatives = listOf("Mary Smith")))
+        assertTrue(guessed.confidence < spelled.confidence)
     }
 }

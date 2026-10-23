@@ -5,6 +5,7 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonParser
 import com.hereliesaz.cleanunderwear.match.CandidateRecord
 import com.hereliesaz.cleanunderwear.match.EventKind
+import com.hereliesaz.cleanunderwear.match.StringSimilarity
 import com.hereliesaz.cleanunderwear.match.UsStates
 import org.jsoup.Jsoup
 
@@ -130,8 +131,9 @@ object StructuredRecords {
         val recFirst = row["first"] ?: parsed?.first ?: return null
         val recLast = row["last"] ?: parsed?.third ?: return null
         val recMiddle = row["middle"] ?: parsed?.second
-        if (!recFirst.substringBefore(' ').equals(first, ignoreCase = true)) return null
-        if (recLast.split(' ', '-').none { it.equals(last, ignoreCase = true) }) return null
+        val fold = StringSimilarity::foldDiacritics
+        if (!fold(recFirst.substringBefore(' ')).equals(fold(first), ignoreCase = true)) return null
+        if (fold(recLast).split(' ', '-').none { it.equals(fold(last), ignoreCase = true) }) return null
 
         // With a status field configured, only it decides (an empty release date
         // means still held); without one, the whole row's text does.
@@ -183,6 +185,9 @@ object StructuredRecords {
         )
     }
 
+    /** Generational suffixes, which rosters print where a middle name would go ("SMITH, JOHN JR"). */
+    private val NAME_SUFFIXES = setOf("jr", "sr", "ii", "iii", "iv", "v")
+
     /** Overridable clock for tests. */
     internal var today: () -> java.time.LocalDate = { java.time.LocalDate.now() }
 
@@ -209,11 +214,14 @@ object StructuredRecords {
     internal fun splitName(name: String, lastFirst: Boolean = false): Triple<String, String?, String>? {
         if (name.contains(',')) {
             val lastPart = name.substringBefore(',').trim()
-            val rest = name.substringAfter(',').trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+            val rest = name.substringAfter(',').trim().split(Regex("\\s+"))
+                .filter { it.isNotEmpty() && it.trimEnd('.').lowercase() !in NAME_SUFFIXES }
             if (lastPart.isEmpty() || rest.isEmpty()) return null
             return Triple(rest[0], rest.getOrNull(1), lastPart)
         }
-        val tokens = name.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        val tokens = name.trim().split(Regex("\\s+"))
+            .filter { it.isNotEmpty() }
+            .filterIndexed { i, t -> i == 0 || t.trimEnd('.').lowercase() !in NAME_SUFFIXES }
         if (tokens.size < 2) return null
         if (lastFirst) return Triple(tokens[1], tokens.getOrNull(2), tokens[0])
         return Triple(tokens.first(), tokens.getOrNull(1)?.takeIf { tokens.size > 2 }, tokens.last())

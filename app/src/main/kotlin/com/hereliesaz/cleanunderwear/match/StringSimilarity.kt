@@ -89,6 +89,21 @@ object StringSimilarity {
     fun normalizeEmail(raw: String?): String? =
         raw?.trim()?.lowercase()?.takeIf { it.contains("@") && it.isNotBlank() }
 
+    /**
+     * [s] with accents removed, one character for one ("José" → "Jose"), so offsets into the
+     * folded text are offsets into the original. Rosters are mostly unaccented capitals while
+     * phone books keep the accents; both sides are folded before comparing.
+     */
+    fun foldDiacritics(s: String): String {
+        if (s.all { it.code < 128 }) return s
+        val out = StringBuilder(s.length)
+        for (c in s) {
+            val base = if (c.code < 128) c else java.text.Normalizer.normalize(c.toString(), java.text.Normalizer.Form.NFD)[0]
+            out.append(base)
+        }
+        return out.toString()
+    }
+
     /** Lowercased letter/hyphen/apostrophe token, for name comparison. */
     fun normalizeNameToken(raw: String?): String? =
         raw?.filter { it.isLetter() || it == '-' || it == '\'' }
