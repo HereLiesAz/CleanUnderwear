@@ -90,13 +90,13 @@ class IdentityVerifier @Inject constructor() {
 
         val records = try {
             val root = JsonParser.parseString(jsonBody)
-            if (!root.isJsonObject) return VerificationResult(isMatch = false, snippet = null)
+            if (!root.isJsonObject) return VerificationResult.fetchFailed()
             inmateArray(root.asJsonObject)
         } catch (e: Exception) {
-            // Malformed body (HTML error page, captcha wall, truncated JSON):
-            // treat as a clean miss, not a crash — the queue keeps moving.
-            return VerificationResult(isMatch = false, snippet = null)
-        } ?: return VerificationResult(isMatch = false, snippet = null)
+            // Malformed body (HTML error page, captcha wall, truncated JSON): a failed
+            // lookup, not a clean miss — the queue keeps moving, the contact's state stands.
+            return VerificationResult.fetchFailed()
+        } ?: return VerificationResult.fetchFailed()
 
         // Exact first name only — nickname expansion is deliberately not applied
         // here, to keep the national BOP search from widening on common nicknames.
@@ -315,10 +315,12 @@ class IdentityVerifier @Inject constructor() {
          */
         val basis: String? = null,
         /** Structured record for [com.hereliesaz.cleanunderwear.match.MatchVerifier], when the source yields one. */
-        val record: CandidateRecord? = null
+        val record: CandidateRecord? = null,
+        /** The source couldn't be read (network error, error status, bot wall), so this says nothing. */
+        val failed: Boolean = false
     ) {
         companion object {
-            fun fetchFailed() = VerificationResult(isMatch = false, snippet = null)
+            fun fetchFailed() = VerificationResult(isMatch = false, snippet = null, failed = true)
         }
     }
 

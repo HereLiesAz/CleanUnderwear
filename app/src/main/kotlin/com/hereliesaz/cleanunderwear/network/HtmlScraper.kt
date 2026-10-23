@@ -75,11 +75,13 @@ class HtmlScraper @Inject constructor(
                     .header("User-Agent", DESKTOP_UA)
                     .header("Accept", "application/json")
                     .build()
-                val response = okHttpClient.newCall(request).execute()
-                if (!response.isSuccessful) return@withContext IdentityVerifier.VerificationResult.fetchFailed()
-                verifier.verifyBopInmateJson(response.body.string(), targetName, corroboration, dismissedKeys)
+                val body = okHttpClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) return@withContext IdentityVerifier.VerificationResult.fetchFailed()
+                    response.body.string()
+                }
+                verifier.verifyBopInmateJson(body, targetName, corroboration, dismissedKeys)
             } catch (e: Exception) {
-                Log.e("HtmlScraper", "Failed to fetch BOP JSON $url", e)
+                Log.e("HtmlScraper", "Failed to fetch BOP JSON", e)
                 IdentityVerifier.VerificationResult.fetchFailed()
             }
         }
@@ -123,7 +125,10 @@ class HtmlScraper @Inject constructor(
                             .build()
                     ).execute()
                 }
-                val doc = Jsoup.parse(tokenResponse.body.string())
+                // Without its token the search would only return the form again.
+                val tokenHtml = tokenResponse.use { if (it.isSuccessful) it.body.string() else null }
+                    ?: return@withContext null
+                val doc = Jsoup.parse(tokenHtml)
                 doc.select("input[type=hidden][name]").forEach { fields[it.attr("name")] = it.attr("value") }
             }
             fields.putAll(formFields)
@@ -137,14 +142,13 @@ class HtmlScraper @Inject constructor(
                 source.method.uppercase() == "POST" ->
                     builder.post(FormBody.Builder().apply { fields.forEach { (k, v) -> add(k, v) } }.build())
             }
-            val response = client.newCall(builder.build()).execute()
-            if (!response.isSuccessful) return@withContext null
-            val searchBody = response.body.string()
+            val searchBody = client.newCall(builder.build()).execute().use { response ->
+                if (response.isSuccessful) response.body.string() else null
+            } ?: return@withContext null
             val resultsUrl = source.resultsUrl ?: return@withContext searchBody
-            val results = client.newCall(
+            client.newCall(
                 Request.Builder().url(sanitize(resultsUrl)).header("User-Agent", DESKTOP_UA).build()
-            ).execute()
-            if (results.isSuccessful) results.body.string() else null
+            ).execute().use { results -> if (results.isSuccessful) results.body.string() else null }
         } catch (e: Exception) {
             Log.e("HtmlScraper", "Failed source fetch ${source.id}", e)
             null
@@ -155,10 +159,11 @@ class HtmlScraper @Inject constructor(
     suspend fun fetchBody(url: String): String? = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder().url(sanitize(url)).header("User-Agent", DESKTOP_UA).build()
-            val response = okHttpClient.newCall(request).execute()
-            if (response.isSuccessful) response.body.string() else null
+            okHttpClient.newCall(request).execute().use { response ->
+                if (response.isSuccessful) response.body.string() else null
+            }
         } catch (e: Exception) {
-            Log.e("HtmlScraper", "Failed to fetch body $url", e)
+            Log.e("HtmlScraper", "Failed to fetch body", e)
             null
         }
     }

@@ -519,11 +519,7 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
      * which the viewmodel records as a per-search miss without halting the
      * whole queue.
      */
-    fun looksLikeBlock(html: String): Boolean {
-        if (html.isBlank()) return true
-        val lower = html.lowercase()
-        return BLOCK_MARKERS.any { it in lower }
-    }
+    fun looksLikeBlock(html: String): Boolean = BotWall.suspected(html)
 
     data class Findings(
         val name: String?,
@@ -547,14 +543,5 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
         const val MAX_JSON_DEPTH = 8
         val CLASS_HINT = Regex("name|addr|phone|age|dob|birth|person|result|card|resident", RegexOption.IGNORE_CASE)
 
-        private val BLOCK_MARKERS = listOf(
-            "captcha",
-            "are you a robot",
-            "verify you are human",
-            "unusual traffic",
-            "access denied",
-            "cf-browser-verification",
-            "/cdn-cgi/challenge",
-        )
     }
 }

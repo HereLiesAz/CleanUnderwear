@@ -178,16 +178,12 @@ dependencies {
     ksp(libs.androidx.hilt.compiler)
 
     // Networking
-    implementation(libs.retrofit)
-    implementation(libs.retrofit.converter.gson)
+    implementation(libs.gson)
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
 
     // In-app update check for Play installs (UpdateChecker)
     implementation(libs.play.app.update.ktx)
-
-    // Image Loading
-    implementation(libs.coil.compose)
 
     // On-Device AI
     implementation(libs.litert)

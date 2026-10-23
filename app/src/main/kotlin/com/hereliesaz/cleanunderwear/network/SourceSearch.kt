@@ -11,6 +11,16 @@ import javax.inject.Inject
  * the BOP JSON locator, mapped JSON APIs and HTML tables, or free text read
  * by [RecordExtractor].
  */
+/**
+ * What one source said: the records naming the contact, and whether the source could be read
+ * at all. A [failed] search found nothing because it saw nothing, which is not "no record".
+ */
+data class SearchResult(val records: List<CandidateRecord>, val failed: Boolean = false) {
+    companion object {
+        val FAILED = SearchResult(emptyList(), failed = true)
+    }
+}
+
 class SourceSearch @Inject constructor(
     private val basicScraper: HtmlScraper,
     private val stealthScraper: WebViewScraper
@@ -28,13 +38,14 @@ class SourceSearch @Inject constructor(
         last: String,
         corroboration: IdentityVerifier.Corroboration,
         dismissedKeys: Set<String>
-    ): List<CandidateRecord> {
+    ): SearchResult {
         @Suppress("NAME_SHADOWING")
         val kind = source.eventKind ?: kind
         val fetchUrl = try {
             SourceUrlBuilder.buildFetchUrl(source, first, last)
         } catch (e: IllegalArgumentException) {
-            return emptyList()
+            // The name can't be put into this source's query; there was nothing to look at.
+            return SearchResult(emptyList())
         }
         val evidenceUrl = SourceUrlBuilder.buildEvidenceUrl(source, first, last)
         val text = when (source.render) {
@@ -42,12 +53,13 @@ class SourceSearch @Inject constructor(
                 source.resultFormat == ResultFormat.NEWS_RSS -> {
                     // A news feed reports deaths and arrests alike; NewsFeed
                     // classifies each item, so [kind] is not used here.
-                    val xml = basicScraper.fetchBody(fetchUrl) ?: return emptyList()
-                    return NewsFeed.candidates(xml, first, last, source.id, source.label)
+                    val xml = basicScraper.fetchBody(fetchUrl) ?: return SearchResult.FAILED
+                    return SearchResult(NewsFeed.candidates(xml, first, last, source.id, source.label))
                 }
                 source.resultFormat == ResultFormat.BOP_JSON -> {
                     val r = basicScraper.scrapeBopInmate(fetchUrl, "$first $last", corroboration, dismissedKeys)
-                    return listOfNotNull(r.record?.copy(evidenceUrl = evidenceUrl))
+                    if (r.failed) return SearchResult.FAILED
+                    return SearchResult(listOfNotNull(r.record?.copy(evidenceUrl = evidenceUrl)))
                 }
                 else -> {
                     val body = basicScraper.fetchSource(
@@ -55,14 +67,18 @@ class SourceSearch @Inject constructor(
                         fetchUrl,
                         SourceUrlBuilder.buildFormFields(source, first, last),
                         SourceUrlBuilder.buildBody(source, first, last)
-                    ) ?: return emptyList()
+                    ) ?: return SearchResult.FAILED
+                    val looksJson = body.trimStart().let { it.startsWith("{") || it.startsWith("[") }
+                    if (!looksJson && BotWall.detected(body)) {
+                        return SearchResult.FAILED
+                    }
                     when (source.resultFormat) {
                         ResultFormat.JSON_RECORDS ->
-                            return StructuredRecords.fromJson(body, source, first, last, kind, evidenceUrl)
+                            return SearchResult(StructuredRecords.fromJson(body, source, first, last, kind, evidenceUrl))
                         ResultFormat.HTML_TABLE ->
-                            return StructuredRecords.fromTable(body, source, first, last, kind, evidenceUrl)
+                            return SearchResult(StructuredRecords.fromTable(body, source, first, last, kind, evidenceUrl))
                         ResultFormat.REGEX_RECORDS ->
-                            return StructuredRecords.fromRegex(body, source, first, last, kind, evidenceUrl)
+                            return SearchResult(StructuredRecords.fromRegex(body, source, first, last, kind, evidenceUrl))
                         else -> Unit
                     }
                     org.jsoup.Jsoup.parse(body).text()
@@ -72,11 +88,11 @@ class SourceSearch @Inject constructor(
                 url = fetchUrl,
                 settleMs = source.renderSettleMs,
                 readySelector = source.readySelector
-            )?.text()
-        } ?: return emptyList()
+            )?.takeUnless { BotWall.detected(it.outerHtml()) }?.text()
+        } ?: return SearchResult.FAILED
         val released = source.releasedPattern?.let { Regex(it, RegexOption.IGNORE_CASE) }
         val custody = source.custodyPattern?.let { Regex(it, RegexOption.IGNORE_CASE) }
-        return RecordExtractor.extract(text, first, last, kind, source.id, source.label, evidenceUrl)
+        return SearchResult(RecordExtractor.extract(text, first, last, kind, source.id, source.label, evidenceUrl)
             // On a roster the status sits just after the name (within one row).
             .filter { c ->
                 val snip = c.snippet.orEmpty()
@@ -84,7 +100,7 @@ class SourceSearch @Inject constructor(
                 val row = if (at < 0) "" else snip.substring(at).take(ROW_CHARS)
                 (released == null || !released.containsMatchIn(row)) &&
                     (custody == null || custody.containsMatchIn(row))
-            }
+            })
     }
 
     private companion object {

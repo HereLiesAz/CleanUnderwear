@@ -1,6 +1,7 @@
 package com.hereliesaz.cleanunderwear.di
 
 import android.content.Context
+import com.hereliesaz.cleanunderwear.BuildConfig
 import com.hereliesaz.cleanunderwear.data.CleanUnderwearDatabase
 import com.hereliesaz.cleanunderwear.data.CommsHistory
 import com.hereliesaz.cleanunderwear.data.DeviceCommsHistory
@@ -20,8 +21,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
+import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
 
 @Module
@@ -64,27 +64,22 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(identityBridge: WebViewIdentityInterceptor): OkHttpClient {
-        val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BASIC
-        }
-        return OkHttpClient.Builder()
+    fun provideOkHttpClient(identityBridge: WebViewIdentityInterceptor): OkHttpClient =
+        OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            // Bounds a whole search, redirects and token page included, so one slow site
+            // can't hold a scrape slot indefinitely.
+            .callTimeout(60, TimeUnit.SECONDS)
             // Identity-bridge runs first so the User-Agent / Cookie rewrite
             // is visible to the logging interceptor below it.
             .addInterceptor(identityBridge)
-            .addInterceptor(logging)
+            .apply {
+                // Request lines carry contacts' names in the query; never log them in release.
+                if (BuildConfig.DEBUG) {
+                    addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC })
+                }
+            }
             .build()
-    }
-
-    @Provides
-    @Singleton
-    fun provideRetrofit(okHttpClient: OkHttpClient): Retrofit {
-        return Retrofit.Builder()
-            // We use a dummy base URL since we construct full URLs dynamically for scraping
-            .baseUrl("https://example.com/")
-            .client(okHttpClient)
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-    }
 
 }

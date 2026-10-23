@@ -119,11 +119,13 @@ class UpdateChecker @Inject constructor(
 /** The latest stable release as GitHub reports it. */
 data class GitHubRelease(val version: String, val url: String) {
     companion object {
-        private val VERSION = Regex("""\b\d+\.\d+\.\d+(?:\.\d+)?\b""")
+        // Not preceded by a digit or dot, so "v1.11.0.2" yields 1.11.0.2, not 11.0.2.
+        private val VERSION = Regex("""(?<![\d.])\d+\.\d+\.\d+(?:\.\d+)?(?![\d.])""")
 
         /**
          * Release tags here are patch-level ("1.10.4") and group immutable builds listed in the
-         * body ("1.10.4.1"), so the newest version named in either is the one on offer.
+         * body ("1.10.4.1"), so the newest of the tag and the body's builds *of that tag* is the
+         * one on offer. Other dotted numbers in the notes (dependency versions) are ignored.
          */
         fun parse(json: String): GitHubRelease? = try {
             val o = JsonParser.parseString(json).asJsonObject
@@ -131,10 +133,10 @@ data class GitHubRelease(val version: String, val url: String) {
             val tag = o.get("tag_name")?.asString.orEmpty()
             val body = o.get("body")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
             val url = o.get("html_url")?.asString ?: return null
-            val version = (VERSION.findAll(tag) + VERSION.findAll(body))
-                .map { it.value }
-                .maxWithOrNull(VersionCompare::compare)
-                ?: return null
+            val tagVersion = VERSION.find(tag)?.value ?: return null
+            val version = (sequenceOf(tagVersion) + VERSION.findAll(body).map { it.value }
+                .filter { it == tagVersion || it.startsWith("$tagVersion.") })
+                .maxWith(VersionCompare::compare)
             GitHubRelease(version, url)
         } catch (e: Exception) {
             null

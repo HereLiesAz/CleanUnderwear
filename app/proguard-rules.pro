@@ -8,8 +8,7 @@
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
 
-# Keep generic signatures (Retrofit needs these for Call<T>, Kotlin reflection
-# needs them, Room uses them for relations).
+# Keep generic signatures (Gson TypeTokens and Room relations read them).
 -keepattributes Signature, InnerClasses, EnclosingMethod, *Annotation*
 
 # ---------------------------------------------------------------------------
@@ -65,15 +64,14 @@
 -keep @androidx.hilt.work.HiltWorker class * { *; }
 
 # ---------------------------------------------------------------------------
-# Retrofit + Gson
+# Gson
 # ---------------------------------------------------------------------------
-# Retrofit ships consumer rules but they don't always cover every edge.
--keep,allowobfuscation,allowshrinking interface retrofit2.Call
--keep,allowobfuscation,allowshrinking class retrofit2.Response
--keepattributes RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations
 # Gson reflectively constructs DTOs using their no-arg constructors and
-# field names. If we add response models in the future, annotate them with
-# @Keep or list them here.
+# field names. Every class Gson reads or writes by reflection must be kept
+# here (or carry @SerializedName), or R8 renames its fields and Gson silently
+# returns nulls. Current reflective models: Target (above, merge snapshots),
+# SourceCatalog's sources.json model (below).
+-keep class com.hereliesaz.cleanunderwear.network.SourceCatalog$* { *; }
 -keep class com.google.gson.** { *; }
 -keep class * implements com.google.gson.TypeAdapterFactory { *; }
 -keep class * implements com.google.gson.JsonSerializer { *; }
@@ -128,7 +126,7 @@
 -keep class com.hereliesaz.cleanunderwear.ui.HtmlDumpInterface { *; }
 
 # ---------------------------------------------------------------------------
-# Crash reporter — payload uses reflection on Throwable; keep stack frames.
+# Crash reporter — kept by name so its frames stay readable in reported traces.
 # ---------------------------------------------------------------------------
 -keep class com.hereliesaz.cleanunderwear.util.GitHubCrashReporter { *; }
 
