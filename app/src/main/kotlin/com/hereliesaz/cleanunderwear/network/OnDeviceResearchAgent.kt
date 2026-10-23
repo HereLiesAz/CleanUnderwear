@@ -102,7 +102,9 @@ class OnDeviceResearchAgent @Inject constructor(
             "customer", "service", "support", "help", "bank",
             "office", "pizza", "taxi", "delivery", "store"
         )
-        val isService = serviceKeywords.any { text.contains(it, ignoreCase = true) }
+        // Whole words only: "Jim Banks", "Ann Storey" and "Pat Officer" are people.
+        val words = text.lowercase().split(Regex("[^a-z]+")).toSet()
+        val isService = serviceKeywords.any { it in words }
 
         return (score > 0.3f || looksLikeName) && !isService
     }

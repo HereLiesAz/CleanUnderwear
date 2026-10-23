@@ -117,13 +117,35 @@ data class Source(
     val headers: Map<String, String> = emptyMap(),
     /** Raw request body template (e.g. JSON) with {first}/{last}; sent instead of form fields. */
     val bodyTemplate: String? = null,
-    val contentType: String? = null
+    val contentType: String? = null,
+    /**
+     * Appended to the search URL, with {page} filled, to fetch further result pages: an obituary
+     * site's first page can span only days for a common name. Pages run from [firstExtraPage]
+     * for at most [maxExtraPages], and stop at the first page with no record inside [maxAgeDays].
+     */
+    val pageSuffix: String? = null,
+    val firstExtraPage: Int = 2,
+    val maxExtraPages: Int = 0
 )
 
 /**
  * Result of resolving a contact's geography. All fields optional — fall through
  * the levels when issuing source lookups: county → state → multi-state.
  */
+/**
+ * What a contact is checked against: every lockup and obituary source for their locale and
+ * for each state they're tied to (the phone's area code, the address). [lockupAutomated] says
+ * whether any jail or prison search runs on its own; obituaries and news alone don't cover custody.
+ */
+data class SearchPlan(
+    val lockup: List<Source>,
+    val obituary: List<Source>,
+    val tiedStates: List<String>
+) {
+    val automated: Boolean get() = (lockup + obituary).any { it.kind != SourceKind.MANUAL_LANDING }
+    val lockupAutomated: Boolean get() = lockup.any { it.kind != SourceKind.MANUAL_LANDING }
+}
+
 data class LocaleResolution(
     val city: String? = null,
     val county: String? = null,
@@ -176,7 +198,10 @@ class SourceCatalog @Inject constructor(
         val custody_pattern: String? = null,
         val headers: Map<String, String>? = null,
         val body_template: String? = null,
-        val content_type: String? = null
+        val content_type: String? = null,
+        val page_suffix: String? = null,
+        val first_extra_page: Int? = null,
+        val max_extra_pages: Int? = null
     )
 
     private data class CountyEntry(
@@ -302,7 +327,7 @@ class SourceCatalog @Inject constructor(
         val city = metro?.primary_city
         val stateFromCounty = county?.let { countyData[it]?.state }
         val stateFromAreaCode = areaCode?.let { areaCodeToState[it] }
-        val state = stateFromCounty ?: stateFromAreaCode
+        val state = stateFromCounty ?: stateFromAreaCode ?: com.hereliesaz.cleanunderwear.match.UsStates.fromAddress(residenceInfo)
         val country = countryFor(state)
 
         return LocaleResolution(
@@ -341,10 +366,23 @@ class SourceCatalog @Inject constructor(
      * [com.hereliesaz.cleanunderwear.data.MonitorabilityState.NO_AUTOMATED_SOURCE]
      * rather than silently reporting "no change".
      */
-    fun hasAutomatableSourceFor(areaCode: String?, residenceInfo: String? = null): Boolean {
-        val automatable = { s: Source -> s.kind != SourceKind.MANUAL_LANDING }
-        return lockupSourcesFor(areaCode, residenceInfo).any(automatable) ||
-            obituarySourcesFor(areaCode, residenceInfo).any(automatable)
+    fun hasAutomatableSourceFor(areaCode: String?, residenceInfo: String? = null): Boolean =
+        searchPlan(areaCode, residenceInfo).automated
+
+    /**
+     * Every source a contact is checked against: their locale's, plus the state-level prison
+     * search of each state they're tied to (area code, address), so a Texas number on a
+     * Louisiana address checks both. Triage and the daily check both use this, so a contact
+     * is never routed as "no automated source" while the check would have found one.
+     */
+    fun searchPlan(areaCode: String?, residenceInfo: String? = null): SearchPlan {
+        val tied = listOfNotNull(
+            resolveStateForAreaCode(areaCode),
+            com.hereliesaz.cleanunderwear.match.UsStates.fromAddress(residenceInfo)
+        ).distinct()
+        val lockup = (lockupSourcesFor(areaCode, residenceInfo) + tied.flatMap { stateLockupSources(it) })
+            .distinctBy { it.id }
+        return SearchPlan(lockup, obituarySourcesFor(areaCode, residenceInfo), tied)
     }
 
     /**
@@ -482,7 +520,10 @@ class SourceCatalog @Inject constructor(
             custodyPattern = custody_pattern,
             headers = headers.orEmpty(),
             bodyTemplate = body_template,
-            contentType = content_type
+            contentType = content_type,
+            pageSuffix = page_suffix,
+            firstExtraPage = first_extra_page ?: 2,
+            maxExtraPages = max_extra_pages ?: 0
         )
     }
 

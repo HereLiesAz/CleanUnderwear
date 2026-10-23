@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 15,
-    "identityHash": "41bdba35dd75e15c10b42785c57c8445",
+    "identityHash": "5f7e9dc05153bb0f870d64b422e90871",
     "entities": [
       {
         "tableName": "targets",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `display_name` TEXT NOT NULL, `phone_number` TEXT, `area_code` TEXT, `jurisdiction` TEXT, `status` TEXT NOT NULL, `last_scraped_timestamp` INTEGER NOT NULL, `source_account` TEXT, `residence_info` TEXT, `lockup_url` TEXT, `obituary_url` TEXT, `check_frequency_hours` INTEGER NOT NULL, `next_scheduled_check` INTEGER NOT NULL, `last_status_change_timestamp` INTEGER NOT NULL, `last_verification_snippet` TEXT, `email` TEXT, `monitorability_state` TEXT NOT NULL, `enrichment_provenance` TEXT, `middle_name` TEXT, `date_of_birth` TEXT, `dismissed_match_keys` TEXT, `match_confidence` REAL, `match_kind` TEXT, `match_reasons` TEXT, `stale_phone` TEXT, `status_before_ignore` TEXT, `unread_sources` TEXT)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `display_name` TEXT NOT NULL, `phone_number` TEXT, `area_code` TEXT, `jurisdiction` TEXT, `status` TEXT NOT NULL, `last_scraped_timestamp` INTEGER NOT NULL, `source_account` TEXT, `residence_info` TEXT, `lockup_url` TEXT, `obituary_url` TEXT, `check_frequency_hours` INTEGER NOT NULL, `next_scheduled_check` INTEGER NOT NULL, `last_status_change_timestamp` INTEGER NOT NULL, `last_verification_snippet` TEXT, `email` TEXT, `monitorability_state` TEXT NOT NULL, `enrichment_provenance` TEXT, `middle_name` TEXT, `date_of_birth` TEXT, `dismissed_match_keys` TEXT, `match_confidence` REAL, `match_kind` TEXT, `match_reasons` TEXT, `stale_phone` TEXT, `status_before_ignore` TEXT, `unread_sources` TEXT, `match_record_key` TEXT)",
         "fields": [
           {
             "fieldPath": "id",
@@ -149,6 +149,11 @@
           {
             "fieldPath": "unreadSources",
             "columnName": "unread_sources",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "matchRecordKey",
+            "columnName": "match_record_key",
             "affinity": "TEXT"
           }
         ],
@@ -307,7 +312,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '41bdba35dd75e15c10b42785c57c8445')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '5f7e9dc05153bb0f870d64b422e90871')"
     ]
   }
 }

@@ -254,13 +254,15 @@ abstract class CleanUnderwearDatabase : RoomDatabase() {
 
         /**
          * What an ignored contact was before it was ignored, so restoring it doesn't throw away a
-         * confirmed status; and which sources the last check couldn't read, so the user can see a
-         * check was incomplete rather than clean.
+         * confirmed status; which sources the last check couldn't read, so the user can see a
+         * check was incomplete rather than clean; and the record behind the current match, so
+         * "Not a match" dismisses that record only.
          */
         val MIGRATION_14_15 = object : Migration(14, 15) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("ALTER TABLE targets ADD COLUMN status_before_ignore TEXT")
                 database.execSQL("ALTER TABLE targets ADD COLUMN unread_sources TEXT")
+                database.execSQL("ALTER TABLE targets ADD COLUMN match_record_key TEXT")
             }
         }
 

@@ -94,7 +94,14 @@ data class Target(
      * wall). Null when every source answered: the check was complete.
      */
     @ColumnInfo(name = "unread_sources")
-    val unreadSources: String? = null
+    val unreadSources: String? = null,
+    /**
+     * Identifies the record behind the current match on its source (an inmate or case number,
+     * or the person's name, age and town there), so "Not a match" dismisses that record and
+     * not every future result from the source.
+     */
+    @ColumnInfo(name = "match_record_key")
+    val matchRecordKey: String? = null
 ) {
     /** True while [phoneNumber] is still the number the user marked stale. */
     val phoneIsStale: Boolean

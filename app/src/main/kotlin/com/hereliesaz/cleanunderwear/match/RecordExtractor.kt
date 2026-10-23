@@ -73,13 +73,22 @@ object RecordExtractor {
                 relatives = if (kind == EventKind.DEATH) survivors(after) else emptyList(),
                 inferredRelatives = if (kind == EventKind.DEATH) inferredSurvivors(after, lastName) else emptyList(),
                 eventYear = deathYear,
-                recordKey = evidenceUrl,
+                recordKey = personKey(sourceId, firstName, middleOf(hit.groupValues.getOrNull(1)), lastName, birthYear ?: age(after), place?.city),
                 evidenceUrl = evidenceUrl,
                 snippet = "..." + original.substring(start, end).replace(Regex("\\s+"), " ").trim() + "..."
             )
         }
         return out
     }
+
+    /**
+     * A key for one person on one source: their name, age or birth year, and town as the source
+     * gives them. Stable across runs, and different for a different person of the same name, so
+     * dismissing one record doesn't hide the next one.
+     */
+    fun personKey(sourceId: String, first: String, middle: String?, last: String, ageOrBirth: Int?, city: String?): String =
+        listOf(sourceId, first, middle.orEmpty(), last, ageOrBirth?.toString().orEmpty(), city.orEmpty())
+            .joinToString("|") { StringSimilarity.foldDiacritics(it).trim().lowercase() }
 
     /** A single alphabetic middle token or initial; anything longer is noise. */
     internal fun middleOf(raw: String?): String? {
@@ -237,5 +246,20 @@ object UsStates {
         val t = s?.trim()?.trimEnd('.') ?: return null
         if (t.length == 2 && t.uppercase() in CODES) return t.uppercase()
         return NAMES[t.lowercase()]
+    }
+
+    /**
+     * The state in an address ("City, Region, Zip", or a street line first). Reads the parts
+     * after the first from the end: a whole part that is a state ("Texas", "TX"), or a part
+     * shaped "ST 12345". A city that starts with a state's name ("Kansas City, MO 64101",
+     * "Washington Court House, OH") is never read as that state.
+     */
+    fun fromAddress(residence: String?): String? {
+        val parts = residence?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() } ?: return null
+        for (part in parts.drop(1).reversed()) {
+            code(part)?.let { return it }
+            Regex("^([A-Za-z .]+?)\\s+\\d{5}(?:-\\d{4})?$").find(part)?.groupValues?.get(1)?.let { code(it) }?.let { return it }
+        }
+        return null
     }
 }

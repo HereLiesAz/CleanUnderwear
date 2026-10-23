@@ -83,8 +83,11 @@ class SourceSearch @Inject constructor(
                             return SearchResult(StructuredRecords.fromJson(body, source, first, last, kind, evidenceUrl))
                         ResultFormat.HTML_TABLE ->
                             return SearchResult(StructuredRecords.fromTable(body, source, first, last, kind, evidenceUrl))
-                        ResultFormat.REGEX_RECORDS ->
-                            return SearchResult(StructuredRecords.fromRegex(body, source, first, last, kind, evidenceUrl))
+                        ResultFormat.REGEX_RECORDS -> {
+                            val records = StructuredRecords.fromRegex(body, source, first, last, kind, evidenceUrl) +
+                                laterPages(source, fetchUrl, body, first, last, kind, evidenceUrl)
+                            return SearchResult(records.distinctBy { it.recordKey })
+                        }
                         else -> Unit
                     }
                     org.jsoup.Jsoup.parse(body).text()
@@ -107,6 +110,36 @@ class SourceSearch @Inject constructor(
                 (released == null || !released.containsMatchIn(row)) &&
                     (custody == null || custody.containsMatchIn(row))
             })
+    }
+
+    /**
+     * Records from the result pages after the first, while each page still reaches into the
+     * source's date window. A page that can't be read just ends the walk: the first page was
+     * read, so the search as a whole didn't fail.
+     */
+    private suspend fun laterPages(
+        source: Source,
+        fetchUrl: String,
+        firstPage: String,
+        first: String,
+        last: String,
+        kind: EventKind,
+        evidenceUrl: String
+    ): List<CandidateRecord> {
+        val suffix = source.pageSuffix ?: return emptyList()
+        if (source.maxExtraPages <= 0 || !StructuredRecords.reachesIntoWindow(firstPage, source)) return emptyList()
+        val out = mutableListOf<CandidateRecord>()
+        for (page in source.firstExtraPage until source.firstExtraPage + source.maxExtraPages) {
+            val body = basicScraper.fetchSource(
+                source,
+                fetchUrl + suffix.replace("{page}", page.toString()),
+                SourceUrlBuilder.buildFormFields(source, first, last),
+                SourceUrlBuilder.buildBody(source, first, last)
+            )?.takeUnless { BotWall.detected(it) } ?: break
+            out += StructuredRecords.fromRegex(body, source, first, last, kind, evidenceUrl)
+            if (!StructuredRecords.reachesIntoWindow(body, source)) break
+        }
+        return out
     }
 
     private companion object {

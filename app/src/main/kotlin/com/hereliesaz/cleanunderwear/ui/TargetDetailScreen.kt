@@ -212,10 +212,11 @@ fun TargetDetailScreen(
                             AzButton(
                                 text = "Not a match",
                                 onClick = {
-                                    // Non-BOP sources carry no inmate number, so the
-                                    // snippet has no [#id]; fall back to the evidence URL
-                                    // (the deterministic lockupUrl) so the dismissal sticks.
-                                    val key = extractInmateKey(target.lastVerificationSnippet)
+                                    // The record's own key, so only this record is dismissed;
+                                    // matches stored before keys existed fall back to the
+                                    // inmate number in the snippet, then the evidence URL.
+                                    val key = target.matchRecordKey
+                                        ?: extractInmateKey(target.lastVerificationSnippet)
                                         ?: evidenceUrl
                                     val dismissed = target.dismissedMatchKeys
                                         ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
@@ -231,7 +232,8 @@ fun TargetDetailScreen(
                                             obituaryUrl = null,
                                             matchConfidence = null,
                                             matchKind = null,
-                                            matchReasons = null
+                                            matchReasons = null,
+                                            matchRecordKey = null
                                         )
                                     )
                                 },

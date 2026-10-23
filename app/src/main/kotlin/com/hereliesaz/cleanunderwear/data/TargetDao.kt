@@ -117,7 +117,9 @@ interface TargetDao {
             "WHERE monitorability_state = 'READY' " +
             "AND status != 'IGNORED' " +
             "AND next_scheduled_check <= :now " +
-            "ORDER BY display_name ASC"
+            // Longest-waiting first, so a run cut short by the OS picks up where it stopped
+            // instead of re-checking the start of the alphabet every day.
+            "ORDER BY next_scheduled_check ASC, id ASC"
     )
     suspend fun getReadyDueTargets(now: Long): List<Target>
 

@@ -142,19 +142,9 @@ class ScrapeTargetsUseCase @Inject constructor(
 
             // Every state the contact is tied to: resolved locale, the phone's
             // area code, and the state written in their address.
-            val tiedStates = listOfNotNull(
-                sourceCatalog.resolveStateForAreaCode(target.areaCode),
-                stateOf(target.residenceInfo)
-            )
-            val lockupSources = (
-                sourceCatalog.lockupSourcesFor(target.areaCode, target.residenceInfo) +
-                    tiedStates.flatMap { sourceCatalog.stateLockupSources(it) }
-                )
-                .distinctBy { it.id }
-                .filter { it.kind != SourceKind.MANUAL_LANDING }
-            val obituarySources = sourceCatalog
-                .obituarySourcesFor(target.areaCode, target.residenceInfo)
-                .filter { it.kind != SourceKind.MANUAL_LANDING }
+            val plan = sourceCatalog.searchPlan(target.areaCode, target.residenceInfo)
+            val lockupSources = plan.lockup.filter { it.kind != SourceKind.MANUAL_LANDING }
+            val obituarySources = plan.obituary.filter { it.kind != SourceKind.MANUAL_LANDING }
 
             // Honesty gate (defensive — Triage already routes contacts with no
             // automatable source to NO_AUTOMATED_SOURCE before they reach the
@@ -200,6 +190,8 @@ class ScrapeTargetsUseCase @Inject constructor(
             }
             val searches = lockupSources.map { it to EventKind.CUSTODY } + obituarySources.map { it to EventKind.DEATH }
             for ((source, kind) in searches) {
+                // Dismissals made before per-record keys were stored the source's search URL;
+                // those still skip the source. Newer ones name the record and filter below.
                 val evidenceUrl = SourceUrlBuilder.buildEvidenceUrl(source, firstName, lastName)
                 if (evidenceUrl in dismissedKeys) continue
                 emitStep("checking ${source.label}")
@@ -221,13 +213,20 @@ class ScrapeTargetsUseCase @Inject constructor(
                 middleName = target.middleName,
                 age = verifier.approxAge(target.dateOfBirth),
                 city = cityOf(target.residenceInfo),
-                state = stateOf(target.residenceInfo) ?: locale.state,
+                state = UsStates.fromAddress(target.residenceInfo) ?: locale.state,
                 otherContactNames = allNames - target.displayName.trim()
             )
-            val best = matchVerifier.verifyAll(
+            val verified = matchVerifier.verifyAll(
                 profile,
                 candidates.filter { it.recordKey == null || it.recordKey !in dismissedKeys }
-            ).firstOrNull()
+            )
+            val best = verified.firstOrNull()
+            val suppressed = candidates.size - verified.size
+            if (suppressed > 0) {
+                // Records naming the contact that verification set aside (a confident conflict, or
+                // nothing beyond the name): logged, so "no match" and "match hidden" can be told apart.
+                DiagnosticLogger.log("${target.displayName}: $suppressed record(s) naming them were set aside by verification")
+            }
 
             // No match, but a source couldn't be read: that's not a clean "nothing found", so the
             // contact keeps its status and evidence and is looked at again sooner.
@@ -278,6 +277,7 @@ class ScrapeTargetsUseCase @Inject constructor(
                     matchConfidence = best?.confidence,
                     matchKind = best?.candidate?.kind?.name,
                     matchReasons = best?.reasons?.joinToString("\n"),
+                    matchRecordKey = best?.candidate?.recordKey,
                     unreadSources = failedSources.takeIf { it.isNotEmpty() }?.joinToString(", ")
                 )
             } ?: return
@@ -334,10 +334,5 @@ class ScrapeTargetsUseCase @Inject constructor(
         val parts = residence?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() } ?: return null
         return parts.firstOrNull()?.takeIf { parts.size >= 2 && it.none(Char::isDigit) }
     }
-
-    /** State from the parts after the city, so a city named "Washington" isn't read as WA. */
-    private fun stateOf(residence: String?): String? =
-        residence?.split(',')?.map { it.trim() }?.drop(1)
-            ?.firstNotNullOfOrNull { UsStates.code(it) ?: UsStates.code(it.split(' ').first()) }
 
 }

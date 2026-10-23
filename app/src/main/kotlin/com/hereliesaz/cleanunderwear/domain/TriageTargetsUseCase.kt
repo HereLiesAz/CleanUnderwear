@@ -139,10 +139,7 @@ class TriageTargetsUseCase @Inject constructor(
                 val statusReset = if (target.status == TargetStatus.UNVERIFIED) {
                     TargetStatus.MONITORING
                 } else null
-                val automatable = sourceCatalog.hasAutomatableSourceFor(
-                    target.areaCode,
-                    target.residenceInfo
-                )
+                val automatable = sourceCatalog.searchPlan(target.areaCode, target.residenceInfo).automated
                 val state = if (automatable) {
                     MonitorabilityState.READY
                 } else {

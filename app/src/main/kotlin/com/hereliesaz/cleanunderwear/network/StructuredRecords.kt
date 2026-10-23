@@ -77,6 +77,20 @@ object StructuredRecords {
         }.toList()
     }
 
+    /**
+     * Whether the oldest record on a regex-records page is still inside [Source.maxAgeDays], so
+     * the next page (sorted newest first) may hold more. A page with no dated records ends it.
+     */
+    fun reachesIntoWindow(html: String, source: Source): Boolean {
+        val days = source.maxAgeDays ?: return true
+        val recordRe = source.recordRegex?.let { Regex(it, setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)) } ?: return false
+        val dateRe = source.fieldRegexes["date"]?.let { Regex(it, setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)) } ?: return false
+        val oldest = recordRe.findAll(html)
+            .mapNotNull { m -> dateRe.find(m.value)?.groupValues?.lastOrNull()?.let(::parseDate) }
+            .minOrNull() ?: return false
+        return !oldest.isBefore(today().minusDays(days.toLong()))
+    }
+
     fun fromTable(
         html: String,
         source: Source,
@@ -168,6 +182,8 @@ object StructuredRecords {
             row["facility"],
             id?.let { "#$it" }
         ).joinToString(" · ")
+        // A link to the record itself, when the source's rows carry one, beats the search page.
+        val recordUrl = row["url"]?.let { absolute(it, source.urlTemplate) } ?: evidenceUrl
         return CandidateRecord(
             sourceId = source.id,
             sourceLabel = source.label,
@@ -179,10 +195,20 @@ object StructuredRecords {
             birthYear = birthYear,
             city = row["city"],
             state = UsStates.code(row["state"]),
-            recordKey = id?.let { "${source.id}:$it" } ?: evidenceUrl,
-            evidenceUrl = evidenceUrl,
+            recordKey = id?.let { "${source.id}:$it" }
+                ?: com.hereliesaz.cleanunderwear.match.RecordExtractor.personKey(
+                    source.id, recFirst, recMiddle, recLast, birthYear ?: age, row["city"]
+                ),
+            evidenceUrl = recordUrl,
             snippet = snippet
         )
+    }
+
+    /** [href] made absolute against the scheme and host of [base]. */
+    internal fun absolute(href: String, base: String): String {
+        if (href.startsWith("http://") || href.startsWith("https://")) return href
+        val origin = Regex("^(https?://[^/]+)").find(base)?.value ?: return href
+        return origin + (if (href.startsWith("/")) href else "/$href")
     }
 
     /** Generational suffixes, which rosters print where a middle name would go ("SMITH, JOHN JR"). */
