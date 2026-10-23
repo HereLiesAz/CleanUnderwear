@@ -224,9 +224,10 @@ private fun DiagnosticLogView(logs: List<DiagnosticLogger.LogEntry>) {
     val scope = rememberCoroutineScope()
     val logListState = rememberLazyListState()
 
-    // Follow the newest line as entries arrive.
-    LaunchedEffect(logs.size) {
-        if (logs.isNotEmpty()) logListState.animateScrollToItem(logs.lastIndex)
+    // Entries are newest first: follow the top as they arrive (keyed on the newest entry,
+    // since the count stops changing once the log is full).
+    LaunchedEffect(logs.firstOrNull()) {
+        if (logs.isNotEmpty()) logListState.animateScrollToItem(0)
     }
 
     Surface(

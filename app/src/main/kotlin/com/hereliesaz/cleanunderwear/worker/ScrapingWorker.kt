@@ -26,9 +26,20 @@ class ScrapingWorker @AssistedInject constructor(
     }
 
     override suspend fun doWork(): Result {
-        val summary = runPipeline { progress, description ->
-            setProgressAsync(workDataOf("progress" to progress, "description" to description))
+        return try {
+            val summary = runPipeline { progress, description ->
+                setProgressAsync(workDataOf("progress" to progress, "description" to description))
+            }
+            Result.success(workDataOf(SUMMARY to summary.describe()))
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Stopped by the OS (time limit, constraints lost). Each contact checked so far is
+            // saved, and the next run starts with those waiting longest.
+            throw e
+        } catch (e: Exception) {
+            com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log(
+                "Daily check failed: ${e.javaClass.simpleName}", com.hereliesaz.cleanunderwear.util.DiagnosticLogger.LogEntry.LogLevel.ERROR
+            )
+            if (runAttemptCount < 3) Result.retry() else Result.failure()
         }
-        return Result.success(workDataOf(SUMMARY to summary.describe()))
     }
 }

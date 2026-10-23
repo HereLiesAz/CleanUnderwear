@@ -93,8 +93,9 @@ fun BrowserScreen(
         return
     }
 
-    var currentIndex by remember(batchId) { mutableIntStateOf(0) }
-    var batchComplete by remember { mutableStateOf(false) }
+    // Saved across rotation: a recreated screen resumes at the same search, not the first.
+    var currentIndex by androidx.compose.runtime.saveable.rememberSaveable(batchId) { mutableIntStateOf(0) }
+    var batchComplete by androidx.compose.runtime.saveable.rememberSaveable(batchId) { mutableStateOf(false) }
     val extractionGate = remember { BrowserExtractionGate() }
     var pageReady by remember { mutableStateOf(false) }
     var automationRan by remember { mutableStateOf(false) }
@@ -206,6 +207,20 @@ fun BrowserScreen(
         }
     }
 
+    // Pause the page with the app: no loading or scripts while it's in the background.
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            when (event) {
+                androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> webView?.onPause()
+                androidx.lifecycle.Lifecycle.Event.ON_RESUME -> webView?.onResume()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             extractionGate.finish()
@@ -213,6 +228,8 @@ fun BrowserScreen(
             webView?.let {
                 try {
                     it.stopLoading()
+                    // Detach before destroying, as Chromium expects.
+                    (it.parent as? android.view.ViewGroup)?.removeView(it)
                     it.destroy()
                 } catch (e: Exception) {
                     DiagnosticLogger.log("BrowserScreen: WebView destroy failed: ${e.message}")

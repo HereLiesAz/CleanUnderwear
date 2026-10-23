@@ -3,6 +3,7 @@ package com.hereliesaz.cleanunderwear.util
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -29,10 +30,8 @@ object DiagnosticLogger {
     fun log(raw: String, level: LogEntry.LogLevel = LogEntry.LogLevel.DEBUG) {
         val message = redact(raw)
         val entry = LogEntry(dateFormat.format(Instant.now()), message, level)
-        val currentLogs = _logs.value.toMutableList()
-        currentLogs.add(0, entry) // Newest first
-        if (currentLogs.size > 500) currentLogs.removeAt(currentLogs.size - 1)
-        _logs.value = currentLogs
+        // Atomic: log() is called from many threads at once.
+        _logs.update { current -> (listOf(entry) + current).take(500) } // newest first
         
         // Logcat is readable over adb and in bug reports: debug builds only.
         if (!com.hereliesaz.cleanunderwear.BuildConfig.DEBUG) return

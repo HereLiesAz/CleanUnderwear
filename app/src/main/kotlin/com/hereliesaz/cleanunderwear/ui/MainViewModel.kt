@@ -37,6 +37,10 @@ import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -240,7 +244,8 @@ class MainViewModel @Inject constructor(
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val targets: Flow<PagingData<TargetLite>> = combine(
-        _searchQuery, _sortOrder, _showIgnored,
+        // Typing settles before the list is re-queried (each query scans the table).
+        @OptIn(kotlinx.coroutines.FlowPreview::class) _searchQuery.debounce(250), _sortOrder, _showIgnored,
         _showNamelessFilter, _showEmailOnlyFilter, _hasEmailFilter, _hasAddressFilter,
         _googleFilter, _metaFilter, _appleFilter, _deviceFilter,
         _pendingEnrichmentFilter
@@ -393,6 +398,8 @@ class MainViewModel @Inject constructor(
                     )
                     val extracted = mutableListOf<Pair<BrowserMission, String>>()
                     val outcome = launchMissionsAndAwait(missions) { mission, html ->
+                        // One result per search: a page re-extracted after a rotation replaces the first.
+                        extracted.removeAll { it.first == mission }
                         extracted.add(mission to html)
                     }
                     if (outcome == BatchOutcome.UserCancelled || resolveCancellationRequested) return@runExclusive
@@ -622,11 +629,16 @@ class MainViewModel @Inject constructor(
                 status = TargetStatus.UNKNOWN
             )
             
-            // We pass it through the Harvester's processor by wrapping in a list
-            harvestContactsUseCase.processManualTargets(listOf(target))
-
-            _operationState.value = OperationState(isRunning = false)
-            post("Added $name.")
+            try {
+                harvestContactsUseCase.processManualTargets(listOf(target))
+                post("Added $name.")
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                post("Couldn't add $name. Try again.")
+            } finally {
+                _operationState.value = OperationState(isRunning = false)
+            }
         }
     }
 
@@ -645,7 +657,7 @@ class MainViewModel @Inject constructor(
             try {
                 // Serialised with the daily check and every other job that writes the registry,
                 // and run off the main thread: harvest, name checks and dedup are heavy.
-                pipelineCoordinator.runExclusive("contact-sweep") {
+                pipelineCoordinator.runExclusive("contact-sweep") { try {
                     _operationState.value = OperationState(isRunning = true, description = "Reading contacts...", progress = 0.1f)
                     val before = repository.getTargetsPaged(limit = Int.MAX_VALUE, offset = 0).size
                     withContext(Dispatchers.Default) {
@@ -670,7 +682,12 @@ class MainViewModel @Inject constructor(
                         if (after > before) "Imported ${after - before} new contact${if (after - before == 1) "" else "s"}; $after in all."
                         else "No new contacts; $after in all."
                     )
-                }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log("Import failed: ${e.javaClass.simpleName}", com.hereliesaz.cleanunderwear.util.DiagnosticLogger.LogEntry.LogLevel.ERROR)
+                    post("Importing contacts failed. Try again; if it keeps failing, the activity log shows where.")
+                } }
             } finally {
                 sweepPending = false
                 if (_operationState.value.isRunning) _operationState.value = OperationState(isRunning = false)
@@ -721,8 +738,16 @@ class MainViewModel @Inject constructor(
 
     private suspend fun resolveCandidates(): List<Target> {
         val limit = _globalTargetLimit.value.takeIf { it > 0 } ?: Int.MAX_VALUE
-        val ids = repository
-            .getTargetWorkInfoPaged(limit = 5000, offset = 0)
+        // Every contact, a page at a time; large phone books run past one page.
+        val all = mutableListOf<com.hereliesaz.cleanunderwear.data.TargetWorkInfo>()
+        var offset = 0
+        while (true) {
+            val page = repository.getTargetWorkInfoPaged(limit = 5000, offset = offset)
+            if (page.isEmpty()) break
+            all += page
+            offset += page.size
+        }
+        val ids = all
             .filter { it.status != TargetStatus.IGNORED }
             .map { it.id }
             .sorted()
@@ -780,6 +805,8 @@ class MainViewModel @Inject constructor(
                     // Jsoup parsing can stall the entire browser on large pages.
                     val extracted = mutableListOf<Pair<BrowserMission, String>>()
                     val outcome = launchMissionsAndAwait(missions) { mission, html ->
+                        // One result per search: a page re-extracted after a rotation replaces the first.
+                        extracted.removeAll { it.first == mission }
                         extracted.add(mission to html)
                     }
 
@@ -927,38 +954,46 @@ class MainViewModel @Inject constructor(
     }
 
     fun triggerManualInterrogation() {
+        // One manual check at a time: a second tap while one runs joins it.
         val request = OneTimeWorkRequestBuilder<ScrapingWorker>().build()
-        workManager.enqueue(request)
-        
+        workManager.enqueueUniqueWork("manual_check", androidx.work.ExistingWorkPolicy.KEEP, request)
+        if (watchingManualCheck) return
+        watchingManualCheck = true
+
         viewModelScope.launch {
-            workManager.getWorkInfoByIdFlow(request.id).collect { workInfo ->
-                if (workInfo != null) {
-                    when (workInfo.state) {
-                        androidx.work.WorkInfo.State.RUNNING -> {
-                            val progress = workInfo.progress.getFloat("progress", -1f)
-                            val description = workInfo.progress.getString("description") ?: "Checking records..."
-                            
-                            _operationState.value = OperationState(
-                                isRunning = true, 
-                                description = description,
-                                progress = progress
-                            )
-                        }
-                        androidx.work.WorkInfo.State.SUCCEEDED -> {
-                            _operationState.value = OperationState(isRunning = false)
-                            workInfo.outputData.getString(ScrapingWorker.SUMMARY)?.let(::post)
-                        }
-                        androidx.work.WorkInfo.State.FAILED -> {
-                            _operationState.value = OperationState(isRunning = false)
-                            post("The check stopped with an error. It will run again with the next daily check.")
-                        }
-                        androidx.work.WorkInfo.State.CANCELLED -> {
-                            _operationState.value = OperationState(isRunning = false)
-                        }
-                        else -> {}
-                    }
-                }
+            try {
+                workManager.getWorkInfosForUniqueWorkFlow("manual_check")
+                    // This run, or one already in progress that the tap joined; never an old result.
+                    .map { infos -> infos.firstOrNull { it.id == request.id || !it.state.isFinished } }
+                    .onEach { onManualCheck(it) }
+                    .first { it != null && it.state.isFinished }
+            } finally {
+                watchingManualCheck = false
             }
+        }
+    }
+
+    @Volatile private var watchingManualCheck = false
+
+    private fun onManualCheck(workInfo: androidx.work.WorkInfo?) {
+        when (workInfo?.state) {
+            androidx.work.WorkInfo.State.RUNNING -> {
+                _operationState.value = OperationState(
+                    isRunning = true,
+                    description = workInfo.progress.getString("description") ?: "Checking records…",
+                    progress = workInfo.progress.getFloat("progress", -1f)
+                )
+            }
+            androidx.work.WorkInfo.State.SUCCEEDED -> {
+                _operationState.value = OperationState(isRunning = false)
+                workInfo.outputData.getString(ScrapingWorker.SUMMARY)?.let(::post)
+            }
+            androidx.work.WorkInfo.State.FAILED -> {
+                _operationState.value = OperationState(isRunning = false)
+                post("The check stopped with an error. It will run again with the next daily check.")
+            }
+            androidx.work.WorkInfo.State.CANCELLED -> _operationState.value = OperationState(isRunning = false)
+            else -> Unit
         }
     }
 

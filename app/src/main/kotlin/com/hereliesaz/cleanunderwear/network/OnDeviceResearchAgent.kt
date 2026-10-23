@@ -38,24 +38,31 @@ class OnDeviceResearchAgent @Inject constructor(
         }
     }
 
-    private var interpreter: Interpreter? = null
     private var nicknames: Map<String, List<String>> = emptyMap()
 
-    init {
+    /**
+     * Loaded on first use, not when the app starts: mapping the model and building the Flex
+     * delegate is slow, and the first user is a background import, not the main thread.
+     */
+    private val interpreter: Interpreter? by lazy {
         try {
             val modelBuffer = loadModelFile("research_agent.tflite")
             val options = Interpreter.Options().apply {
                 addDelegate(FlexDelegate())
             }
-            interpreter = Interpreter(modelBuffer, options)
-            DiagnosticLogger.log("Intelligence Agent: Model loaded successfully with Flex support.")
+            Interpreter(modelBuffer, options).also {
+                DiagnosticLogger.log("Intelligence Agent: Model loaded successfully with Flex support.")
+            }
         } catch (e: Exception) {
             DiagnosticLogger.log(
                 "Intelligence Agent Error: Failed to load LiteRT model. ${e.message}",
                 DiagnosticLogger.LogEntry.LogLevel.ERROR
             )
-            interpreter = null
+            null
         }
+    }
+
+    init {
         loadAssets()
     }
 
@@ -122,6 +129,11 @@ class OnDeviceResearchAgent @Inject constructor(
 
     private fun scoreWithModel(text: String): Float {
         val currentInterpreter = interpreter ?: return 1.0f
+        // An Interpreter isn't thread-safe; one inference at a time.
+        return synchronized(this) { runModel(currentInterpreter, text) }
+    }
+
+    private fun runModel(currentInterpreter: Interpreter, text: String): Float {
         val input = arrayOf(text)
         val output = Array(1) { FloatArray(1) }
         return try {

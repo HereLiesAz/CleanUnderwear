@@ -319,6 +319,8 @@ class ScrapeTargetsUseCase @Inject constructor(
 
             emitStep("syncing back to system contacts")
             contactSyncer.syncToSystem(updatedTarget)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             DiagnosticLogger.log(
                 "Scrape failed for ${target.displayName}: ${e.javaClass.simpleName}: ${e.message}",
