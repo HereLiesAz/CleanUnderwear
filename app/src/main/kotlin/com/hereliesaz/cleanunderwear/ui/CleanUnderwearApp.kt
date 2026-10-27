@@ -164,6 +164,7 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                         isBlocked = batch.isBlocked,
                         context = operationState.description.takeIf { operationState.isRunning },
                         stopsBatch = batch.retainBrowserForResolve,
+                        findings = if (operationState.isRunning) operationState.findings else emptyList(),
                     )
                 return@onscreen
             }

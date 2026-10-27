@@ -10,7 +10,7 @@ This document details the internal logic of the CleanUnderwear daily records-che
 - **Failures**: a failed request or a bot wall (`BotWall`: captcha, Cloudflare, an empty page) is recorded as unread on the contact, not as "no match". A pending match it might have cleared stays, and is checked again within six hours; a contact with no pending match is checked as usual, so a site that is always down can't hold it at "Not checked yet". A status restored from a note waits for the user, whatever a later check finds.
 
 ### Visible browser (imports and people-search)
-Imports (Facebook, WhatsApp, Instagram, Google Contacts) and every CyberBackgroundChecks lookup run in the app's own visible `BrowserScreen`, where the user can sign in or solve a challenge. Each mission has a watchdog; a page that never settles offers retry, skip or abort.
+Imports (Facebook, WhatsApp, Instagram, Google Contacts) and every CyberBackgroundChecks lookup run in the app's own visible `BrowserScreen`, where the user can sign in or solve a challenge. Each mission has a watchdog; a page that never settles offers retry, skip or abort. A page that says it found nobody ("0 results", "we did not find any results") is an answer, not a wall: the search is noted on the contact ("nobody found by email, name") and the lookup moves on. Only a CAPTCHA the user can see pauses it; a CAPTCHA script that a page merely loads does not.
 
 ### Visible Resolve browser (user-initiated)
 

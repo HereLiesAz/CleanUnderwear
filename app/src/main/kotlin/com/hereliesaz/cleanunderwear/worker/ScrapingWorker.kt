@@ -23,13 +23,26 @@ class ScrapingWorker @AssistedInject constructor(
     companion object {
         /** Output key: the run's summary, shown to the user when they started the check. */
         const val SUMMARY = "summary"
+
+        /** Progress keys: 0..1 done, what is happening now, and what has turned up so far. */
+        const val PROGRESS = "progress"
+        const val DESCRIPTION = "description"
+        const val FINDINGS = "findings"
     }
 
     override suspend fun doWork(): Result {
         return try {
-            val summary = runPipeline { progress, description ->
-                setProgressAsync(workDataOf("progress" to progress, "description" to description))
+            // Each progress report replaces the last whole, so both halves go every time.
+            var progress = 0f
+            var description = ""
+            var findings = emptyArray<String>()
+            fun report() {
+                setProgressAsync(workDataOf(PROGRESS to progress, DESCRIPTION to description, FINDINGS to findings))
             }
+            val summary = runPipeline(
+                onProgress = { p, d -> progress = p; description = d; report() },
+                onFindings = { lines -> findings = lines.toTypedArray(); report() }
+            )
             Result.success(workDataOf(SUMMARY to summary.describe()))
         } catch (e: kotlinx.coroutines.CancellationException) {
             // Stopped by the OS (time limit, constraints lost). Each contact checked so far is

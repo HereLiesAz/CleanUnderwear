@@ -232,7 +232,9 @@ class MainViewModel @Inject constructor(
         /** Whether Cancel can stop it partway without leaving a mess. */
         val cancellable: Boolean = true,
         /** Whether it keeps going if the user stops watching it. */
-        val continues: Continues = Continues.NO
+        val continues: Continues = Continues.NO,
+        /** What has turned up so far, a line each, shown under what is happening. */
+        val findings: List<String> = emptyList()
     )
 
     enum class Continues {
@@ -730,20 +732,34 @@ class MainViewModel @Inject constructor(
                     begin(OperationState(description = "Reading contacts...", progress = 0.1f, continues = Continues.IN_APP))
                     val before = repository.getTargetsPaged(limit = Int.MAX_VALUE, offset = 0).size
                     withContext(Dispatchers.Default) {
+                        // What has turned up so far, under the loader.
+                        val found = mutableListOf<String>()
+                        fun note(line: String) {
+                            found += line
+                            _operationState.value = _operationState.value.copy(findings = found.toList())
+                        }
+
                         // 1. Ingest raw data from enabled sources
                         harvestContactsUseCase(activeSources)
+                        val read = repository.getTargetsPaged(limit = Int.MAX_VALUE, offset = 0).size
+                        note("$read contact${if (read == 1) "" else "s"} in the list (${(read - before).coerceAtLeast(0)} new)")
 
                         // 2. Consolidate and deduplicate the full registry
                         _operationState.value = _operationState.value.copy(description = "Merging duplicates...", progress = 0.4f)
-                        deduplicateTargetsUseCase { sub, _ ->
+                        val merged = deduplicateTargetsUseCase { sub, _ ->
                             _operationState.value = _operationState.value.copy(progress = 0.4f + (sub * 0.3f))
                         }
+                        note(if (merged == 0) "No duplicates" else "Merged $merged duplicate${if (merged == 1) "" else "s"}")
 
                         // 3. Triage for monitorability
                         _operationState.value = _operationState.value.copy(description = "Preparing contacts for daily checks...", progress = 0.7f)
-                        triageTargetsUseCase { sub, _ ->
+                        val triaged = triageTargetsUseCase { sub, _ ->
                             _operationState.value = _operationState.value.copy(progress = 0.7f + (sub * 0.3f))
                         }
+                        note(
+                            "${triaged.ready} ready for daily checks" +
+                                if (triaged.needsEnrichment > 0) " · ${triaged.needsEnrichment} need more details" else ""
+                        )
                     }
                     val after = repository.getTargetsPaged(limit = Int.MAX_VALUE, offset = 0).size
                     _operationState.value = OperationState(isRunning = false)
@@ -827,6 +843,15 @@ class MainViewModel @Inject constructor(
 
     fun resolveUnverifiedBatch() = resolveContacts { resolveCandidates() }
 
+    /** What a verified lookup added to the contact, in a few words ("born ~1970, Gretna, LA"). */
+    private fun learnedFrom(before: Target, after: Target): String = listOfNotNull(
+        after.dateOfBirth?.takeIf { it != before.dateOfBirth }?.let { "born $it" },
+        after.middleName?.takeIf { it != before.middleName }?.let { "middle name $it" },
+        after.residenceInfo?.takeIf { it != before.residenceInfo },
+        after.phoneNumber?.takeIf { it != before.phoneNumber }?.let { "new number" },
+        after.displayName.takeIf { it != before.displayName }?.let { "named $it" }
+    ).joinToString(", ")
+
     /** Looks up one contact's missing details, from its detail screen. */
     fun resolveOne(id: Int) = resolveContacts { listOfNotNull(repository.getTargetById(id)) }
 
@@ -849,6 +874,15 @@ class MainViewModel @Inject constructor(
                     progress = 0f
                 ))
                 var filled = 0
+                // What has turned up so far, newest first, under the loader and in the browser.
+                val results = ArrayDeque<String>()
+                fun noteResult(done: Int, line: String) {
+                    results.addFirst(line)
+                    while (results.size > RECENT_RESULTS) results.removeLast()
+                    _operationState.value = _operationState.value.copy(
+                        findings = listOf("$done of $total looked up · details filled in for $filled") + results
+                    )
+                }
 
                 for ((index, lite) in unverified.withIndex()) {
                     if (resolveCancellationRequested) return@runExclusive
@@ -859,6 +893,7 @@ class MainViewModel @Inject constructor(
                             target.id,
                             com.hereliesaz.cleanunderwear.data.MonitorabilityState.ENRICHMENT_FAILED
                         )
+                        noteResult(index + 1, "${target.displayName}: nothing to search by")
                         continue
                     }
 
@@ -885,8 +920,18 @@ class MainViewModel @Inject constructor(
                         return@runExclusive
                     }
 
+                    // A search that says it found nobody is noted and passed over, not parsed:
+                    // its page chrome would only be mistaken for a person.
+                    val nobody = withContext(Dispatchers.Default) {
+                        extracted.filter { (_, html) -> cbcEnricher.foundNobody(html) }.map { it.first }
+                    }
+                    if (nobody.isNotEmpty()) {
+                        com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log(
+                            "CYBG: nobody found for ${target.displayName} (${nobody.joinToString { it.label }})"
+                        )
+                    }
                     val collected = withContext(Dispatchers.Default) {
-                        extracted.mapNotNull { (mission, html) ->
+                        extracted.filterNot { (mission, _) -> mission in nobody }.mapNotNull { (mission, html) ->
                             val findings = cbcEnricher.parseFindings(html)
                             com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log(
                                 "CYBG parse ${mission.label}: ${cbcEnricher.describeParse(html, findings)}"
@@ -904,10 +949,11 @@ class MainViewModel @Inject constructor(
                     // Judged against the contact as it is now: the user may have spent minutes in
                     // the browser, and a check or an edit may have written it meanwhile.
                     val id = target.id
-                    repository.inTransaction {
+                    val line = repository.inTransaction {
                     @Suppress("NAME_SHADOWING")
-                    val target = repository.getTargetById(id) ?: return@inTransaction
-                    val enrichment = cbcEnricher.enrich(target, collected)
+                    val target = repository.getTargetById(id) ?: return@inTransaction null
+                    val enrichment = cbcEnricher.enrich(target, collected, foundNobody = nobody)
+                    val learned = if (enrichment.verified) learnedFrom(target, enrichment.target) else ""
                     if (enrichment.verified) {
                         filled++
                         repository.updateTarget(
@@ -934,7 +980,14 @@ class MainViewModel @Inject constructor(
                         // simply not used; the contact keeps monitoring as before.
                         repository.updateTarget(target.copy(enrichmentProvenance = enrichment.target.enrichmentProvenance))
                     }
+                    when {
+                        enrichment.verified -> "${target.displayName}: " + learned.ifEmpty { "confirmed, nothing new" }
+                        collected.isEmpty() && nobody.isNotEmpty() -> "${target.displayName}: nobody found"
+                        collected.isEmpty() -> "${target.displayName}: couldn't read the page"
+                        else -> "${target.displayName}: found someone else; not used"
                     }
+                    }
+                    line?.let { noteResult(index + 1, it) }
                 }
 
                 _operationState.value = OperationState(isRunning = false)
@@ -1064,9 +1117,10 @@ class MainViewModel @Inject constructor(
                 }
                 _operationState.value = OperationState(
                     isRunning = true,
-                    description = workInfo.progress.getString("description") ?: "Checking records…",
-                    progress = workInfo.progress.getFloat("progress", -1f),
-                    continues = Continues.ANYWHERE
+                    description = workInfo.progress.getString(ScrapingWorker.DESCRIPTION) ?: "Checking records…",
+                    progress = workInfo.progress.getFloat(ScrapingWorker.PROGRESS, -1f),
+                    continues = Continues.ANYWHERE,
+                    findings = workInfo.progress.getStringArray(ScrapingWorker.FINDINGS)?.toList().orEmpty()
                 )
             }
             androidx.work.WorkInfo.State.SUCCEEDED -> {
@@ -1122,6 +1176,9 @@ class MainViewModel @Inject constructor(
         )
     }
 }
+
+/** How many contacts' results Fill in details keeps on screen, newest first. */
+private const val RECENT_RESULTS = 5
 
 /** Automatic update checks run at most this often; the manual check in Settings ignores it. */
 private const val AUTO_UPDATE_CHECK_INTERVAL_MS = 12L * 60 * 60 * 1000

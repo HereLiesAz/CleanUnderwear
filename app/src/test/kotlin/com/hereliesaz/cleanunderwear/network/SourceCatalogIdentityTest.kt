@@ -91,14 +91,13 @@ class SourceCatalogIdentityTest {
 
     @Test
     fun cbcIdentityChip_usesSameNameSearchPathAsEnricher() {
-        // Regression: the CBC / SmartBGC chips previously used a /people/ path
-        // that did not match the /name/ search path the enrichment flow
-        // (util.CyberBackgroundChecks) produces, so the manual chip and the
-        // auto-enricher landed on different pages. They must now agree.
+        // The chip and the enrichment flow (util.CyberBackgroundChecks) must land on the same
+        // page: CBC's name results at /people/first-last (/name/first-last is "page cannot be
+        // found").
         val catalog = loadCatalog()
         val cbc = catalog.identitySources().first { it.id == "cyberbgc_people_lookup" }
         val chipUrl = SourceUrlBuilder.buildFetchUrl(cbc, "John", "Smith")
-        assertEquals("https://www.cyberbackgroundchecks.com/name/John-Smith", chipUrl)
+        assertEquals("https://www.cyberbackgroundchecks.com/people/John-Smith", chipUrl)
         // Same host + path structure the enricher produces (case-insensitive).
         assertEquals(
             com.hereliesaz.cleanunderwear.util.CyberBackgroundChecks.getNameSearchUrl("John Smith"),

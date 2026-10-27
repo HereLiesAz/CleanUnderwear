@@ -163,4 +163,14 @@ class ScrapeTargetsUseCaseTest {
         assertEquals(TargetStatus.POSSIBLE_MATCH, repo.getTargetById(id)!!.status)
         verify(exactly = 0) { notifications.notifyStatusChange(any(), any()) }
     }
+
+    @Test
+    fun whatTurnsUpIsReportedWhileTheCheckRuns() = runBlocking {
+        seed(TargetStatus.UNKNOWN)
+        answer(SearchResult(listOf(obituary)))
+        var seen = emptyList<String>()
+        useCase().invoke(onFindings = { seen = it })
+        assertEquals("1 of 1 checked", seen.first())
+        assertTrue(seen.any { it == "Jane Doe: obituary" })
+    }
 }
