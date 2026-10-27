@@ -34,6 +34,10 @@ import javax.inject.Singleton
 @Singleton
 class SystemContactSyncer @Inject constructor(@ApplicationContext private val context: Context) {
 
+    private companion object {
+        const val NOTE_BATCH = 100
+    }
+
     private val dateFormat: DateTimeFormatter =
         DateTimeFormatter.ofPattern("MM/dd/yyyy", Locale.US).withZone(ZoneId.systemDefault())
 
@@ -56,37 +60,54 @@ class SystemContactSyncer @Inject constructor(@ApplicationContext private val co
         }
     }
 
+    /** What [removeAllBlocks] did: notes cleaned, notes it couldn't change, and whether it could look at all. */
+    data class Removal(val removed: Int, val failed: Int, val noAccess: Boolean = false)
+
     /**
      * Removes this app's block from every contact note, leaving the user's own note text (and
-     * deleting a note that held nothing else). Returns how many notes were changed.
+     * deleting a note that held nothing else). Works from the notes themselves, not the app's
+     * list, so it can be run again after the list is gone. Never throws: without contacts access
+     * it reports [Removal.noAccess]; a batch that fails is counted, not hidden.
      */
-    fun removeAllBlocks(): Int {
+    fun removeAllBlocks(): Removal {
         val resolver = context.contentResolver
         val projection = arrayOf(ContactsContract.Data._ID, ContactsContract.CommonDataKinds.Note.NOTE)
         val selection = "${ContactsContract.Data.MIMETYPE} = ? AND ${ContactsContract.CommonDataKinds.Note.NOTE} LIKE ?"
         val args = arrayOf(ContactsContract.CommonDataKinds.Note.CONTENT_ITEM_TYPE, "%[Registry Status:%")
         val ops = ArrayList<ContentProviderOperation>()
-        resolver.query(ContactsContract.Data.CONTENT_URI, projection, selection, args, null)?.use { cursor ->
-            while (cursor.moveToNext()) {
-                val id = cursor.getString(0)
-                val rest = ContactNote.strip(cursor.getString(1).orEmpty())
-                val sel = "${ContactsContract.Data._ID} = ?"
-                ops += if (rest.isBlank()) {
-                    ContentProviderOperation.newDelete(ContactsContract.Data.CONTENT_URI).withSelection(sel, arrayOf(id)).build()
-                } else {
-                    ContentProviderOperation.newUpdate(ContactsContract.Data.CONTENT_URI).withSelection(sel, arrayOf(id))
-                        .withValue(ContactsContract.CommonDataKinds.Note.NOTE, rest).build()
+        try {
+            resolver.query(ContactsContract.Data.CONTENT_URI, projection, selection, args, null)?.use { cursor ->
+                while (cursor.moveToNext()) {
+                    val id = cursor.getString(0)
+                    val rest = ContactNote.strip(cursor.getString(1).orEmpty())
+                    val sel = "${ContactsContract.Data._ID} = ?"
+                    ops += if (rest.isBlank()) {
+                        ContentProviderOperation.newDelete(ContactsContract.Data.CONTENT_URI).withSelection(sel, arrayOf(id)).build()
+                    } else {
+                        ContentProviderOperation.newUpdate(ContactsContract.Data.CONTENT_URI).withSelection(sel, arrayOf(id))
+                            .withValue(ContactsContract.CommonDataKinds.Note.NOTE, rest).build()
+                    }
                 }
             }
-        }
-        if (ops.isEmpty()) return 0
-        return try {
-            resolver.applyBatch(ContactsContract.AUTHORITY, ops)
-            ops.size
+        } catch (e: SecurityException) {
+            return Removal(0, 0, noAccess = true)
         } catch (e: Exception) {
-            Log.e("ContactSyncer", "Removing note blocks failed", e)
-            0
+            Log.e("ContactSyncer", "Reading notes failed", e)
+            return Removal(0, 0, noAccess = true)
         }
+        // In batches: one transaction for a whole address book can exceed what the provider takes.
+        var removed = 0
+        var failed = 0
+        for (chunk in ops.chunked(NOTE_BATCH)) {
+            try {
+                resolver.applyBatch(ContactsContract.AUTHORITY, ArrayList(chunk))
+                removed += chunk.size
+            } catch (e: Exception) {
+                Log.e("ContactSyncer", "Removing a batch of note blocks failed", e)
+                failed += chunk.size
+            }
+        }
+        return Removal(removed, failed)
     }
 
     /**

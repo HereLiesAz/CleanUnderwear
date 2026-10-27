@@ -716,8 +716,22 @@ class MainViewModel @Inject constructor(
                 begin(OperationState(description = "Deleting…", progress = -1f, cancellable = false))
                 val notes = withContext(Dispatchers.IO) { contactSyncer.removeAllBlocks() }
                 repository.wipeAll()
+                // What the app holds in memory goes too: the activity log names contacts, and the
+                // Review list and any lookup offer are about the list just deleted.
+                com.hereliesaz.cleanunderwear.util.DiagnosticLogger.clear()
+                _reviewState.value = ReviewState()
+                _alternates.value = null
                 _operationState.value = OperationState(isRunning = false)
-                post("Deleted the app's data and its notes on $notes contact${if (notes == 1) "" else "s"}.")
+                fun contacts(n: Int) = "$n contact${if (n == 1) "" else "s"}"
+                post(
+                    when {
+                        notes.noAccess -> "Deleted the app's data. The notes it added to your contacts weren't removed: " +
+                            "the app can't see your contacts. Allow contacts access and run Delete everything again to remove them."
+                        notes.failed > 0 -> "Deleted the app's data and the notes on ${contacts(notes.removed)}. " +
+                            "The notes on ${contacts(notes.failed)} couldn't be changed; run Delete everything again to retry."
+                        else -> "Deleted the app's data and its notes on ${contacts(notes.removed)}."
+                    }
+                )
             }
             signOutOfSites()
         }
