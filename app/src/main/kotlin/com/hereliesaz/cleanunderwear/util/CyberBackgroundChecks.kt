@@ -7,9 +7,11 @@ object CyberBackgroundChecks {
         // Given name and surname only: titles, suffixes and notes ("Dr", "Jr", "(work)") would
         // narrow the search to nobody.
         val parts = com.hereliesaz.cleanunderwear.network.NameValidator.tokenize(name)
+        // Name results live at /people/first-last; /name/… is only the search form, and
+        // /name/first-last answers "The page you are looking for cannot be found".
         if (parts.isEmpty()) return "$BASE_URL/name"
         val slug = listOf(parts.first(), parts.last()).distinct().joinToString("-") { slug(it) }
-        return "$BASE_URL/name/$slug"
+        return "$BASE_URL/people/$slug"
     }
 
     /** A path segment: accents folded, anything but letters, digits and hyphens dropped. */

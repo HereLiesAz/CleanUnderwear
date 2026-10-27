@@ -331,9 +331,18 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
      * Unverified results are NOT written into the registry or system contacts —
      * the caller should leave the contact UNVERIFIED and surface the provenance.
      */
-    fun enrich(target: Target, results: List<Pair<BrowserMission, Findings>>): EnrichmentOutcome {
+    fun enrich(
+        target: Target,
+        results: List<Pair<BrowserMission, Findings>>,
+        foundNobody: List<BrowserMission> = emptyList()
+    ): EnrichmentOutcome {
         if (results.isEmpty()) {
-            val prov = "no results parsed"
+            // A search that said it found nobody is noted as such: it ran, and there is no one.
+            val prov = if (foundNobody.isNotEmpty()) {
+                "nobody found by " + foundNobody.map(::modeLabel).distinct().joinToString(", ")
+            } else {
+                "no results parsed"
+            }
             return EnrichmentOutcome(target.copy(enrichmentProvenance = prov), verified = false, provenance = prov)
         }
 
@@ -562,6 +571,9 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
      * whole queue.
      */
     fun looksLikeBlock(html: String): Boolean = BotWall.suspected(html)
+
+    /** Whether a lookup page says it found nobody: a finished search with nothing in it. */
+    fun foundNobody(html: String): Boolean = BotWall.saysNoResults(html)
 
     /**
      * A bare age ("45", "Age 45") is true only on the day it was read; stored as-is it would be

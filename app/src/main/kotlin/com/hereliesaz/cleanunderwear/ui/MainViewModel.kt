@@ -885,8 +885,18 @@ class MainViewModel @Inject constructor(
                         return@runExclusive
                     }
 
+                    // A search that says it found nobody is noted and passed over, not parsed:
+                    // its page chrome would only be mistaken for a person.
+                    val nobody = withContext(Dispatchers.Default) {
+                        extracted.filter { (_, html) -> cbcEnricher.foundNobody(html) }.map { it.first }
+                    }
+                    if (nobody.isNotEmpty()) {
+                        com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log(
+                            "CYBG: nobody found for ${target.displayName} (${nobody.joinToString { it.label }})"
+                        )
+                    }
                     val collected = withContext(Dispatchers.Default) {
-                        extracted.mapNotNull { (mission, html) ->
+                        extracted.filterNot { (mission, _) -> mission in nobody }.mapNotNull { (mission, html) ->
                             val findings = cbcEnricher.parseFindings(html)
                             com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log(
                                 "CYBG parse ${mission.label}: ${cbcEnricher.describeParse(html, findings)}"
@@ -907,7 +917,7 @@ class MainViewModel @Inject constructor(
                     repository.inTransaction {
                     @Suppress("NAME_SHADOWING")
                     val target = repository.getTargetById(id) ?: return@inTransaction
-                    val enrichment = cbcEnricher.enrich(target, collected)
+                    val enrichment = cbcEnricher.enrich(target, collected, foundNobody = nobody)
                     if (enrichment.verified) {
                         filled++
                         repository.updateTarget(
