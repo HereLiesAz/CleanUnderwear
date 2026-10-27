@@ -10,4 +10,6 @@ permissions:
 
 jobs:
   label:
-    uses: HereLiesAz/workflows/.github/workflows/pr-labeler.yml@main
+    # Pinned to a commit: this runs with a write token on pull_request_target, so a moving ref
+    # would let any later change in that repo run here unseen. Bump deliberately.
+    uses: HereLiesAz/workflows/.github/workflows/pr-labeler.yml@e740e975543237d9b80147b18b32c9f035f45c80 # main, 2026-10-27

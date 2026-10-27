@@ -44,7 +44,7 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
     val activeColor = MaterialTheme.colorScheme.primary
     val highlightedColor = MaterialTheme.colorScheme.onSurfaceVariant
     val backgroundColor = MaterialTheme.colorScheme.background
-    var confirmLookUp by remember { mutableStateOf<Int?>(null) }
+    var confirmLookUp by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<Int?>(null) }
     val scope = rememberCoroutineScope()
 
     AzHostActivityLayout(

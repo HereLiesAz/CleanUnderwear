@@ -47,8 +47,8 @@ configurations.configureEach {
     }
 }
 
-// Room writes each schema version here (committed), so migrations can be tested against the
-// exact shape every released version had.
+// Room writes each schema version here (committed). Only 15 was ever exported, so MigrationTest
+// rebuilds 13 and 14 from it; from 16 on, each version's exact shape is kept for its migration test.
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
@@ -187,8 +187,6 @@ dependencies {
     implementation(libs.play.app.update.ktx)
 
     // On-Device AI
-    implementation(libs.litert)
-    implementation(libs.litert.tensorflow.ops)
 
     // Thumb-Driven Navigation
     implementation(libs.aznavrail)

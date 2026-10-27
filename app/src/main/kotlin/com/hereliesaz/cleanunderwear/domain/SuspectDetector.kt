@@ -15,15 +15,17 @@ enum class SuspicionKind { BAD_MERGE, STALE_NUMBER }
 enum class Lean { LIKELY_PROBLEM, TOSS_UP, LIKELY_FINE }
 
 /**
- * What to do about a case, when the evidence clearly tips one way. [label] is the button,
- * [done] the past tense for a summary ("separated").
+ * What to do about a case, when the evidence clearly tips one way. [label] is the button;
+ * [done] says what n of them did, for a summary ("2 separated", "1 number kept").
  */
-enum class Recommendation(val label: String, val done: String) {
-    SEPARATE("Separate them", "separated"),
-    KEEP_COMBINED("Keep them combined", "kept combined"),
-    USE_REPLACEMENT("Use the newer number", "switched to a newer number"),
-    MARK_OUT_OF_DATE("Mark the number out of date", "numbers marked out of date"),
-    KEEP_NUMBER("Keep the number", "numbers kept")
+enum class Recommendation(val label: String, private val one: String, private val many: String) {
+    SEPARATE("Separate them", "separated", "separated"),
+    KEEP_COMBINED("Keep them combined", "kept combined", "kept combined"),
+    USE_REPLACEMENT("Use the newer number", "switched to a newer number", "switched to a newer number"),
+    MARK_OUT_OF_DATE("Mark the number out of date", "number marked out of date", "numbers marked out of date"),
+    KEEP_NUMBER("Keep the number", "number kept", "numbers kept");
+
+    fun done(n: Int): String = "$n ${if (n == 1) one else many}"
 }
 
 /** One reason, in plain words, with how much it counts (roughly 1 = hint, 3+ = strong). */

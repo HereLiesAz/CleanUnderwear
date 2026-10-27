@@ -40,6 +40,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.repeatOnLifecycle
 import com.hereliesaz.aznavrail.AzButton
 import com.hereliesaz.aznavrail.AzLoad
 import com.hereliesaz.aznavrail.model.AzButtonShape
@@ -224,3 +225,40 @@ fun DetailRow(label: String, value: String) {
         Text(value, style = MaterialTheme.typography.bodyLarge)
     }
 }
+
+/**
+ * Whether this app may show notifications now: the Android 13+ permission and the app's own
+ * notification switch in system settings. Re-read whenever the screen comes back (from settings).
+ */
+@Composable
+fun rememberNotificationsAllowed(): Boolean {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    fun read() = androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled() &&
+        (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU ||
+            androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED)
+    val allowed = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(read()) }
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    androidx.compose.runtime.LaunchedEffect(lifecycle) {
+        lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) { allowed.value = read() }
+    }
+    return allowed.value
+}
+
+/** Opens this app's notification settings, where alerts can be allowed whatever was answered before. */
+fun openNotificationSettings(context: android.content.Context) {
+    val intent = android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+        .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+    try {
+        context.startActivity(intent)
+    } catch (e: android.content.ActivityNotFoundException) {
+        context.startActivity(
+            android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                .setData(android.net.Uri.fromParts("package", context.packageName, null))
+        )
+    }
+}
+
+/** The line an app with its alerts blocked shows wherever alerts are promised. */
+const val ALERTS_OFF = "Alerts are off for this app, so you won't be told when something turns up. Matches still appear in the list."
+

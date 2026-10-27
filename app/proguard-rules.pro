@@ -99,15 +99,6 @@
 -dontwarn kotlinx.coroutines.debug.**
 
 # ---------------------------------------------------------------------------
-# TensorFlow Lite (LiteRT)
-# ---------------------------------------------------------------------------
-# OnDeviceResearchAgent loads research_agent.tflite at runtime. The interpreter
-# resolves native ops by class-name reflection.
--keep class org.tensorflow.lite.** { *; }
--keep class com.google.ai.edge.litert.** { *; }
--dontwarn org.tensorflow.lite.**
-
-# ---------------------------------------------------------------------------
 # Jsoup
 # ---------------------------------------------------------------------------
 -keep class org.jsoup.** { *; }

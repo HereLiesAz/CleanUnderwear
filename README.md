@@ -1,6 +1,6 @@
 # CleanUnderwear
 
-**CleanUnderwear** keeps your contacts up to date and tells you when someone you know is arrested, taken into custody, or dies. It fills in missing details for the contacts you already have, then checks them daily against public arrest, inmate and obituary records.
+**CleanUnderwear** tells you when someone you know is arrested, taken into custody, or dies. It reads the contacts you already have into its own list, fills in missing details there (age, middle name), then checks them daily against public arrest, inmate and obituary records. Your phone's contacts themselves are never edited; the only thing written to them is a short status note.
 
 ---
 
@@ -10,7 +10,7 @@ The app works only from contacts you already have. It runs local-first:
 - **Lookups leave the device**: To check a record, the app sends a contact's first and last name to the public-records, obituary or news site being queried. Location is never in the request, but it decides *which* sites are asked (the county and state ones for the contact's ZIP, area code and address), so the set of sites that receive a name says roughly where the contact lives. See [What leaves your device](#-what-leaves-your-device).
 - **Daily checks**: A background worker checks public inmate rosters, court searches, obituaries and the news once a day, around the hour chosen in Settings (6 AM to 9 PM; 9 AM by default).
 - **Evidence-First Verification**: Every status change is backed by a "Verification Snippet"—the raw text found during the scan—allowing you to manually verify findings and correct false positives (e.g., surviving relatives mentioned in an obituary).
-- **Verify-before-merge enrichment**: **Fill in details** (the Resolve run) enriches every UNVERIFIED contact and every contact still missing an age or date of birth (archived contacts aside, up to the Contact limit) via cyberbackgroundchecks (age is what separates two people who share a name). For each one, the result is only merged into the Registry if the candidate card is corroborated as the *same person* (a unique-identifier phone/email lookup, or a matching name). A conflicting card — e.g. a recycled phone number returning a stranger — is rejected, never written into your address book, and the reason is recorded as the contact's enrichment provenance.
+- **Verify-before-merge enrichment**: **Fill in details** (the Resolve run) enriches every UNVERIFIED contact and every contact still missing an age or date of birth (archived contacts aside, up to the Contact limit) via cyberbackgroundchecks (age is what separates two people who share a name). For each one, the result is only merged into the Registry if the candidate card is corroborated as the *same person* (a unique-identifier phone/email lookup, or a matching name). A conflicting card — e.g. a recycled phone number returning a stranger — is rejected, never written into the app's list, and the reason is recorded as the contact's enrichment provenance. Verified details go into the app's list only; your phone's address book isn't changed.
 
 ---
 
@@ -105,7 +105,7 @@ Nothing else is uploaded. There is no analytics, advertising or tracking SDK. An
 
 ### Local Infrastructure
 - **WorkManager**: Runs the daily check.
-- **Room Database**: Persists the Registry (schema version 15, every migration from 1 registered, schemas exported to `app/schemas`; the upgrades from 13 and 14 are tested against them).
+- **Room Database**: Persists the Registry (schema version 15, every migration from 1 registered). Only version 15's schema was ever exported (`app/schemas/15.json`); `MigrationTest` rebuilds versions 13 and 14 from it by removing the columns later migrations added, and upgrades those. Older versions' upgrades are not tested. From now on each new version's schema is committed alongside it.
 - **Hilt**: Manages the dependency graph for scrapers, repositories, and use cases.
 
 ---

@@ -246,7 +246,7 @@ fun BrowserScreen(
     // System Back: on a page waiting for the user (a sign-in, a CAPTCHA), one page back in the
     // site, as in any browser; otherwise the same as the top bar's Stop, asked first so a stray
     // gesture doesn't end a run of lookups. Without this, Back closed the app mid-run.
-    var confirmStop by remember { mutableStateOf(false) }
+    var confirmStop by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     androidx.activity.compose.BackHandler {
         val view = webView
         if (paused && view?.canGoBack() == true) view.goBack() else confirmStop = true

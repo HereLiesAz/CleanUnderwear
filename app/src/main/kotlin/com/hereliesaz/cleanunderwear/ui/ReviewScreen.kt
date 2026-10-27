@@ -64,7 +64,7 @@ fun ReviewScreen(
     val alternates by viewModel.alternates.collectAsState()
     var kindFilter by rememberSaveable { mutableStateOf<SuspicionKind?>(null) }
     var expandedKey by rememberSaveable { mutableStateOf<String?>(null) }
-    var confirmAll by remember { mutableStateOf(false) }
+    var confirmAll by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { viewModel.refreshSuspects() }
 
@@ -98,6 +98,7 @@ fun ReviewScreen(
         ) {
             item {
                 Header(
+                    loading = state.loading,
                     total = report?.cases?.size ?: 0,
                     merges = report?.cases?.count { it.kind == SuspicionKind.BAD_MERGE } ?: 0,
                     stale = report?.cases?.count { it.kind == SuspicionKind.STALE_NUMBER } ?: 0,
@@ -132,6 +133,7 @@ fun ReviewScreen(
 
 @Composable
 private fun Header(
+    loading: Boolean,
     total: Int,
     merges: Int,
     stale: Int,
@@ -141,7 +143,16 @@ private fun Header(
     onApplyAll: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-        Text(if (total == 0) "Nothing to review" else "$total to review", style = MaterialTheme.typography.titleLarge)
+        Text(
+            when {
+                loading && total == 0 -> "Looking…"
+                total == 0 -> "Nothing to review"
+                else -> "$total to review"
+            },
+            style = MaterialTheme.typography.titleLarge
+        )
+        // A rescan after a decision keeps the last list on screen; say it's being refreshed.
+        if (loading && total > 0) LoadingCaption("Checking the list again…")
         AppCaption(
             "When the app finds two entries for one person it combines them. Here are the ones that may " +
                 "be two different people, or a number that's out of date. Tap one to see why, and why it might be fine."
@@ -181,20 +192,27 @@ private fun ApplyAllDialog(cases: List<SuspectCase>, onConfirm: () -> Unit, onDi
     ) {
         Recommendation.entries.forEach { rec ->
             byRec[rec]?.let { n -> Text("${rec.label}: $n", style = MaterialTheme.typography.bodyMedium) }
-            byRec[rec]?.let { AppCaption(whatItDoes(rec)) }
+            byRec[rec]?.let { AppCaption(whatItDoes(rec, bulk = true)) }
         }
         if (left > 0) AppCaption("$left too close to call ${if (left == 1) "is" else "are"} left for you.")
         AppCaption("Only this app's list changes; your phone's contacts aren't touched. You can stop partway.")
     }
 }
 
-/** One line on what a recommendation does, used on its card and in the confirmation. */
-private fun whatItDoes(rec: Recommendation): String = when (rec) {
+/**
+ * One line on what a recommendation does: on its card, or for [bulk] in the Apply-all
+ * confirmation. They differ for one action: marking a number out of date on a card also
+ * searches for a current one; in bulk it doesn't (that search needs the browser, contact by contact).
+ */
+private fun whatItDoes(rec: Recommendation, bulk: Boolean = false): String = when (rec) {
     Recommendation.SEPARATE -> "The combined entry comes back as its own contact, and the two won't be combined again."
     Recommendation.KEEP_COMBINED -> "It stays one contact and isn't raised here again."
     Recommendation.USE_REPLACEMENT -> "The contact's number becomes the newer one found on its other entry."
-    Recommendation.MARK_OUT_OF_DATE ->
-        "The number stops being used to check or look the contact up. Searching for a current one is done from each card."
+    Recommendation.MARK_OUT_OF_DATE -> if (bulk) {
+        "The number stops being used to check or look the contact up. Searching for a current one is done from each card, afterwards."
+    } else {
+        "The number stops being used to check or look the contact up, and CyberBackgroundChecks is searched for a current one."
+    }
     Recommendation.KEEP_NUMBER -> "The number stays in use and isn't raised here again."
 }
 
@@ -220,7 +238,7 @@ private fun SuspectCard(
     onToggle: () -> Unit,
     viewModel: MainViewModel
 ) {
-    var pending by remember { mutableStateOf<Pending?>(null) }
+    var pending by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<Pending?>(null) }
     AppCard(emphasis = case.lean == Lean.LIKELY_PROBLEM) {
         Column(
             Modifier

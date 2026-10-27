@@ -5,62 +5,25 @@ import com.hereliesaz.cleanunderwear.util.DiagnosticLogger
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import dagger.hilt.android.qualifiers.ApplicationContext
-import org.tensorflow.lite.Interpreter
-import org.tensorflow.lite.flex.FlexDelegate
-import java.io.FileInputStream
-import java.nio.MappedByteBuffer
-import java.nio.channels.FileChannel
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Identity / nickname helper. Provides:
- *  - Nickname expansion for first-name matching ([getNicknames])
- *  - Heuristic + ML name validation ([validatePersonName])
+ * Name helpers, on the device:
+ *  - nickname variants for duplicate detection ([getNicknames]), from `nicknames.json`;
+ *  - whether a contact's display name reads like a person ([validatePersonName]).
  *
- * URL discovery (the search-engine-backed "find the inmate roster page"
- * machinery) was deleted in the source-catalog-only redesign — sources now
- * come from the curated [SourceCatalog]. Identity enrichment for UNVERIFIED
- * contacts is user-initiated via the in-app browser flow, not run from the
- * auto pipeline.
+ * The name check used to OR a TensorFlow Lite score into the rules below. That model was the one
+ * the repo's training script builds (scripts/train_research_ai.py): a classifier of official
+ * sheriff and government websites, not of names, so its score meant nothing for a name and it
+ * could only wave through what the rules had rejected. It's gone, with the LiteRT runtime it
+ * pulled into every build.
  */
 @Singleton
 class OnDeviceResearchAgent @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    companion object {
-        init {
-            try {
-                System.loadLibrary("tensorflowlite_flex_jni")
-            } catch (e: Throwable) {
-                // Native flex library loading handled by delegate if this fails
-            }
-        }
-    }
-
     private var nicknames: Map<String, List<String>> = emptyMap()
-
-    /**
-     * Loaded on first use, not when the app starts: mapping the model and building the Flex
-     * delegate is slow, and the first user is a background import, not the main thread.
-     */
-    private val interpreter: Interpreter? by lazy {
-        try {
-            val modelBuffer = loadModelFile("research_agent.tflite")
-            val options = Interpreter.Options().apply {
-                addDelegate(FlexDelegate())
-            }
-            Interpreter(modelBuffer, options).also {
-                DiagnosticLogger.log("Intelligence Agent: Model loaded successfully with Flex support.")
-            }
-        } catch (e: Exception) {
-            DiagnosticLogger.log(
-                "Intelligence Agent Error: Failed to load LiteRT model. ${e.message}",
-                DiagnosticLogger.LogEntry.LogLevel.ERROR
-            )
-            null
-        }
-    }
 
     init {
         loadAssets()
@@ -75,7 +38,7 @@ class OnDeviceResearchAgent @Inject constructor(
             nicknames = gson.fromJson(nicknameJson, nicknameType)
         } catch (e: Exception) {
             DiagnosticLogger.log(
-                "Intelligence Agent: Failed to load nicknames asset. ${e.message}",
+                "Name helpers: failed to load nicknames. ${e.message}",
                 DiagnosticLogger.LogEntry.LogLevel.ERROR
             )
         }
@@ -86,14 +49,12 @@ class OnDeviceResearchAgent @Inject constructor(
     }
 
     /**
-     * Heuristic + ML check that [text] reads like a person name. Used by the
-     * harvesters when classifying contact fields, not by the scrape loop.
+     * Whether [text] reads like a person's name: no digits; two or more words, or one word of
+     * letters longer than one character; and no business word ("Pizza", "Customer Service").
+     * Used by the harvesters when classifying contacts, not by the records check.
      *
-     * Logging note: a single registry sweep runs this hundreds of times, and
-     * the in-app log buffer is only 500 entries — per-rejection logging here
-     * used to flush every other diagnostic off the operator's screen. Callers
-     * that want a per-run trail should accumulate counts and emit a summary
-     * themselves.
+     * Logging note: a single registry sweep runs this hundreds of times, and the in-app log
+     * buffer is only 500 entries, so it logs nothing; callers summarise.
      */
     fun validatePersonName(text: String): Boolean {
         if (text.isBlank() || text == "Unnamed Entity") return false
@@ -103,8 +64,6 @@ class OnDeviceResearchAgent @Inject constructor(
         val hasNoDigits = text.none { it.isDigit() }
         val looksLikeName = (hasSpace || (text.length > 1 && isAlphaish)) && hasNoDigits
 
-        val score = scoreWithModel(text)
-
         val serviceKeywords = listOf(
             "customer", "service", "support", "help", "bank",
             "office", "pizza", "taxi", "delivery", "store"
@@ -113,38 +72,6 @@ class OnDeviceResearchAgent @Inject constructor(
         val words = text.lowercase().split(Regex("[^a-z]+")).toSet()
         val isService = serviceKeywords.any { it in words }
 
-        return (score > 0.3f || looksLikeName) && !isService
-    }
-
-    private fun loadModelFile(fileName: String): MappedByteBuffer {
-        val fileDescriptor = context.assets.openFd(fileName)
-        val inputStream = FileInputStream(fileDescriptor.fileDescriptor)
-        val fileChannel = inputStream.channel
-        return fileChannel.map(
-            FileChannel.MapMode.READ_ONLY,
-            fileDescriptor.startOffset,
-            fileDescriptor.declaredLength
-        )
-    }
-
-    private fun scoreWithModel(text: String): Float {
-        val currentInterpreter = interpreter ?: return 1.0f
-        // An Interpreter isn't thread-safe; one inference at a time.
-        return synchronized(this) { runModel(currentInterpreter, text) }
-    }
-
-    private fun runModel(currentInterpreter: Interpreter, text: String): Float {
-        val input = arrayOf(text)
-        val output = Array(1) { FloatArray(1) }
-        return try {
-            currentInterpreter.run(input, output)
-            output[0][0]
-        } catch (e: Exception) {
-            DiagnosticLogger.log(
-                "Inference Error: ${e.message}",
-                DiagnosticLogger.LogEntry.LogLevel.ERROR
-            )
-            0.5f
-        }
+        return looksLikeName && !isService
     }
 }

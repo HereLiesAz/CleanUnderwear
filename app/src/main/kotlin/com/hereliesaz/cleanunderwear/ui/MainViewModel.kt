@@ -400,7 +400,10 @@ class MainViewModel @Inject constructor(
     /** Undo the merge behind [case]; the absorbed contact comes back as its own row. */
     fun splitMerge(case: SuspectCase) {
         applyVerdict(case, rescan = true) {
-            case.ledgerId?.let { suspectReview.split(it) }
+            if (case.ledgerId?.let { suspectReview.split(it) } != true) {
+                post("Couldn't separate ${case.title}: that entry changed since the list was made. The list was refreshed.")
+                return@applyVerdict
+            }
             // Undoing a merge can take back a number the survivor had only through it; look one
             // up, reading the survivor after the split has landed.
             val survivor = repository.getTargetById(case.targetId)
@@ -439,8 +442,12 @@ class MainViewModel @Inject constructor(
                 val done = linkedMapOf<com.hereliesaz.cleanunderwear.domain.Recommendation, Int>()
                 val separated = mutableSetOf<Int>()
                 var setAside = 0
-                fun lines() = done.map { (rec, n) -> "$n ${rec.done}" } +
-                    listOfNotNull(setAside.takeIf { it > 0 }?.let { "$it left for a fresh look after separating" })
+                var notApplied = 0
+                fun lines() = done.map { (rec, n) -> rec.done(n) } +
+                    listOfNotNull(
+                        setAside.takeIf { it > 0 }?.let { "$it left for a fresh look after separating" },
+                        notApplied.takeIf { it > 0 }?.let { "$it couldn't be done: the contact changed since the list was made" }
+                    )
                 try {
                     begin(OperationState(description = "Applying recommendations…", progress = 0f))
                     for ((i, case) in todo.withIndex()) {
@@ -454,18 +461,18 @@ class MainViewModel @Inject constructor(
                             setAside++
                             continue
                         }
-                        when (rec) {
-                            com.hereliesaz.cleanunderwear.domain.Recommendation.SEPARATE -> {
-                                case.ledgerId?.let { suspectReview.split(it) }
-                                separated += case.targetId
-                            }
+                        // Only what actually happened is counted: a merge already undone, or a
+                        // number no longer on the contact, is reported as not done.
+                        val applied = when (rec) {
+                            com.hereliesaz.cleanunderwear.domain.Recommendation.SEPARATE ->
+                                (case.ledgerId?.let { suspectReview.split(it) } == true).also { if (it) separated += case.targetId }
                             com.hereliesaz.cleanunderwear.domain.Recommendation.KEEP_COMBINED ->
-                                case.ledgerId?.let { suspectReview.keepMerged(it) }
+                                case.ledgerId?.let { suspectReview.keepMerged(it); true } == true
                             com.hereliesaz.cleanunderwear.domain.Recommendation.USE_REPLACEMENT -> suspectReview.adoptReplacement(case)
-                            com.hereliesaz.cleanunderwear.domain.Recommendation.MARK_OUT_OF_DATE -> suspectReview.markStale(case)
-                            com.hereliesaz.cleanunderwear.domain.Recommendation.KEEP_NUMBER -> suspectReview.dismiss(case)
+                            com.hereliesaz.cleanunderwear.domain.Recommendation.MARK_OUT_OF_DATE -> { suspectReview.markStale(case); true }
+                            com.hereliesaz.cleanunderwear.domain.Recommendation.KEEP_NUMBER -> { suspectReview.dismiss(case); true }
                         }
-                        done[rec] = (done[rec] ?: 0) + 1
+                        if (applied) done[rec] = (done[rec] ?: 0) + 1 else notApplied++
                     }
                     _operationState.value = OperationState(isRunning = false)
                     post(lines().joinToString("; ").replaceFirstChar { it.uppercase() } + ".")
@@ -752,12 +759,13 @@ class MainViewModel @Inject constructor(
         _showManualEntryDialog.value = show
     }
 
+    /**
+     * Adds one person. A single insert, so it doesn't take the busy screen (which belongs to
+     * whatever longer operation may be running, and its Cancel); the next read of contacts
+     * folds the row in with any duplicate.
+     */
     fun addManualTarget(name: String, phone: String?, email: String?) {
         viewModelScope.launch {
-            begin(OperationState(description = "Adding $name…", progress = -1f))
-            
-            // Re-use de-duplication and AI validation logic via UseCase if possible, 
-            // or just build a single Target and insert.
             val target = Target(
                 displayName = name,
                 phoneNumber = phone,
@@ -777,8 +785,6 @@ class MainViewModel @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 post("Couldn't add $name. Try again.")
-            } finally {
-                _operationState.value = OperationState(isRunning = false)
             }
         }
     }
@@ -1177,6 +1183,10 @@ class MainViewModel @Inject constructor(
         when (workInfo?.state) {
             androidx.work.WorkInfo.State.RUNNING -> {
                 if (manualCheckCancelled) return
+                // The worker reports once it has the pipeline; until then it is queued behind
+                // whatever holds the screen (a contact read), which keeps it.
+                val started = workInfo.progress.getString(ScrapingWorker.DESCRIPTION) != null
+                if (!started && _operationState.value.isRunning) return
                 if (!_operationState.value.isRunning) _operationInBackground.value = false
                 // The check runs in WorkManager, not here: Cancel stops the work itself.
                 cancelRunning = {

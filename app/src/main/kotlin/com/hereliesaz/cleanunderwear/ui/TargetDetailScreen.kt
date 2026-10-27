@@ -47,7 +47,7 @@ fun TargetDetailScreen(
     onNavigateBack: () -> Unit
 ) {
     val context = LocalContext.current
-    var confirming by remember { mutableStateOf<Verdict?>(null) }
+    var confirming by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<Verdict?>(null) }
     val name = target.displayName
 
     Scaffold(
