@@ -2,7 +2,6 @@ package com.hereliesaz.cleanunderwear.ui
 
 import android.app.Application
 import android.content.Context
-import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -246,6 +245,19 @@ class MainViewModel @Inject constructor(
         ANYWHERE
     }
 
+    /**
+     * Every operation runs under this: an error nothing else caught (a bad page, a full disk) is
+     * logged and reported in a line, and the busy screen cleared, instead of closing the app.
+     * Cancellation never reaches it.
+     */
+    private val failSafe = kotlinx.coroutines.CoroutineExceptionHandler { _, e ->
+        com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log(
+            "Operation failed: ${e.javaClass.simpleName}", com.hereliesaz.cleanunderwear.util.DiagnosticLogger.LogEntry.LogLevel.ERROR
+        )
+        _operationState.value = OperationState(isRunning = false)
+        post("Something went wrong and that stopped. What was done before is kept; the activity log has details.")
+    }
+
     /** Stops the operation now running; set by [begin]. */
     private var cancelRunning: (() -> Unit)? = null
 
@@ -354,7 +366,7 @@ class MainViewModel @Inject constructor(
         val now = System.currentTimeMillis()
         if (!manual && now - prefs.getLong("last_update_check", 0L) < AUTO_UPDATE_CHECK_INTERVAL_MS) return
         if (_updateState.value.checking) return
-        viewModelScope.launch {
+        viewModelScope.launch(failSafe) {
             _updateState.value = _updateState.value.copy(checking = true)
             val result = updateChecker.check()
             // A failed check (offline, rate-limited) doesn't count: the next launch tries again.
@@ -389,7 +401,7 @@ class MainViewModel @Inject constructor(
 
     /** Re-scan for bad merges and stale numbers. Read-only; changes nothing. */
     fun refreshSuspects() {
-        viewModelScope.launch {
+        viewModelScope.launch(failSafe) {
             _reviewState.value = _reviewState.value.copy(loading = true)
             val report = pipelineCoordinator.runExclusive("suspect-scan") {
                 withContext(Dispatchers.Default) { suspectReview.find() }
@@ -401,7 +413,10 @@ class MainViewModel @Inject constructor(
     /** Undo the merge behind [case]; the absorbed contact comes back as its own row. */
     fun splitMerge(case: SuspectCase) {
         applyVerdict(case, rescan = true) {
-            case.ledgerId?.let { suspectReview.split(it) }
+            if (case.ledgerId?.let { suspectReview.split(it) } != true) {
+                post("Couldn't separate ${case.title}: that entry changed since the list was made. The list was refreshed.")
+                return@applyVerdict
+            }
             // Undoing a merge can take back a number the survivor had only through it; look one
             // up, reading the survivor after the split has landed.
             val survivor = repository.getTargetById(case.targetId)
@@ -435,13 +450,17 @@ class MainViewModel @Inject constructor(
         val todo = cases.filter { it.recommendation != null }
             .sortedBy { if (it.kind == com.hereliesaz.cleanunderwear.domain.SuspicionKind.BAD_MERGE) 0 else 1 }
         if (todo.isEmpty()) return
-        viewModelScope.launch {
+        viewModelScope.launch(failSafe) {
             pipelineCoordinator.runExclusive("review-all") {
                 val done = linkedMapOf<com.hereliesaz.cleanunderwear.domain.Recommendation, Int>()
                 val separated = mutableSetOf<Int>()
                 var setAside = 0
-                fun lines() = done.map { (rec, n) -> "$n ${rec.done}" } +
-                    listOfNotNull(setAside.takeIf { it > 0 }?.let { "$it left for a fresh look after separating" })
+                var notApplied = 0
+                fun lines() = done.map { (rec, n) -> rec.done(n) } +
+                    listOfNotNull(
+                        setAside.takeIf { it > 0 }?.let { "$it left for a fresh look after separating" },
+                        notApplied.takeIf { it > 0 }?.let { "$it couldn't be done: the contact changed since the list was made" }
+                    )
                 try {
                     begin(OperationState(description = "Applying recommendations…", progress = 0f))
                     for ((i, case) in todo.withIndex()) {
@@ -455,18 +474,18 @@ class MainViewModel @Inject constructor(
                             setAside++
                             continue
                         }
-                        when (rec) {
-                            com.hereliesaz.cleanunderwear.domain.Recommendation.SEPARATE -> {
-                                case.ledgerId?.let { suspectReview.split(it) }
-                                separated += case.targetId
-                            }
+                        // Only what actually happened is counted: a merge already undone, or a
+                        // number no longer on the contact, is reported as not done.
+                        val applied = when (rec) {
+                            com.hereliesaz.cleanunderwear.domain.Recommendation.SEPARATE ->
+                                (case.ledgerId?.let { suspectReview.split(it) } == true).also { if (it) separated += case.targetId }
                             com.hereliesaz.cleanunderwear.domain.Recommendation.KEEP_COMBINED ->
-                                case.ledgerId?.let { suspectReview.keepMerged(it) }
+                                case.ledgerId?.let { suspectReview.keepMerged(it); true } == true
                             com.hereliesaz.cleanunderwear.domain.Recommendation.USE_REPLACEMENT -> suspectReview.adoptReplacement(case)
-                            com.hereliesaz.cleanunderwear.domain.Recommendation.MARK_OUT_OF_DATE -> suspectReview.markStale(case)
-                            com.hereliesaz.cleanunderwear.domain.Recommendation.KEEP_NUMBER -> suspectReview.dismiss(case)
+                            com.hereliesaz.cleanunderwear.domain.Recommendation.MARK_OUT_OF_DATE -> { suspectReview.markStale(case); true }
+                            com.hereliesaz.cleanunderwear.domain.Recommendation.KEEP_NUMBER -> { suspectReview.dismiss(case); true }
                         }
-                        done[rec] = (done[rec] ?: 0) + 1
+                        if (applied) done[rec] = (done[rec] ?: 0) + 1 else notApplied++
                     }
                     _operationState.value = OperationState(isRunning = false)
                     post(lines().joinToString("; ").replaceFirstChar { it.uppercase() } + ".")
@@ -490,7 +509,7 @@ class MainViewModel @Inject constructor(
      * ever started by a review verdict or the "Look up alternates" button.
      */
     fun findAlternates(targetId: Int, stalePhone: String?) {
-        viewModelScope.launch {
+        viewModelScope.launch(failSafe) {
             pipelineCoordinator.runExclusive("find-alternates") {
                 resolveCancellationRequested = false
                 try {
@@ -539,12 +558,14 @@ class MainViewModel @Inject constructor(
 
     /** Write the offered number and/or address onto the contact. Only fills what the lookup found. */
     fun applyAlternates(info: AlternateInfo) {
-        viewModelScope.launch {
+        viewModelScope.launch(failSafe) {
             pipelineCoordinator.runExclusive("apply-alternates") {
                 val target = repository.getTargetById(info.targetId) ?: return@runExclusive
                 repository.updateTarget(
                     target.copy(
                         phoneNumber = info.phone ?: target.phoneNumber,
+                        // The replaced number is remembered (see SuspectReview.adoptReplacement).
+                        stalePhone = if (info.phone != null && info.phone != target.phoneNumber) target.phoneNumber ?: target.stalePhone else target.stalePhone,
                         areaCode = info.phone
                             ?.let { com.hereliesaz.cleanunderwear.match.StringSimilarity.nanpAreaCode(it) }
                             ?: target.areaCode,
@@ -563,7 +584,7 @@ class MainViewModel @Inject constructor(
 
     /** Runs a review verdict alongside the pipeline's other writers, then drops the case from the queue. */
     private fun applyVerdict(case: SuspectCase, rescan: Boolean = false, action: suspend () -> Unit) {
-        viewModelScope.launch {
+        viewModelScope.launch(failSafe) {
             pipelineCoordinator.runExclusive("review-verdict") { action() }
             val state = _reviewState.value
             _reviewState.value = state.copy(
@@ -579,7 +600,7 @@ class MainViewModel @Inject constructor(
      * that changes the status) is refused if the match itself changed since the user saw it.
      */
     fun updateTarget(shown: Target, change: (Target) -> Target) {
-        viewModelScope.launch {
+        viewModelScope.launch(failSafe) {
             val verdict = change(shown).status != shown.status
             val written = repository.inTransaction {
                 val current = repository.getTargetById(shown.id) ?: return@inTransaction null
@@ -600,14 +621,14 @@ class MainViewModel @Inject constructor(
     }
 
     fun ignoreTarget(id: Int) {
-        viewModelScope.launch {
+        viewModelScope.launch(failSafe) {
             repository.ignore(id, System.currentTimeMillis())
             syncNote(id)
         }
     }
 
     fun restoreTarget(id: Int) {
-        viewModelScope.launch {
+        viewModelScope.launch(failSafe) {
             repository.unignore(id, System.currentTimeMillis())
             syncNote(id)
         }
@@ -710,14 +731,28 @@ class MainViewModel @Inject constructor(
      * the notes it wrote into phone-book contacts, and site sign-ins. Settings are kept.
      */
     fun deleteEverything() {
-        viewModelScope.launch {
+        viewModelScope.launch(failSafe) {
             pipelineCoordinator.runExclusive("delete-everything") {
                 // Half a deletion is worse than none; it's quick, so it runs to the end.
                 begin(OperationState(description = "Deleting…", progress = -1f, cancellable = false))
                 val notes = withContext(Dispatchers.IO) { contactSyncer.removeAllBlocks() }
                 repository.wipeAll()
+                // What the app holds in memory goes too: the activity log names contacts, and the
+                // Review list and any lookup offer are about the list just deleted.
+                com.hereliesaz.cleanunderwear.util.DiagnosticLogger.clear()
+                _reviewState.value = ReviewState()
+                _alternates.value = null
                 _operationState.value = OperationState(isRunning = false)
-                post("Deleted the app's data and its notes on $notes contact${if (notes == 1) "" else "s"}.")
+                fun contacts(n: Int) = "$n contact${if (n == 1) "" else "s"}"
+                post(
+                    when {
+                        notes.noAccess -> "Deleted the app's data. The notes it added to your contacts weren't removed: " +
+                            "the app can't see your contacts. Allow contacts access and run Delete everything again to remove them."
+                        notes.failed > 0 -> "Deleted the app's data and the notes on ${contacts(notes.removed)}. " +
+                            "The notes on ${contacts(notes.failed)} couldn't be changed; run Delete everything again to retry."
+                        else -> "Deleted the app's data and its notes on ${contacts(notes.removed)}."
+                    }
+                )
             }
             signOutOfSites()
         }
@@ -737,12 +772,13 @@ class MainViewModel @Inject constructor(
         _showManualEntryDialog.value = show
     }
 
+    /**
+     * Adds one person. A single insert, so it doesn't take the busy screen (which belongs to
+     * whatever longer operation may be running, and its Cancel); the next read of contacts
+     * folds the row in with any duplicate.
+     */
     fun addManualTarget(name: String, phone: String?, email: String?) {
-        viewModelScope.launch {
-            begin(OperationState(description = "Adding $name…", progress = -1f))
-            
-            // Re-use de-duplication and AI validation logic via UseCase if possible, 
-            // or just build a single Target and insert.
+        viewModelScope.launch(failSafe) {
             val target = Target(
                 displayName = name,
                 phoneNumber = phone,
@@ -762,24 +798,17 @@ class MainViewModel @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 post("Couldn't add $name. Try again.")
-            } finally {
-                _operationState.value = OperationState(isRunning = false)
             }
         }
     }
 
     fun sweepContacts() {
-        val activeSources = mutableSetOf<String>()
-        if (_googleFilter.value != false) activeSources.add("Google")
-        if (_metaFilter.value != false) activeSources.add("Meta")
-        if (_appleFilter.value != false) activeSources.add("Apple")
-        if (_deviceFilter.value != false) activeSources.add("Device")
-
-        Log.d("MainViewModel", "Sweeping contacts with sources: $activeSources")
+        // Every account, always: the list's filter chips change what is shown, never what is
+        // read (hiding Google contacts from view used to skip them on the next import).
         // A sweep already queued or running covers this request too.
         if (sweepPending) return
         sweepPending = true
-        viewModelScope.launch {
+        viewModelScope.launch(failSafe) {
             try {
                 // Serialised with the daily check and every other job that writes the registry,
                 // and run off the main thread: harvest, name checks and dedup are heavy.
@@ -795,9 +824,12 @@ class MainViewModel @Inject constructor(
                         }
 
                         // 1. Ingest raw data from enabled sources
-                        harvestContactsUseCase(activeSources)
+                        val harvest = harvestContactsUseCase()
                         val read = repository.getTargetsPaged(limit = Int.MAX_VALUE, offset = 0).size
-                        note("$read contact${if (read == 1) "" else "s"} in the list (${(read - before).coerceAtLeast(0)} new)")
+                        note("$read contact${if (read == 1) "" else "s"} in the list (${(read - before + harvest.removed).coerceAtLeast(0)} new)")
+                        if (harvest.removed > 0) {
+                            note("${harvest.removed} no longer in your phone's contacts, so no longer checked")
+                        }
 
                         // 2. Consolidate and deduplicate the full registry
                         _operationState.value = _operationState.value.copy(description = "Merging duplicates...", progress = 0.4f)
@@ -838,7 +870,7 @@ class MainViewModel @Inject constructor(
     @Volatile private var sweepPending = false
 
     fun harvestFacebook() {
-        viewModelScope.launch {
+        viewModelScope.launch(failSafe) {
             pipelineCoordinator.runExclusive("facebook-harvest") {
                 try {
                     begin(OperationState(
@@ -894,6 +926,9 @@ class MainViewModel @Inject constructor(
         return ids.chunked(500)
             .flatMap { repository.getTargetsByIds(it) }
             .filter { it.status == TargetStatus.UNVERIFIED || it.dateOfBirth.isNullOrBlank() }
+            // A contact the site already said it has nobody for isn't looked up again in every
+            // run; "Look up details" on its own screen still tries it.
+            .filterNot { it.enrichmentProvenance?.startsWith("nobody found by") == true }
     }
 
     fun resolveUnverifiedBatch() = resolveContacts { resolveCandidates() }
@@ -910,8 +945,17 @@ class MainViewModel @Inject constructor(
     /** Looks up one contact's missing details, from its detail screen. */
     fun resolveOne(id: Int) = resolveContacts { listOfNotNull(repository.getTargetById(id)) }
 
+    @Volatile private var resolvePending = false
+
     private fun resolveContacts(select: suspend () -> List<Target>) {
-        viewModelScope.launch {
+        // One run of lookups at a time; a tap while one waits or runs doesn't queue another.
+        if (resolvePending) {
+            post("A lookup is already running or waiting to start.")
+            return
+        }
+        resolvePending = true
+        viewModelScope.launch(failSafe) {
+            try {
             pipelineCoordinator.runExclusive("user-enrichment") {
                 resolveCancellationRequested = false
                 try {
@@ -1059,6 +1103,9 @@ class MainViewModel @Inject constructor(
                     }
                 }
             }
+            } finally {
+                resolvePending = false
+            }
         }
     }
 
@@ -1115,7 +1162,7 @@ class MainViewModel @Inject constructor(
      * service needs it, and imports what [parse] reads from the page it hands back.
      */
     private fun harvestInBrowser(key: String, mission: BrowserMission, what: String, hosts: List<String>, parse: (String) -> List<Target>) {
-        viewModelScope.launch {
+        viewModelScope.launch(failSafe) {
             pipelineCoordinator.runExclusive(key) {
                 try {
                     begin(OperationState(description = "Importing $what. Sign in if asked.", progress = -1f))
@@ -1142,7 +1189,7 @@ class MainViewModel @Inject constructor(
         if (watchingManualCheck) return
         watchingManualCheck = true
 
-        viewModelScope.launch {
+        viewModelScope.launch(failSafe) {
             try {
                 workManager.getWorkInfosForUniqueWorkFlow("manual_check")
                     // This run, or one already in progress that the tap joined; never an old result.
@@ -1164,6 +1211,10 @@ class MainViewModel @Inject constructor(
         when (workInfo?.state) {
             androidx.work.WorkInfo.State.RUNNING -> {
                 if (manualCheckCancelled) return
+                // The worker reports once it has the pipeline; until then it is queued behind
+                // whatever holds the screen (a contact read), which keeps it.
+                val started = workInfo.progress.getString(ScrapingWorker.DESCRIPTION) != null
+                if (!started && _operationState.value.isRunning) return
                 if (!_operationState.value.isRunning) _operationInBackground.value = false
                 // The check runs in WorkManager, not here: Cancel stops the work itself.
                 cancelRunning = {

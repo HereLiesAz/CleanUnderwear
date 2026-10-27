@@ -34,7 +34,8 @@ object BotWall {
         "\\b(no (results|records|matches|matching (records|results)|people|persons|inmates|offenders|cases) (were )?found" +
             "|no results( for| match)|0 (results|records|matches)( found)?|returned no (results|records)" +
             "|did not (return|match|find) any|we (could not|couldn't|can't|cannot|did not|didn't) find|nothing (was )?found" +
-            "|there (are|were) no (results|records|matches))\\b",
+            "|there (are|were) no (results|records|matches|articles|obituaries)" +
+            "|no (articles|obituaries) (were )?found|did not find any (obituaries|results|records))\\b",
         RegexOption.IGNORE_CASE
     )
 

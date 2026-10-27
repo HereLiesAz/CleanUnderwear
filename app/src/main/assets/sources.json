@@ -1207,6 +1207,7 @@
         {
           "id": "ar_benton_jail",
           "label": "Benton County AR (jail)",
+          "county": "Benton County, AR",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://benton-so-ar.zuercherportal.com/api/portal/inmates/load",
@@ -1232,6 +1233,7 @@
         {
           "id": "ar_pulaski_jail",
           "label": "Pulaski County AR (jail)",
+          "county": "Pulaski County, AR",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://pulaski-so-ar.zuercherportal.com/api/portal/inmates/load",
@@ -1302,6 +1304,7 @@
         {
           "id": "ca_sutter_jail",
           "label": "Sutter County CA (jail)",
+          "county": "Sutter County, CA",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://sutter-so-ca.zuercherportal.com/api/portal/inmates/load",
@@ -1362,6 +1365,7 @@
         {
           "id": "co_gilpin_jail",
           "label": "Gilpin County CO (jail)",
+          "county": "Gilpin County, CO",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://gilpin-so-co.zuercherportal.com/api/portal/inmates/load",
@@ -1454,6 +1458,7 @@
         {
           "id": "fl_walton_jail",
           "label": "Walton County FL (jail)",
+          "county": "Walton County, FL",
           "kind": "QUERY_TEMPLATE",
           "method": "GET",
           "url_template": "https://nwscorrections.waltonso.org/NewWorld.InmateInquiry/WaltonCounty?Name={last}&InCustody=True&SubjectNumber=&BookingNumber=&BookingFromDate=&BookingToDate=",
@@ -1477,6 +1482,7 @@
         {
           "id": "ga_bartow_jail",
           "label": "Bartow County GA (jail)",
+          "county": "Bartow County, GA",
           "kind": "QUERY_TEMPLATE",
           "method": "GET",
           "url_template": "https://jailroster.bc-cville.org/NewWorld.InmateInquiry/bartow?Name={last}&InCustody=True&SubjectNumber=&BookingNumber=&BookingFromDate=&BookingToDate=",
@@ -1494,6 +1500,7 @@
         {
           "id": "ga_catoosa_jail",
           "label": "Catoosa County GA (jail)",
+          "county": "Catoosa County, GA",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://catoosa-so-ga.zuercherportal.com/api/portal/inmates/load",
@@ -1519,6 +1526,7 @@
         {
           "id": "ga_lumpkin_jail",
           "label": "Lumpkin County GA (jail)",
+          "county": "Lumpkin County, GA",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://lumpkin-so-ga.zuercherportal.com/api/portal/inmates/load",
@@ -1544,6 +1552,7 @@
         {
           "id": "ga_houston_jail",
           "label": "Houston County GA (jail)",
+          "county": "Houston County, GA",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://houston-so-ga.zuercherportal.com/api/portal/inmates/load",
@@ -1569,6 +1578,7 @@
         {
           "id": "ga_toombs_jail",
           "label": "Toombs County GA (jail)",
+          "county": "Toombs County, GA",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://toombs-so-ga.zuercherportal.com/api/portal/inmates/load",
@@ -1621,6 +1631,7 @@
         {
           "id": "id_washington_jail",
           "label": "Washington County ID (jail)",
+          "county": "Washington County, ID",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://washington-so-id.zuercherportal.com/api/portal/inmates/load",
@@ -1652,6 +1663,7 @@
         {
           "id": "il_stephenson_jail",
           "label": "Stephenson County IL (jail)",
+          "county": "Stephenson County, IL",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://stephenson-so-il.zuercherportal.com/api/portal/inmates/load",
@@ -1677,6 +1689,7 @@
         {
           "id": "il_whiteside_jail",
           "label": "Whiteside County IL (jail)",
+          "county": "Whiteside County, IL",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://whiteside-so-il.zuercherportal.com/api/portal/inmates/load",
@@ -1783,6 +1796,7 @@
         {
           "id": "ia_marshall_jail",
           "label": "Marshall County IA (jail)",
+          "county": "Marshall County, IA",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://marshall-so-ia.zuercherportal.com/api/portal/inmates/load",
@@ -1814,6 +1828,7 @@
         {
           "id": "ks_atchison_jail",
           "label": "Atchison County KS (jail)",
+          "county": "Atchison County, KS",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://atchison-so-ks.zuercherportal.com/api/portal/inmates/load",
@@ -1854,6 +1869,7 @@
         {
           "id": "la_acadia_jail",
           "label": "Acadia Parish LA (jail)",
+          "county": "Acadia Parish, LA",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://acadia-so-la.zuercherportal.com/api/portal/inmates/load",
@@ -1879,6 +1895,7 @@
         {
           "id": "la_lafourche_jail",
           "label": "Lafourche Parish LA (jail)",
+          "county": "Lafourche Parish, LA",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://lafourche-so-la.zuercherportal.com/api/portal/inmates/load",
@@ -1904,6 +1921,7 @@
         {
           "id": "la_stcharles_jail",
           "label": "St. Charles Parish LA (jail)",
+          "county": "St. Charles Parish, LA",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://stcharles-so-la.zuercherportal.com/api/portal/inmates/load",
@@ -1935,6 +1953,7 @@
         {
           "id": "me_androscoggin_jail",
           "label": "Androscoggin County ME (jail)",
+          "county": "Androscoggin County, ME",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://androscoggin-so-me.zuercherportal.com/api/portal/inmates/load",
@@ -1960,6 +1979,7 @@
         {
           "id": "me_somerset_jail",
           "label": "Somerset County ME (jail)",
+          "county": "Somerset County, ME",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://somerset-so-me.zuercherportal.com/api/portal/inmates/load",
@@ -2039,6 +2059,7 @@
         {
           "id": "mi_monroe_jail",
           "label": "Monroe County MI (jail)",
+          "county": "Monroe County, MI",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://monroe-so-mi.zuercherportal.com/api/portal/inmates/load",
@@ -2070,6 +2091,7 @@
         {
           "id": "mn_winona_jail",
           "label": "Winona County MN (jail)",
+          "county": "Winona County, MN",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://winona-so-mn.zuercherportal.com/api/portal/inmates/load",
@@ -2133,6 +2155,7 @@
         {
           "id": "mt_jefferson_jail",
           "label": "Jefferson County MT (jail)",
+          "county": "Jefferson County, MT",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://jefferson-so-mt.zuercherportal.com/api/portal/inmates/load",
@@ -2158,6 +2181,7 @@
         {
           "id": "mt_ravalli_jail",
           "label": "Ravalli County MT (jail)",
+          "county": "Ravalli County, MT",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://ravalli-so-mt.zuercherportal.com/api/portal/inmates/load",
@@ -2213,6 +2237,7 @@
         {
           "id": "ne_scottsbluff_jail",
           "label": "Scotts Bluff County NE (jail)",
+          "county": "Scotts Bluff County, NE",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://scottsbluff-so-ne.zuercherportal.com/api/portal/inmates/load",
@@ -2274,6 +2299,7 @@
         {
           "id": "nh_rockingham_jail",
           "label": "Rockingham County NH (jail)",
+          "county": "Rockingham County, NH",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://rockingham-so-nh.zuercherportal.com/api/portal/inmates/load",
@@ -2348,6 +2374,7 @@
         {
           "id": "nc_union_jail",
           "label": "Union County NC (jail)",
+          "county": "Union County, NC",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://sheriff.unioncountync.gov/jqHandler.ashx?op=s",
@@ -2379,6 +2406,7 @@
         {
           "id": "nc_cabarrus_jail",
           "label": "Cabarrus County NC (jail)",
+          "county": "Cabarrus County, NC",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://onlineservices.cabarruscounty.us/p2c/jqHandler.ashx?op=s",
@@ -2410,6 +2438,7 @@
         {
           "id": "nc_newhanover_jail",
           "label": "New Hanover County NC (jail)",
+          "county": "New Hanover County, NC",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://p2c.nhcgov.com/p2c/jqHandler.ashx?op=s",
@@ -2441,6 +2470,7 @@
         {
           "id": "nc_iredell_jail",
           "label": "Iredell County NC (jail)",
+          "county": "Iredell County, NC",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://p2c.iredellcountync.gov/jqHandler.ashx?op=s",
@@ -2472,6 +2502,7 @@
         {
           "id": "nc_davie_jail",
           "label": "Davie County NC (jail)",
+          "county": "Davie County, NC",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://davie-so-nc.zuercherportal.com/api/portal/inmates/load",
@@ -2497,6 +2528,7 @@
         {
           "id": "nc_pender_jail",
           "label": "Pender County NC (jail)",
+          "county": "Pender County, NC",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://pender-so-nc.zuercherportal.com/api/portal/inmates/load",
@@ -2582,6 +2614,7 @@
         {
           "id": "oh_ashland_jail",
           "label": "Ashland County OH (jail)",
+          "county": "Ashland County, OH",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://ashland-so-oh.zuercherportal.com/api/portal/inmates/load",
@@ -2607,6 +2640,7 @@
         {
           "id": "oh_paulding_jail",
           "label": "Paulding County OH (jail)",
+          "county": "Paulding County, OH",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://paulding-so-oh.zuercherportal.com/api/portal/inmates/load",
@@ -2632,6 +2666,7 @@
         {
           "id": "oh_ross_jail",
           "label": "Ross County OH (jail)",
+          "county": "Ross County, OH",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://ross-so-oh.zuercherportal.com/api/portal/inmates/load",
@@ -2657,6 +2692,7 @@
         {
           "id": "oh_shelby_jail",
           "label": "Shelby County OH (jail)",
+          "county": "Shelby County, OH",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://shelby-so-oh.zuercherportal.com/api/portal/inmates/load",
@@ -2682,6 +2718,7 @@
         {
           "id": "oh_preble_jail",
           "label": "Preble County OH (jail)",
+          "county": "Preble County, OH",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://preble-so-oh.zuercherportal.com/api/portal/inmates/load",
@@ -2797,6 +2834,7 @@
         {
           "id": "sc_cherokee_jail",
           "label": "Cherokee County SC (jail)",
+          "county": "Cherokee County, SC",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://cherokee-so-sc.zuercherportal.com/api/portal/inmates/load",
@@ -2822,6 +2860,7 @@
         {
           "id": "sc_oconee_jail",
           "label": "Oconee County SC (jail)",
+          "county": "Oconee County, SC",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://oconee-so-sc.zuercherportal.com/api/portal/inmates/load",
@@ -2847,6 +2886,7 @@
         {
           "id": "sc_kershaw_jail",
           "label": "Kershaw County SC (jail)",
+          "county": "Kershaw County, SC",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://kershaw-so-sc.zuercherportal.com/api/portal/inmates/load",
@@ -2872,6 +2912,7 @@
         {
           "id": "sc_union_jail",
           "label": "Union County SC (jail)",
+          "county": "Union County, SC",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://union-so-sc.zuercherportal.com/api/portal/inmates/load",
@@ -2897,6 +2938,7 @@
         {
           "id": "sc_colleton_jail",
           "label": "Colleton County SC (jail)",
+          "county": "Colleton County, SC",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://colleton-so-sc.zuercherportal.com/api/portal/inmates/load",
@@ -2928,6 +2970,7 @@
         {
           "id": "sd_lincoln_jail",
           "label": "Lincoln County SD (jail)",
+          "county": "Lincoln County, SD",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://lincoln-so-sd.zuercherportal.com/api/portal/inmates/load",
@@ -2953,6 +2996,7 @@
         {
           "id": "sd_meade_jail",
           "label": "Meade County SD (jail)",
+          "county": "Meade County, SD",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://meade-so-sd.zuercherportal.com/api/portal/inmates/load",
@@ -2978,6 +3022,7 @@
         {
           "id": "sd_roberts_jail",
           "label": "Roberts County SD (jail)",
+          "county": "Roberts County, SD",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://roberts-so-sd.zuercherportal.com/api/portal/inmates/load",
@@ -3009,6 +3054,7 @@
         {
           "id": "tn_sullivan_jail",
           "label": "Sullivan County TN (jail)",
+          "county": "Sullivan County, TN",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://sullivan-so-tn.zuercherportal.com/api/portal/inmates/load",
@@ -3034,6 +3080,7 @@
         {
           "id": "tn_washington_jail",
           "label": "Washington County TN (jail)",
+          "county": "Washington County, TN",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://washington-so-tn.zuercherportal.com/api/portal/inmates/load",
@@ -3100,6 +3147,7 @@
         {
           "id": "tx_upshur_jail",
           "label": "Upshur County TX (jail)",
+          "county": "Upshur County, TX",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://upshur-so-tx.zuercherportal.com/api/portal/inmates/load",
@@ -3186,6 +3234,7 @@
         {
           "id": "wi_lincoln_jail",
           "label": "Lincoln County WI (jail)",
+          "county": "Lincoln County, WI",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://lincoln-so-wi.zuercherportal.com/api/portal/inmates/load",
@@ -3211,6 +3260,7 @@
         {
           "id": "wi_grant_jail",
           "label": "Grant County WI (jail)",
+          "county": "Grant County, WI",
           "kind": "QUERY_TEMPLATE",
           "method": "POST",
           "url_template": "https://grant-so-wi.zuercherportal.com/api/portal/inmates/load",
@@ -3383,7 +3433,6 @@
       "field_regexes": {
         "name": "title=\"Title:\\s*([^\"]+)\"",
         "date": "views-field-date\">\\s*<span class=\"field-content\">([^<]+)",
-        "city": "views-field-text-3\">\\s*<span class=\"field-content\">[^(]*\\(([^,)]+),",
         "state": "views-field-text-3\">\\s*<span class=\"field-content\">[^(]*\\(?[^,)]*,?\\s*([A-Z]{2})\\)",
         "url": "<a href=\"(/obituaries/obit/[^\"?]+)"
       },

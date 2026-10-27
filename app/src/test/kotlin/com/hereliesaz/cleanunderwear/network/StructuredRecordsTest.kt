@@ -145,4 +145,31 @@ class StructuredRecordsTest {
         assertEquals("xx_doc:B5678", r.recordKey)
         assertEquals(1990, r.birthYear)
     }
+
+    @Test
+    fun aNicknameVariantIsAcceptedAndMarked() {
+        val nick = """{"data":{"offenders":[{"name":{"first":"WILLIAM","last":"JOHNSON"},"age":"40","status":"Incarcerated","docNumber":"B1"}]}}"""
+        val src = source(fields)
+        assertTrue(StructuredRecords.fromJson(nick, src, "Bill", "Johnson", EventKind.CUSTODY, "https://example.org/").isEmpty())
+        val r = StructuredRecords.fromJson(nick, src, "Bill", "Johnson", EventKind.CUSTODY, "https://example.org/", listOf("william")).single()
+        assertEquals("WILLIAM", r.nicknameOf)
+    }
+
+    @Test
+    fun aDateOnlyIdIsMadeThePersonsOwn() {
+        val sameDay = """{"data":{"offenders":[
+            {"name":{"first":"JOHN","last":"SMITH"},"age":"40","status":"Incarcerated","docNumber":"2026-10-01"},
+            {"name":{"first":"JOHN","last":"SMITH"},"age":"22","status":"Incarcerated","docNumber":"2026-10-01"}
+        ]}}"""
+        val keys = StructuredRecords.fromJson(sameDay, source(fields), "John", "Smith", EventKind.CUSTODY, "https://example.org/")
+            .map { it.recordKey }
+        assertEquals(2, keys.distinct().size)
+    }
+
+    @Test
+    fun aJsonReplyWithoutItsRecordsPathIsUnread() {
+        assertTrue(StructuredRecords.jsonReadable("""{"data":{"offenders":[]}}""", source(fields)))
+        assertTrue(!StructuredRecords.jsonReadable("""{"error":"maintenance"}""", source(fields)))
+        assertTrue(!StructuredRecords.jsonReadable("<html>Service unavailable</html>", source(fields)))
+    }
 }

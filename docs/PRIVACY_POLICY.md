@@ -41,7 +41,7 @@ Every contact with a usable full name who is tied to a US or Canadian state is c
 Matches are based on names, ages, places and the people an obituary names, and can be wrong. Nothing is recorded as fact until you confirm it. Every match shows the text it was based on, and you can dismiss it.
 
 ## 6. Deleting your data
-Archive a contact to stop checking them. Settings → **Sign out of sites** removes your sign-ins in the app's browser. Settings → **Delete everything** deletes the app's database, removes the blocks it wrote into your contacts' notes (keeping your own note text), and signs you out of sites; your contacts themselves stay. Uninstalling the app deletes its database but leaves the note blocks in your contacts.
+Archive a contact to stop checking them. Settings → **Sign out of sites** removes your sign-ins in the app's browser. Settings → **Delete everything** deletes the app's database and its in-memory activity log, removes the blocks it wrote into your contacts' notes (keeping your own note text), and signs you out of sites; your contacts themselves stay. If the app can't see your contacts, or some notes can't be changed, it says so, and running it again later removes what's left. A contact you delete from your phone is also removed from the app's list at the next contact read, unless it was imported or added by hand. Uninstalling the app deletes its database but leaves the note blocks in your contacts.
 
 ## 7. Contact
 Questions: open an issue at [github.com/HereLiesAz/CleanUnderwear/issues](https://github.com/HereLiesAz/CleanUnderwear/issues).

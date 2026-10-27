@@ -23,7 +23,7 @@ While an operation runs, everything behind it, rail included, is darkened and bl
 - In the browser, an automated page is darkened and blurred the same way, with Cancel at the bottom; it lifts when the page needs the user.
 
 ## Writing
-Plain words for the person, not the system: "Checked daily", "Possible match", "Fill in details", not "MONITORING" or "Resolve". Say what will happen before it does (a confirmation names how many contacts a lookup will send), and what a setting costs. A possible death or arrest is never stated as fact.
+Plain words for the person, not the system: "Checked daily", "Possible obituary", "Fill in details", not "MONITORING" or "Resolve". Say what will happen before it does (a confirmation names how many contacts a lookup will send), and what a setting costs. A possible death or arrest is never stated as fact.
 
 ## Navigation
 AzNavRail **11.57**. The active destination uses `primary`; focus and highlight use `onSurfaceVariant`, so the rail stays inside the monochrome palette.

@@ -47,6 +47,13 @@ enum class SourceCategory { LOCKUP, OBITUARY, IDENTITY }
 data class Source(
     val id: String,
     val label: String,
+    /**
+     * The one county a county jail covers ("Acadia Parish, LA"), in the same form as the
+     * `counties` keys; null for a statewide or national source. It is searched for everyone in
+     * its state (people are jailed away from home), but only counts as the contact's own jail,
+     * and as evidence of place, in that county.
+     */
+    val county: String? = null,
     val kind: SourceKind,
     val method: String,
     val urlTemplate: String,
@@ -140,10 +147,23 @@ data class Source(
 data class SearchPlan(
     val lockup: List<Source>,
     val obituary: List<Source>,
-    val tiedStates: List<String>
+    val tiedStates: List<String>,
+    /** The contact's county, when their ZIP or area code names one. */
+    val ownCounty: String? = null
 ) {
     val automated: Boolean get() = (lockup + obituary).any { it.kind != SourceKind.MANUAL_LANDING }
-    val lockupAutomated: Boolean get() = lockup.any { it.kind != SourceKind.MANUAL_LANDING }
+
+    /**
+     * Whether a jail or prison search that covers the contact runs on its own: a statewide one,
+     * or their own county's jail. Another county's jail elsewhere in the state is still searched,
+     * but doesn't count: it says nothing about the jail they'd most likely be in. Nor does the
+     * federal prison locator: it's searched for everyone, and federal custody is the rare case.
+     */
+    val lockupAutomated: Boolean
+        get() = lockup.any {
+            it.kind != SourceKind.MANUAL_LANDING && it.scope != SourceScope.MULTI_STATE &&
+                (it.county == null || it.county == ownCounty)
+        }
 }
 
 data class LocaleResolution(
@@ -168,6 +188,7 @@ class SourceCatalog @Inject constructor(
     private data class RawSource(
         val id: String? = null,
         val label: String? = null,
+        val county: String? = null,
         val kind: String? = null,
         val method: String? = null,
         val url_template: String? = null,
@@ -382,7 +403,7 @@ class SourceCatalog @Inject constructor(
         ).distinct()
         val lockup = (lockupSourcesFor(areaCode, residenceInfo) + tied.flatMap { stateLockupSources(it) })
             .distinctBy { it.id }
-        return SearchPlan(lockup, obituarySourcesFor(areaCode, residenceInfo), tied)
+        return SearchPlan(lockup, obituarySourcesFor(areaCode, residenceInfo), tied, resolveLocale(areaCode, residenceInfo).county)
     }
 
     /**
@@ -488,6 +509,7 @@ class SourceCatalog @Inject constructor(
         return Source(
             id = id,
             label = label,
+            county = county,
             kind = kind,
             method = method?.uppercase() ?: "GET",
             urlTemplate = urlTemplate,

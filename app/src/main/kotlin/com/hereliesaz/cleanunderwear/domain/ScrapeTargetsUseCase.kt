@@ -63,7 +63,7 @@ class ScrapeTargetsUseCase @Inject constructor(
     private val matchVerifier = MatchVerifier()
 
     /** What one run did, in words a person can read. */
-    data class Summary(val checked: Int, val newMatches: Int, val incomplete: Int) {
+    data class Summary(val checked: Int, val newMatches: Int, val incomplete: Int, val stillDue: Int = 0) {
         fun describe(): String = when {
             checked == 0 -> "Nothing was due for a check."
             else -> buildString {
@@ -74,6 +74,9 @@ class ScrapeTargetsUseCase @Inject constructor(
                 )
                 if (incomplete > 0) append("; $incomplete couldn't be fully checked: some sites didn't answer")
                 append('.')
+                // A run stopped by the system (or a contact limit) leaves some for next time; say so
+                // rather than let "checked N" read as everyone.
+                if (stillDue > 0) append(" $stillDue more ${if (stillDue == 1) "is" else "are"} due and will be checked first next time.")
             }
         }
     }
@@ -173,7 +176,8 @@ class ScrapeTargetsUseCase @Inject constructor(
             }
         }.awaitAll()
 
-        val summary = Summary(total, newMatches.get(), incomplete.get())
+        val stillDue = repository.getReadyDueTargets(System.currentTimeMillis(), limit).size
+        val summary = Summary(total, newMatches.get(), incomplete.get(), stillDue)
         onProgress(1f, summary.describe())
         summary
     }
@@ -262,6 +266,7 @@ class ScrapeTargetsUseCase @Inject constructor(
             if (lockupSources.isEmpty()) {
                 emitStep("no automated lockup source for area ${target.areaCode ?: "?"}")
             }
+            val homeState = UsStates.fromAddress(target.residenceInfo) ?: locale.state
             val searches = lockupSources.map { it to EventKind.CUSTODY } + obituarySources.map { it to EventKind.DEATH }
             for ((source, kind) in searches) {
                 // Dismissals made before per-record keys were stored the source's search URL;
@@ -270,7 +275,17 @@ class ScrapeTargetsUseCase @Inject constructor(
                 if (evidenceUrl in dismissedKeys) continue
                 emitStep("checking ${source.label}")
                 val result = sourceSearch.search(source, kind, firstName, lastName, corroboration, dismissedKeys)
-                candidates += result.records
+                // A state or county source's rows rarely name a place; the source itself is one.
+                // Only the contact's own state is written in (a second state they're tied to, by
+                // an old phone number, isn't evidence against them).
+                val sourceState = source.county?.substringAfterLast(", ")
+                    ?: plan.tiedStates.firstOrNull { st -> sourceCatalog.stateLockupSources(st).any { it.id == source.id } }
+                candidates += result.records.map { r ->
+                    r.copy(
+                        state = r.state ?: sourceState?.takeIf { it == homeState },
+                        ownCounty = source.county != null && source.county == plan.ownCounty
+                    )
+                }
                 if (result.failed) failedSources += source.label
             }
             if (failedSources.isNotEmpty()) {
@@ -287,7 +302,7 @@ class ScrapeTargetsUseCase @Inject constructor(
                 middleName = target.middleName,
                 age = verifier.approxAge(target.dateOfBirth),
                 city = cityOf(target.residenceInfo),
-                state = UsStates.fromAddress(target.residenceInfo) ?: locale.state,
+                state = homeState,
                 otherContactNames = allNames - target.displayName.trim()
             )
             val verified = matchVerifier.verifyAll(
@@ -311,7 +326,12 @@ class ScrapeTargetsUseCase @Inject constructor(
             // match to protect, the check stands (unread sources noted), so a site that is always
             // down can't hold a contact at "Not checked yet".
             val pendingMatch = target.status == TargetStatus.POSSIBLE_MATCH || target.status == TargetStatus.WEAK_MATCH
-            val inconclusive = best == null && (noteClaim || (failedSources.isNotEmpty() && pendingMatch))
+            // A pending obituary or arrest isn't undone by its absence: obituary, court and news
+            // searches only look back so far (60 days for most), so a record that stops showing has
+            // aged out of the window, not left the world. Only a custody record (a jail or prison
+            // roster) disappearing means something: the person was released. The user settles the rest.
+            val pendingEvent = pendingMatch && (target.matchKind == EventKind.DEATH.name || target.matchKind == EventKind.ARREST.name)
+            val inconclusive = best == null && (noteClaim || pendingEvent || (failedSources.isNotEmpty() && pendingMatch))
             val nextCheck = now + if (inconclusive && failedSources.isNotEmpty()) {
                 minOf(target.checkFrequencyHours, RETRY_HOURS) * 3600000L
             } else {
@@ -374,7 +394,12 @@ class ScrapeTargetsUseCase @Inject constructor(
                 best?.candidate?.kind?.let { tally.match(target.displayName, it) }
             }
             if (newStatus == TargetStatus.WEAK_MATCH && target.status != TargetStatus.WEAK_MATCH) tally.weak()
-            if (newStatus != target.status && shouldNotify(target.status, newStatus)) {
+            // A pending match replaced by a different kind of record (custody, then an obituary)
+            // is news too, though the status stays "possible match".
+            val newKind = newStatus == TargetStatus.POSSIBLE_MATCH && target.status == TargetStatus.POSSIBLE_MATCH &&
+                target.matchKind != null && updatedTarget.matchKind != target.matchKind
+            if (newKind) best?.candidate?.kind?.let { tally.match(target.displayName, it) }
+            if ((newStatus != target.status && shouldNotify(target.status, newStatus)) || newKind) {
                 emitStep("notifying status change")
                 notifications.notifyStatusChange(updatedTarget, target.status)
             }

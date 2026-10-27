@@ -23,23 +23,27 @@ object RecordExtractor {
         kind: EventKind,
         sourceId: String,
         sourceLabel: String,
-        evidenceUrl: String?
+        evidenceUrl: String?,
+        /** Nickname variants of [firstName] ("William" for "Bill") also accepted, for less. */
+        firstVariants: List<String> = emptyList()
     ): List<CandidateRecord> {
         // Match on accent-folded text (same length, so offsets carry over to the original).
         val original = text
         @Suppress("NAME_SHADOWING")
         val text = StringSimilarity.foldDiacritics(text)
-        val firstQ = Regex.escape(StringSimilarity.foldDiacritics(firstName))
+        // The first name or a nickname variant; group 1 is the one the text uses.
+        val firstQ = (listOf(firstName) + firstVariants).map { StringSimilarity.foldDiacritics(it) }
+            .filter { it.isNotBlank() }.distinct().joinToString("|") { Regex.escape(it) }
         val lastQ = Regex.escape(StringSimilarity.foldDiacritics(lastName))
         // "First [middle tokens] Last" (up to 2 middle tokens) or "Last, First".
         // The inverted form captures no middle name: on rosters the next token is
         // as often a column ("SMITH, JOHN  Booked …") as a middle name, and a
         // misread middle name would wrongly reject the record.
-        val forward = Regex("(?i)\\b$firstQ\\b((?:\\s+[A-Za-z][A-Za-z.'-]*){0,2}?)\\s+\\b$lastQ\\b")
-        val inverted = Regex("(?i)\\b$lastQ\\b\\s*,\\s*\\b$firstQ\\b()")
+        val forward = Regex("(?i)\\b($firstQ)\\b((?:\\s+[A-Za-z][A-Za-z.'-]*){0,2}?)\\s+\\b$lastQ\\b")
+        val inverted = Regex("(?i)\\b$lastQ\\b\\s*,\\s*\\b($firstQ)\\b()")
         // Roster tables often print "SMITH JOHN" in adjacent columns with no comma.
         // Too ambiguous in prose, so only for custody rosters.
-        val columns = Regex("(?i)\\b$lastQ\\s+$firstQ\\b()")
+        val columns = Regex("(?i)\\b$lastQ\\s+($firstQ)\\b()")
 
         val hits = (forward.findAll(text) + inverted.findAll(text) +
             (if (kind == EventKind.CUSTODY) columns.findAll(text) else emptySequence()))
@@ -65,7 +69,8 @@ object RecordExtractor {
                 kind = kind,
                 firstName = firstName,
                 lastName = lastName,
-                middleName = middleOf(hit.groupValues.getOrNull(1)),
+                middleName = middleOf(hit.groupValues.getOrNull(2)),
+                nicknameOf = hit.groupValues[1].takeUnless { it.equals(StringSimilarity.foldDiacritics(firstName), ignoreCase = true) },
                 age = age(after) ?: if (birthYear != null && deathYear != null) deathYear - birthYear else null,
                 birthYear = birthYear ?: bornYear(window) ?: if (kind == EventKind.CUSTODY) rosterBirthYear(after) else null,
                 city = place?.city,
@@ -73,7 +78,7 @@ object RecordExtractor {
                 relatives = if (kind == EventKind.DEATH) survivors(after) else emptyList(),
                 inferredRelatives = if (kind == EventKind.DEATH) inferredSurvivors(after, lastName) else emptyList(),
                 eventYear = deathYear,
-                recordKey = personKey(sourceId, firstName, middleOf(hit.groupValues.getOrNull(1)), lastName, birthYear ?: age(after), place?.city),
+                recordKey = personKey(sourceId, firstName, middleOf(hit.groupValues.getOrNull(2)), lastName, birthYear ?: age(after), place?.city),
                 evidenceUrl = evidenceUrl,
                 snippet = "..." + original.substring(start, end).replace(Regex("\\s+"), " ").trim() + "..."
             )

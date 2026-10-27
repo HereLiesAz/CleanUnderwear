@@ -114,14 +114,29 @@ class ScrapeTargetsUseCaseTest {
     }
 
     @Test
-    fun aMatchGoneFromEveryReadSourceClearsAndSaysSo() = runBlocking {
-        val id = seed(TargetStatus.POSSIBLE_MATCH)
+    fun aCustodyMatchGoneFromEveryReadSourceClearsAndSaysSo() = runBlocking {
+        // Off the roster: released.
+        val id = seed(TargetStatus.POSSIBLE_MATCH, {
+            it.copy(matchKind = "CUSTODY", obituaryUrl = null, lockupUrl = "https://example.test/roster/1")
+        })
         answer(SearchResult(emptyList()))
         useCase().invoke()
         val t = repo.getTargetById(id)!!
         assertEquals(TargetStatus.MONITORING, t.status)
-        assertNull(t.obituaryUrl)
+        assertNull(t.lockupUrl)
         verify(exactly = 1) { notifications.notifyStatusChange(any(), TargetStatus.POSSIBLE_MATCH) }
+    }
+
+    @Test
+    fun anObituaryMatchThatAgesOutOfTheSearchWindowStays() = runBlocking {
+        // Obituary searches look back 60 days; a death that stops showing hasn't un-happened.
+        val id = seed(TargetStatus.POSSIBLE_MATCH)
+        answer(SearchResult(emptyList()))
+        useCase().invoke()
+        val t = repo.getTargetById(id)!!
+        assertEquals(TargetStatus.POSSIBLE_MATCH, t.status)
+        assertNotNull(t.obituaryUrl)
+        verify(exactly = 0) { notifications.notifyStatusChange(any(), any()) }
     }
 
     @Test

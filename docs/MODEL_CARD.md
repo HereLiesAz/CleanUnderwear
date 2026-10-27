@@ -1,20 +1,14 @@
-# Research Agent Model Card
+# Model Card: none shipped
 
-## What it is
-`research_agent.tflite`: a small text classifier, built with TensorFlow/Keras and converted for on-device inference with LiteRT (`OnDeviceResearchAgent`). Its training data and training code are not in this repository.
+The app contains no machine-learning model. Name screening and record matching are rules, written out in the code.
 
-## What it does in the app
-One job: when contacts are harvested (`HarvestContactsUseCase`), it scores whether a contact's display name reads like a person.
+## What used to be here
+Earlier versions shipped `research_agent.tflite` and ran it through LiteRT (with the TensorFlow select-ops runtime) inside `OnDeviceResearchAgent.validatePersonName`, OR-ing its score into the name rules. That model is the one `scripts/train_research_ai.py` and `ml/CleanUnderwear.ipynb` build: a classifier of **official sheriff and government websites versus commercial ones**, trained on strings such as "opso.us Orleans Parish Sheriff's Office Inmate Roster". Its vocabulary (`roster`, `sheriff`, `dpstexasgov`, …) showed it. Applied to a person's name its score meant nothing, and it could only let through a name the rules had rejected. It was removed, with the runtime.
 
-- **Input**: the display name, as a raw string (preprocessed against `research_agent_vocab.txt`).
-- **Output**: a sigmoid score, 0.0 to 1.0.
-- **Decision**: a name passes when the score is above **0.3** *or* a heuristic says it looks like a name (letters, no digits, a space or more than one letter), and it contains no service word as a whole word ("customer", "service", "support", "help", "bank", "office", "pizza", "taxi", "delivery", "store").
-- **On failure**: if the model can't be loaded, the score is 1.0 and the heuristic and service-word rules decide alone.
-- A name that fails is kept, renamed "Unnamed Entity (…)", and is not searched.
+## What the app does instead
+- **Is this a person's name?** (`OnDeviceResearchAgent.validatePersonName`, used when contacts are read): no digits; two or more words, or one word of letters longer than one character; no business word as a whole word ("customer", "service", "support", "help", "bank", "office", "pizza", "taxi", "delivery", "store"). A name that fails is kept, renamed "Unnamed Entity (…)", and not searched.
+- **Nicknames** (`nicknames.json`): Robert → Bob, Bobby, …, used by duplicate detection (`ProbabilisticScorer`, `DeduplicateTargetsUseCase`) to see that "Bob Smith" and "Robert Smith" may be one contact.
+- **Matching a record to a contact** is rule-based (`RecordExtractor`, `MatchVerifier`); see the Monitoring Guide.
 
-It does not classify search results, sources, obituaries or court records; no model is used in matching. Matching is rule-based (`RecordExtractor`, `MatchVerifier`).
-
-## Assets
-- `research_agent.tflite`: the model.
-- `research_agent_vocab.txt`: its vocabulary.
-- `nicknames.json`: a nickname table (Robert → Bob, Bobby, …), used by duplicate detection (`ProbabilisticScorer`, `DeduplicateTargetsUseCase`) to see that "Bob Smith" and "Robert Smith" may be one contact. It is not used to widen any records search.
+## The training code
+`scripts/train_research_ai.py` and `ml/CleanUnderwear.ipynb` remain in the repository as history. Nothing the app ships is built from them.

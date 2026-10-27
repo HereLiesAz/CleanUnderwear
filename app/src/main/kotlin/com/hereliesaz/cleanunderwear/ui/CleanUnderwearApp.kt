@@ -44,7 +44,7 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
     val activeColor = MaterialTheme.colorScheme.primary
     val highlightedColor = MaterialTheme.colorScheme.onSurfaceVariant
     val backgroundColor = MaterialTheme.colorScheme.background
-    var confirmLookUp by remember { mutableStateOf<Int?>(null) }
+    var confirmLookUp by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<Int?>(null) }
     val scope = rememberCoroutineScope()
 
     AzHostActivityLayout(
@@ -77,6 +77,11 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                 "ingest" to "Add someone who isn't in your phone's contacts.",
                 "update" to "Run the daily check now instead of waiting for it.",
                 "resolve" to "Look up missing names, numbers and ages on a people-search site, contact by contact. Asks first.",
+                "intelligence_ops" to "Things to do with your contacts: import, add, check, fill in.",
+                "sort_host" to "The order of the contact list. The current one is ticked.",
+                "sort_name" to "A to Z by name.",
+                "sort_status" to "What needs you first: possible matches, then weak ones, then confirmed, then the rest.",
+                "sort_date" to "Most recently checked first.",
                 "archives" to "Show or hide contacts you archived.",
                 "settings" to "Alerts, check time, imports, your data.",
                 "diagnostic_log" to "Show what the app is doing, step by step."
@@ -98,12 +103,14 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
             azRailSubItem(id = "resolve", hostId = "intelligence_ops", text = "Fill in details", shape = AzButtonShape.NONE,
                 onClick = { scope.launch { confirmLookUp = viewModel.resolveCandidateCount() } })
 
+            // The active sort is ticked, so the list's order is never a guess.
+            fun sortLabel(order: MainViewModel.SortOrder, text: String) = if (sortOrder == order) "✓ $text" else text
             azRailHostItem(id = "sort_host", text = "Sort")
-            azRailSubItem(id = "sort_name", hostId = "sort_host", text = "By name", shape = AzButtonShape.NONE,
+            azRailSubItem(id = "sort_name", hostId = "sort_host", text = sortLabel(MainViewModel.SortOrder.NAME, "By name"), shape = AzButtonShape.NONE,
                 onClick = { viewModel.setSortOrder(MainViewModel.SortOrder.NAME) })
-            azRailSubItem(id = "sort_status", hostId = "sort_host", text = "By status", shape = AzButtonShape.NONE,
+            azRailSubItem(id = "sort_status", hostId = "sort_host", text = sortLabel(MainViewModel.SortOrder.STATUS, "By status"), shape = AzButtonShape.NONE,
                 onClick = { viewModel.setSortOrder(MainViewModel.SortOrder.STATUS) })
-            azRailSubItem(id = "sort_date", hostId = "sort_host", text = "By last check", shape = AzButtonShape.NONE,
+            azRailSubItem(id = "sort_date", hostId = "sort_host", text = sortLabel(MainViewModel.SortOrder.DATE, "By last check"), shape = AzButtonShape.NONE,
                 onClick = { viewModel.setSortOrder(MainViewModel.SortOrder.DATE) })
 
             azRailToggle(

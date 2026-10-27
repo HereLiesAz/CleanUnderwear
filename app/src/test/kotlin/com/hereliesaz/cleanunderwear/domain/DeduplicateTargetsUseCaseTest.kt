@@ -298,4 +298,41 @@ class DeduplicateTargetsUseCaseTest {
         assertEquals(0, DeduplicateTargetsUseCase(repo).invoke())
         assertEquals(2, repo.store.size)
     }
+
+    @Test
+    fun aHouseholdOfTwoOnOneLine_staysTwoContacts() = runTest {
+        val repo = FakeRepository(
+            listOf(
+                Target(id = 1, displayName = "John Smith", phoneNumber = "504-555-0100", areaCode = "504"),
+                Target(id = 2, displayName = "Mary Smith", phoneNumber = "504-555-0100", areaCode = "504"),
+                Target(id = 3, displayName = "Mom", phoneNumber = "504-555-0199"),
+                Target(id = 4, displayName = "Dad", phoneNumber = "504-555-0199")
+            )
+        )
+
+        assertEquals(0, DeduplicateTargetsUseCase(repo).invoke())
+        assertEquals(4, repo.store.size)
+    }
+
+    @Test
+    fun anArchivedCopyKeepsWhatItWasBeforeArchiving() = runTest {
+        // The restored row holds a pending match; a re-read copy says Archived. The merge stays
+        // archived, but remembers the match, so "Bring back" returns it.
+        val repo = FakeRepository(
+            listOf(
+                Target(
+                    id = 1, displayName = "Jane Doe", phoneNumber = "555-123-4567",
+                    status = TargetStatus.POSSIBLE_MATCH, matchKind = "DEATH", matchConfidence = 0.9
+                ),
+                Target(id = 2, displayName = "Jane Doe", phoneNumber = "555-123-4567", status = TargetStatus.IGNORED)
+            )
+        )
+
+        DeduplicateTargetsUseCase(repo).invoke()
+
+        val survivor = repo.store.single()
+        assertEquals(TargetStatus.IGNORED, survivor.status)
+        assertEquals(TargetStatus.POSSIBLE_MATCH, survivor.statusBeforeIgnore)
+        assertEquals("DEATH", survivor.matchKind)
+    }
 }

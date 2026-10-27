@@ -65,7 +65,9 @@ data class MatchRecord(
                 return null to null
             }
             val tokens = NameValidator.tokenize(displayName)
-            if (tokens.size < 2) return null to null
+            if (tokens.isEmpty()) return null to null
+            // A one-word name ("Mom", "Bobby") is a first name with no surname.
+            if (tokens.size == 1) return tokens.first() to null
             return tokens.first() to tokens.last()
         }
     }

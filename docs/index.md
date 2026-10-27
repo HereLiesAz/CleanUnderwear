@@ -13,7 +13,7 @@ This documentation site provides insights into the technical foundations and des
 
 *   [**Architecture Guide**](ARCHITECTURE.html): Layers, the pipeline, storage and tests.
 *   [**Design Guide**](DESIGN.html): Theme, components and writing.
-*   [**Model Card**](MODEL_CARD.html): The on-device name classifier and what it is (and isn't) used for.
+*   [**Model Card**](MODEL_CARD.html): Why the app ships no model, and how names are screened instead.
 *   [**Monitoring Guide**](MONITORING_GUIDE.html): How the daily records check, matching and contact-note recovery work.
 *   [**Privacy Policy**](PRIVACY_POLICY.html): What the app reads, stores and sends.
 

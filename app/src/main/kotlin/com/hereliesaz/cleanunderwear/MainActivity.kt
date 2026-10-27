@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,7 +37,10 @@ class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge()
+        // The app's own theme, not the phone's, decides the window and system-bar colours.
+        val darkAtStart = getSharedPreferences("clean_underwear_prefs", MODE_PRIVATE).getBoolean("dark_theme", true)
+        if (!darkAtStart) setTheme(R.style.Theme_CleanUnderwear_Light)
+        applySystemBars(darkAtStart)
         super.onCreate(savedInstanceState)
 
         // Only on a fresh start: after a rotation the intent is the same, and the user may have left that contact.
@@ -46,6 +50,8 @@ class MainActivity : ComponentActivity() {
             val isDarkTheme by viewModel.isDarkTheme.collectAsState()
             val onboarded by viewModel.isOnboardingCompleted.collectAsState()
             val colorScheme = if (isDarkTheme) SurveillanceDarkColorScheme else SurveillanceLightColorScheme
+
+            LaunchedEffect(isDarkTheme) { applySystemBars(isDarkTheme) }
 
             MaterialTheme(colorScheme = colorScheme, typography = AppTypography) {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -90,6 +96,23 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         openTargetFrom(intent)
+    }
+
+    /**
+     * Edge to edge, with status- and navigation-bar icons for the app's theme: light icons on the
+     * dark theme, dark on the light one. Left to itself the bar follows the phone's setting, which
+     * on a light phone puts dark icons on the black app.
+     */
+    private fun applySystemBars(dark: Boolean) {
+        val style = if (dark) {
+            SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+        } else {
+            SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT)
+        }
+        enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+        window.setBackgroundDrawable(
+            android.graphics.drawable.ColorDrawable(if (dark) 0xFF0A0A0A.toInt() else 0xFFF7F7F7.toInt())
+        )
     }
 
     private fun contactsAllowed() =

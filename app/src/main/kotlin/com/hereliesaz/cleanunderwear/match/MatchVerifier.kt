@@ -56,6 +56,8 @@ class MatchVerifier(
         /** Prior odds, in bits, that a bare name hit is the contact. */
         val priorBits: Double = -8.0,
         val nameExact: Double = 2.0,
+        /** A nickname variant of the first name ("William" for "Bill"): many share one. */
+        val nameNickname: Double = 0.5,
         val middleAgree: Double = 4.0,
         val middleInitialAgree: Double = 2.0,
         val ageAgree: Double = 6.0,
@@ -83,8 +85,10 @@ class MatchVerifier(
         candidate: CandidateRecord,
         corroboratingSources: List<String> = emptyList()
     ): Verification {
-        val reasons = mutableListOf("Name matches")
-        var bits = config.priorBits + config.nameExact
+        val reasons = mutableListOf(
+            candidate.nicknameOf?.let { "Name matches, with a nickname (${it.lowercase().replaceFirstChar { c -> c.uppercase() }})" } ?: "Name matches"
+        )
+        var bits = config.priorBits + if (candidate.nicknameOf != null) config.nameNickname else config.nameExact
         for (signal in listOf(middleName(contact, candidate), age(contact, candidate))) {
             if (signal.rejects) return rejected(candidate, reasons + signal.reason!!)
             bits += signal.bits
@@ -153,6 +157,8 @@ class MatchVerifier(
         return when {
             cCity != null && cCity == rCity && statesCompatible ->
                 Signal(config.cityAgree, "Same city (${candidate.city})")
+            // A county jail's rows name no place, but the jail is in one: their own county's.
+            candidate.ownCounty -> Signal(config.cityAgree, "Held in their own county's jail")
             cState != null && cState == rState -> Signal(config.stateAgree, "Same state ($rState)")
             cState != null && rState != null -> Signal(config.stateDisagree, "Different state ($rState vs $cState)")
             else -> Signal()
@@ -205,7 +211,11 @@ class MatchVerifier(
     }
 
     private fun sameEvent(a: CandidateRecord, b: CandidateRecord): Boolean {
-        val cityAgrees = a.city != null && a.city.equals(b.city, ignoreCase = true)
+        // The same city; or, where a source names no city at all (ObitsArchive lists only a
+        // state), the same state and the same year.
+        val cityAgrees = a.city != null && a.city.equals(b.city, ignoreCase = true) ||
+            (a.city == null || b.city == null) && a.state != null && a.state == b.state &&
+            a.eventYear != null && a.eventYear == b.eventYear
         val aBirth = recordBirthYear(a)
         val bBirth = recordBirthYear(b)
         val ageConflicts = aBirth != null && bBirth != null && abs(aBirth - bBirth) > config.ageTolerance + 1

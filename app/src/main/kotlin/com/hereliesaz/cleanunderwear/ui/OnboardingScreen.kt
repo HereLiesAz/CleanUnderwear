@@ -5,6 +5,7 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.MaterialTheme
@@ -61,8 +62,12 @@ fun OnboardingScreen(onComplete: () -> Unit) {
 
     Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
         HorizontalPager(state = pagerState, modifier = Modifier.weight(1f)) { page ->
+            // Scrolls, so a page still reads whole at a large font size.
             Column(
-                modifier = Modifier.fillMaxSize().padding(Spacing.xl),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(androidx.compose.foundation.rememberScrollState())
+                    .padding(Spacing.xl),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
@@ -78,6 +83,10 @@ fun OnboardingScreen(onComplete: () -> Unit) {
         }
 
         Column(modifier = Modifier.fillMaxWidth().padding(Spacing.lg), verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+            AppCaption(
+                "${pagerState.currentPage + 1} of ${PAGES.size}",
+                Modifier.align(Alignment.CenterHorizontally)
+            )
             if (last) {
                 AppCaption("Next, Android asks to let the app read and update your contacts, and to send you alerts.")
                 AppAction("Continue", {
@@ -89,8 +98,8 @@ fun OnboardingScreen(onComplete: () -> Unit) {
                     permissions.launch(wanted.toTypedArray())
                 })
             } else {
+                // No Skip: the pages on wrong matches and on sad news are the ones not to miss.
                 AppAction("Next", { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) } })
-                AppTextAction("Skip", { scope.launch { pagerState.animateScrollToPage(PAGES.lastIndex) } })
             }
         }
     }

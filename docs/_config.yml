@@ -1,3 +1,6 @@
 title: CleanUnderwear Documentation
 description: Technical guides and documentation for the CleanUnderwear Android application.
 theme: jekyll-theme-cayman
+# Not published: the original brief, kept in the repo for history only.
+exclude:
+  - initial_prompt.md

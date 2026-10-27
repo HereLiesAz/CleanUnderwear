@@ -39,7 +39,7 @@ fun SettingsScreen(
     val notifyCustody by viewModel.notifyCustody.collectAsState()
     val checkHour by viewModel.checkHour.collectAsState()
     val updateState by viewModel.updateState.collectAsState()
-    var confirmDelete by remember { mutableStateOf(false) }
+    var confirmDelete by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
 
     // Permission status is re-read whenever the screen comes back, e.g. from system settings.
     var contactsGranted by remember { mutableStateOf(false) }
@@ -66,6 +66,10 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {
             AppSection("Alerts")
+            if (!rememberNotificationsAllowed()) {
+                Text(ALERTS_OFF, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                AppAction("Turn on alerts", { openNotificationSettings(context) })
+            }
             SettingToggle("Possible deaths", "Tell me when an obituary may be about one of my contacts.", notifyDeath, viewModel::setNotifyDeath)
             SettingToggle("Possible arrests and custody", "Tell me when an arrest, court or jail record may be about one of my contacts.", notifyCustody, viewModel::setNotifyCustody)
             AppCaption("With an alert off, matches still appear in the app.")
