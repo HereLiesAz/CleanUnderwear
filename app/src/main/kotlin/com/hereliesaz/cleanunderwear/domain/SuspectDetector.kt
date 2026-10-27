@@ -14,6 +14,18 @@ enum class SuspicionKind { BAD_MERGE, STALE_NUMBER }
 /** Which way the evidence on a case tips. */
 enum class Lean { LIKELY_PROBLEM, TOSS_UP, LIKELY_FINE }
 
+/**
+ * What to do about a case, when the evidence clearly tips one way. [label] is the button,
+ * [done] the past tense for a summary ("separated").
+ */
+enum class Recommendation(val label: String, val done: String) {
+    SEPARATE("Separate them", "separated"),
+    KEEP_COMBINED("Keep them combined", "kept combined"),
+    USE_REPLACEMENT("Use the newer number", "switched to a newer number"),
+    MARK_OUT_OF_DATE("Mark the number out of date", "numbers marked out of date"),
+    KEEP_NUMBER("Keep the number", "numbers kept")
+}
+
 /** One reason, in plain words, with how much it counts (roughly 1 = hint, 3+ = strong). */
 data class Evidence(val text: String, val weight: Double)
 
@@ -53,6 +65,29 @@ data class SuspectCase(
             net >= SuspectDetector.LEAN_MARGIN -> Lean.LIKELY_PROBLEM
             net <= -SuspectDetector.LEAN_MARGIN -> Lean.LIKELY_FINE
             else -> Lean.TOSS_UP
+        }
+
+    /** What the evidence says to do; null when it is too evenly balanced to say. */
+    val recommendation: Recommendation?
+        get() = when (lean) {
+            Lean.TOSS_UP -> null
+            Lean.LIKELY_PROBLEM -> when (kind) {
+                SuspicionKind.BAD_MERGE -> Recommendation.SEPARATE
+                SuspicionKind.STALE_NUMBER ->
+                    if (replacementPhone != null) Recommendation.USE_REPLACEMENT else Recommendation.MARK_OUT_OF_DATE
+            }
+            Lean.LIKELY_FINE -> when (kind) {
+                SuspicionKind.BAD_MERGE -> Recommendation.KEEP_COMBINED
+                SuspicionKind.STALE_NUMBER -> Recommendation.KEEP_NUMBER
+            }
+        }
+
+    /** The strongest reason on the side the recommendation follows, to say why in one line. */
+    val mainReason: Evidence?
+        get() = when (lean) {
+            Lean.LIKELY_PROBLEM -> suspicion.maxByOrNull { it.weight }
+            Lean.LIKELY_FINE -> defense.maxByOrNull { it.weight }
+            Lean.TOSS_UP -> null
         }
 }
 
