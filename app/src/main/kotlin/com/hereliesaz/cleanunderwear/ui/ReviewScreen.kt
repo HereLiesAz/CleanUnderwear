@@ -45,6 +45,7 @@ import com.hereliesaz.cleanunderwear.domain.AlternateInfo
 import com.hereliesaz.cleanunderwear.domain.Evidence
 import com.hereliesaz.cleanunderwear.domain.IdentityLine
 import com.hereliesaz.cleanunderwear.domain.Lean
+import com.hereliesaz.cleanunderwear.domain.Recommendation
 import com.hereliesaz.cleanunderwear.domain.SuspectCase
 import com.hereliesaz.cleanunderwear.domain.SuspicionKind
 
@@ -63,6 +64,7 @@ fun ReviewScreen(
     val alternates by viewModel.alternates.collectAsState()
     var kindFilter by rememberSaveable { mutableStateOf<SuspicionKind?>(null) }
     var expandedKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var confirmAll by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { viewModel.refreshSuspects() }
 
@@ -76,6 +78,14 @@ fun ReviewScreen(
 
     val report = state.report
     val cases = report?.cases.orEmpty().filter { kindFilter == null || it.kind == kindFilter }
+
+    if (confirmAll) {
+        ApplyAllDialog(
+            cases = cases,
+            onConfirm = { confirmAll = false; viewModel.applyRecommendations(cases) },
+            onDismiss = { confirmAll = false }
+        )
+    }
 
     Scaffold(
         topBar = { AppTopBar(title = "Review", onBack = onNavigateBack) },
@@ -92,7 +102,9 @@ fun ReviewScreen(
                     merges = report?.cases?.count { it.kind == SuspicionKind.BAD_MERGE } ?: 0,
                     stale = report?.cases?.count { it.kind == SuspicionKind.STALE_NUMBER } ?: 0,
                     filter = kindFilter,
-                    onFilter = { kindFilter = if (kindFilter == it) null else it }
+                    onFilter = { kindFilter = if (kindFilter == it) null else it },
+                    recommended = cases.count { it.recommendation != null },
+                    onApplyAll = { confirmAll = true }
                 )
             }
 
@@ -124,7 +136,9 @@ private fun Header(
     merges: Int,
     stale: Int,
     filter: SuspicionKind?,
-    onFilter: (SuspicionKind) -> Unit
+    onFilter: (SuspicionKind) -> Unit,
+    recommended: Int,
+    onApplyAll: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
         Text(if (total == 0) "Nothing to review" else "$total to review", style = MaterialTheme.typography.titleLarge)
@@ -144,7 +158,44 @@ private fun Header(
                 label = { Text("Old numbers ($stale)") }
             )
         }
+        if (recommended > 0) {
+            AppAction("Apply recommendations ($recommended)", onApplyAll)
+            AppCaption(
+                "Does what each case below recommends" + (if (filter != null) ", in this group" else "") +
+                    ". You see the list first. Cases too close to call are left for you."
+            )
+        }
     }
+}
+
+/** The confirmation before applying every recommendation: exactly what will happen, by kind. */
+@Composable
+private fun ApplyAllDialog(cases: List<SuspectCase>, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    val byRec = cases.mapNotNull { it.recommendation }.groupingBy { it }.eachCount()
+    val left = cases.count { it.recommendation == null }
+    AppDialog(
+        title = "Apply ${byRec.values.sum()} recommendation${if (byRec.values.sum() == 1) "" else "s"}?",
+        confirm = "Apply",
+        onConfirm = onConfirm,
+        onDismiss = onDismiss
+    ) {
+        Recommendation.entries.forEach { rec ->
+            byRec[rec]?.let { n -> Text("${rec.label}: $n", style = MaterialTheme.typography.bodyMedium) }
+            byRec[rec]?.let { AppCaption(whatItDoes(rec)) }
+        }
+        if (left > 0) AppCaption("$left too close to call ${if (left == 1) "is" else "are"} left for you.")
+        AppCaption("Only this app's list changes; your phone's contacts aren't touched. You can stop partway.")
+    }
+}
+
+/** One line on what a recommendation does, used on its card and in the confirmation. */
+private fun whatItDoes(rec: Recommendation): String = when (rec) {
+    Recommendation.SEPARATE -> "The combined entry comes back as its own contact, and the two won't be combined again."
+    Recommendation.KEEP_COMBINED -> "It stays one contact and isn't raised here again."
+    Recommendation.USE_REPLACEMENT -> "The contact's number becomes the newer one found on its other entry."
+    Recommendation.MARK_OUT_OF_DATE ->
+        "The number stops being used to check or look the contact up. Searching for a current one is done from each card."
+    Recommendation.KEEP_NUMBER -> "The number stays in use and isn't raised here again."
 }
 
 @Composable
@@ -188,28 +239,32 @@ private fun SuspectCard(
                         }
                     )
                 }
-                LeanTag(case)
                 Icon(if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, contentDescription = null)
             }
             Text(case.headline, style = MaterialTheme.typography.bodyMedium)
             BalanceBar(case.suspicion.size, case.defense.size, case.suspicionScore, case.defenseScore)
+            RecommendationLine(case)
         }
+        case.recommendation?.let { rec -> AppAction(rec.label, { pending = rec.toPending() }) }
 
         if (expanded) {
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             IdentityComparison(case.identities)
             EvidenceList("Why it looks wrong", case.suspicion, Icons.Filled.Warning, "Nothing.")
             EvidenceList("Why it might be fine", case.defense, Icons.Filled.Info, "Nothing speaks for it.")
+            // Every choice, the recommended one included; the recommendation only says which.
+            Text(if (case.recommendation == null) "Your choices" else "Or choose", style = MaterialTheme.typography.titleMedium)
+            val rec = case.recommendation
             when (case.kind) {
                 SuspicionKind.BAD_MERGE -> {
-                    AppAction("Separate them", { pending = Pending.SPLIT })
-                    AppTextAction("They're the same person", { pending = Pending.KEEP })
+                    if (rec != Recommendation.SEPARATE) AppTextAction("Separate them", { pending = Pending.SPLIT })
+                    if (rec != Recommendation.KEEP_COMBINED) AppTextAction("They're the same person: keep them combined", { pending = Pending.KEEP })
                 }
                 SuspicionKind.STALE_NUMBER -> {
-                    case.replacementPhone?.let { AppAction("Use $it instead", { pending = Pending.ADOPT }) }
-                    AppAction("Mark the number out of date", { pending = Pending.STALE })
+                    if (rec != Recommendation.USE_REPLACEMENT) case.replacementPhone?.let { AppTextAction("Use $it instead", { pending = Pending.ADOPT }) }
+                    if (rec != Recommendation.MARK_OUT_OF_DATE) AppTextAction("Mark the number out of date", { pending = Pending.STALE })
                     AppTextAction("Look for a current number", { pending = Pending.LOOK_UP })
-                    AppTextAction("The number is fine", { pending = Pending.FINE })
+                    if (rec != Recommendation.KEEP_NUMBER) AppTextAction("The number is fine: keep it", { pending = Pending.FINE })
                 }
             }
         }
@@ -240,15 +295,31 @@ private fun SuspectCard(
     }
 }
 
+/**
+ * What to do and why, in two lines: "Recommended: Separate them" and the strongest reason on the
+ * side it follows. A case too evenly balanced says so instead of guessing.
+ */
 @Composable
-private fun LeanTag(case: SuspectCase) {
-    val problem = if (case.kind == SuspicionKind.BAD_MERGE) "Likely two people" else "Likely out of date"
-    val spec = when (case.lean) {
-        Lean.LIKELY_PROBLEM -> StatusSpec(problem, Icons.Filled.Warning, needsUser = true)
-        Lean.TOSS_UP -> StatusSpec("Could go either way", Icons.Filled.Info)
-        Lean.LIKELY_FINE -> StatusSpec("Probably fine", Icons.Filled.Info, muted = true)
+private fun RecommendationLine(case: SuspectCase) {
+    val rec = case.recommendation
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        if (rec == null) {
+            Text("No recommendation", style = MaterialTheme.typography.titleMedium)
+            AppCaption("The reasons on each side weigh about the same. Open it to decide.")
+        } else {
+            Text("Recommended: ${rec.label}", style = MaterialTheme.typography.titleMedium)
+            case.mainReason?.let { AppCaption("Mainly because: ${it.text.replaceFirstChar { c -> c.lowercase() }}") }
+            AppCaption(whatItDoes(rec))
+        }
     }
-    StatusBadge(spec, Modifier.padding(end = Spacing.xs))
+}
+
+private fun Recommendation.toPending(): Pending = when (this) {
+    Recommendation.SEPARATE -> Pending.SPLIT
+    Recommendation.KEEP_COMBINED -> Pending.KEEP
+    Recommendation.USE_REPLACEMENT -> Pending.ADOPT
+    Recommendation.MARK_OUT_OF_DATE -> Pending.STALE
+    Recommendation.KEEP_NUMBER -> Pending.FINE
 }
 
 /** The weight of the reasons against (solid) and for (outlined), with the counts in words. */

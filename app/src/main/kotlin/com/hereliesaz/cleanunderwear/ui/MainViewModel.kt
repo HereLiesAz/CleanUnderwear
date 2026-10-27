@@ -424,6 +424,61 @@ class MainViewModel @Inject constructor(
 
     fun dismissSuspect(case: SuspectCase) = applyVerdict(case) { suspectReview.dismiss(case) }
 
+    /**
+     * Does what each of [cases] recommends, one after another, under the busy screen; cases with no
+     * recommendation (too close to call) are left alone. Merges go first: a number case on a contact
+     * that was just separated is set aside, since separating changes what that contact's numbers
+     * are, and the rescan afterwards raises it again if it still applies. Out-of-date numbers are
+     * only marked: looking up a current one needs the browser, contact by contact.
+     */
+    fun applyRecommendations(cases: List<SuspectCase>) {
+        val todo = cases.filter { it.recommendation != null }
+            .sortedBy { if (it.kind == com.hereliesaz.cleanunderwear.domain.SuspicionKind.BAD_MERGE) 0 else 1 }
+        if (todo.isEmpty()) return
+        viewModelScope.launch {
+            pipelineCoordinator.runExclusive("review-all") {
+                val done = linkedMapOf<com.hereliesaz.cleanunderwear.domain.Recommendation, Int>()
+                val separated = mutableSetOf<Int>()
+                var setAside = 0
+                fun lines() = done.map { (rec, n) -> "$n ${rec.done}" } +
+                    listOfNotNull(setAside.takeIf { it > 0 }?.let { "$it left for a fresh look after separating" })
+                try {
+                    begin(OperationState(description = "Applying recommendations…", progress = 0f))
+                    for ((i, case) in todo.withIndex()) {
+                        val rec = case.recommendation!!
+                        _operationState.value = _operationState.value.copy(
+                            description = "${rec.label}: ${case.title} (${i + 1} of ${todo.size})",
+                            progress = i.toFloat() / todo.size,
+                            findings = lines()
+                        )
+                        if (case.kind == com.hereliesaz.cleanunderwear.domain.SuspicionKind.STALE_NUMBER && case.targetId in separated) {
+                            setAside++
+                            continue
+                        }
+                        when (rec) {
+                            com.hereliesaz.cleanunderwear.domain.Recommendation.SEPARATE -> {
+                                case.ledgerId?.let { suspectReview.split(it) }
+                                separated += case.targetId
+                            }
+                            com.hereliesaz.cleanunderwear.domain.Recommendation.KEEP_COMBINED ->
+                                case.ledgerId?.let { suspectReview.keepMerged(it) }
+                            com.hereliesaz.cleanunderwear.domain.Recommendation.USE_REPLACEMENT -> suspectReview.adoptReplacement(case)
+                            com.hereliesaz.cleanunderwear.domain.Recommendation.MARK_OUT_OF_DATE -> suspectReview.markStale(case)
+                            com.hereliesaz.cleanunderwear.domain.Recommendation.KEEP_NUMBER -> suspectReview.dismiss(case)
+                        }
+                        done[rec] = (done[rec] ?: 0) + 1
+                    }
+                    _operationState.value = OperationState(isRunning = false)
+                    post(lines().joinToString("; ").replaceFirstChar { it.uppercase() } + ".")
+                } finally {
+                    if (_operationState.value.isRunning) _operationState.value = OperationState(isRunning = false)
+                    // Cancelled or not, what was done is done; the list shows what is left.
+                    refreshSuspects()
+                }
+            }
+        }
+    }
+
     private val _alternates = MutableStateFlow<AlternateInfo?>(null)
 
     /** The lookup's offer for a contact whose number was just ruled out; null when none is pending. */
