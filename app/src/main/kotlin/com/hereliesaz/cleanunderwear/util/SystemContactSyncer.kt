@@ -39,11 +39,18 @@ class SystemContactSyncer @Inject constructor(@ApplicationContext private val co
 
     fun syncToSystem(target: Target) {
         try {
-            val block = ContactNote.block(target) { dateFormat.format(Instant.ofEpochMilli(it)) } ?: return
+            val block = ContactNote.block(target) { dateFormat.format(Instant.ofEpochMilli(it)) }
             // A stale number may now belong to a stranger's contact; never write this person's status there.
             val phone = target.usablePhone ?: return
             val contactId = findContactId(context.contentResolver, phone, target.displayName) ?: return
-            upsertBlock(context.contentResolver, contactId, block)
+            if (block != null) {
+                upsertBlock(context.contentResolver, contactId, block)
+            } else {
+                // A status that doesn't belong in a note (not checked yet, a possible match) must
+                // not leave an older block behind: a stale "Archived" would archive the contact
+                // again at the next contact read. Only a block this app signed is removed.
+                removeSignedBlock(context.contentResolver, contactId)
+            }
         } catch (e: Exception) {
             Log.e("ContactSyncer", "Failed to sync a contact note", e)
         }
@@ -129,6 +136,24 @@ class SystemContactSyncer @Inject constructor(@ApplicationContext private val co
             resolver.applyBatch(ContactsContract.AUTHORITY, ArrayList(listOf(op)))
         } catch (e: Exception) {
             Log.e("ContactSyncer", "Note write failed for contact $contactId", e)
+        }
+    }
+
+    private fun removeSignedBlock(resolver: ContentResolver, contactId: String) {
+        val (rowId, note) = findNote(resolver, contactId) ?: return
+        if (!ContactNote.isSigned(note)) return
+        val rest = ContactNote.strip(note)
+        val sel = "${ContactsContract.Data._ID} = ?"
+        val op = if (rest.isBlank()) {
+            ContentProviderOperation.newDelete(ContactsContract.Data.CONTENT_URI).withSelection(sel, arrayOf(rowId)).build()
+        } else {
+            ContentProviderOperation.newUpdate(ContactsContract.Data.CONTENT_URI).withSelection(sel, arrayOf(rowId))
+                .withValue(ContactsContract.CommonDataKinds.Note.NOTE, rest).build()
+        }
+        try {
+            resolver.applyBatch(ContactsContract.AUTHORITY, ArrayList(listOf(op)))
+        } catch (e: Exception) {
+            Log.e("ContactSyncer", "Removing the note block failed for contact $contactId", e)
         }
     }
 

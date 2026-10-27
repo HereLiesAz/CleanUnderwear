@@ -330,6 +330,9 @@ class DeduplicateTargetsUseCase(
     private fun mergeFields(into: Target, from: Target): Target {
         val mergedSources = mergeSources(into.sourceAccount, from.sourceAccount)
         val statusFrom = if (statusRank(from.status) > statusRank(into.status)) from else into
+        val other = if (statusFrom === from) into else from
+        // Archiving hides a contact; it doesn't erase its match, which comes back with "Bring back".
+        val archived = statusFrom.status == TargetStatus.IGNORED
         return into.copy(
             displayName = preferNonPlaceholder(into.displayName, from.displayName),
             phoneNumber = into.phoneNumber ?: from.phoneNumber,
@@ -342,12 +345,21 @@ class DeduplicateTargetsUseCase(
             dateOfBirth = into.dateOfBirth ?: from.dateOfBirth,
             enrichmentProvenance = into.enrichmentProvenance ?: from.enrichmentProvenance,
             status = statusFrom.status,
+            // An archived result keeps what it was before archiving, so "Bring back" restores it;
+            // if the archive came from the other copy, this copy's own status is that answer.
+            statusBeforeIgnore = if (statusFrom.status == TargetStatus.IGNORED) {
+                statusFrom.statusBeforeIgnore ?: other.status.takeIf { it != TargetStatus.IGNORED }
+            } else {
+                null
+            },
+            matchRecordKey = statusFrom.matchRecordKey ?: other.matchRecordKey.takeIf { archived },
+            unreadSources = statusFrom.unreadSources,
             lockupUrl = statusFrom.lockupUrl ?: into.lockupUrl ?: from.lockupUrl,
             obituaryUrl = statusFrom.obituaryUrl ?: into.obituaryUrl ?: from.obituaryUrl,
             lastVerificationSnippet = statusFrom.lastVerificationSnippet ?: into.lastVerificationSnippet ?: from.lastVerificationSnippet,
-            matchConfidence = statusFrom.matchConfidence,
-            matchKind = statusFrom.matchKind,
-            matchReasons = statusFrom.matchReasons,
+            matchConfidence = statusFrom.matchConfidence ?: other.matchConfidence.takeIf { archived },
+            matchKind = statusFrom.matchKind ?: other.matchKind.takeIf { archived },
+            matchReasons = statusFrom.matchReasons ?: other.matchReasons.takeIf { archived },
             dismissedMatchKeys = unionCsv(into.dismissedMatchKeys, from.dismissedMatchKeys),
             sourceAccount = mergedSources,
             checkFrequencyHours = minOf(into.checkFrequencyHours, from.checkFrequencyHours),

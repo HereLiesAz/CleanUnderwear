@@ -109,4 +109,26 @@ class ProbabilisticScorerTest {
         assertTrue(verdict.contributions.any { it.field == "name" })
         assertTrue(verdict.probability in 0.0..1.0)
     }
+
+    @Test
+    fun aHouseholdLine_neverMergesTwoFirstNames() {
+        // "John" and "Mary Smith" on the home number: one surname, two people.
+        val john = MatchRecord.fromDisplayName("John Smith", phone = "504-555-0100", areaCode = "504")
+        val mary = MatchRecord.fromDisplayName("Mary Smith", phone = "504-555-0100", areaCode = "504")
+        assertFalse(scorer.score(john, mary).isConfidentMatch)
+    }
+
+    @Test
+    fun twoOneWordNamesOnOneLine_areTwoPeople() {
+        val mom = MatchRecord.fromDisplayName("Mom", phone = "504-555-0100")
+        val dad = MatchRecord.fromDisplayName("Dad", phone = "504-555-0100")
+        assertFalse(scorer.score(mom, dad).isConfidentMatch)
+    }
+
+    @Test
+    fun anInitialStillJoinsItsName() {
+        val a = MatchRecord.fromDisplayName("J Smith", phone = "504-555-0100")
+        val b = MatchRecord.fromDisplayName("John Smith", phone = "504-555-0100")
+        assertTrue(scorer.score(a, b).isConfidentMatch)
+    }
 }

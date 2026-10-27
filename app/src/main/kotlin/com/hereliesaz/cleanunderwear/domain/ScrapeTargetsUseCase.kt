@@ -311,7 +311,12 @@ class ScrapeTargetsUseCase @Inject constructor(
             // match to protect, the check stands (unread sources noted), so a site that is always
             // down can't hold a contact at "Not checked yet".
             val pendingMatch = target.status == TargetStatus.POSSIBLE_MATCH || target.status == TargetStatus.WEAK_MATCH
-            val inconclusive = best == null && (noteClaim || (failedSources.isNotEmpty() && pendingMatch))
+            // A pending obituary or arrest isn't undone by its absence: obituary, court and news
+            // searches only look back so far (60 days for most), so a record that stops showing has
+            // aged out of the window, not left the world. Only a custody record (a jail or prison
+            // roster) disappearing means something: the person was released. The user settles the rest.
+            val pendingEvent = pendingMatch && (target.matchKind == EventKind.DEATH.name || target.matchKind == EventKind.ARREST.name)
+            val inconclusive = best == null && (noteClaim || pendingEvent || (failedSources.isNotEmpty() && pendingMatch))
             val nextCheck = now + if (inconclusive && failedSources.isNotEmpty()) {
                 minOf(target.checkFrequencyHours, RETRY_HOURS) * 3600000L
             } else {

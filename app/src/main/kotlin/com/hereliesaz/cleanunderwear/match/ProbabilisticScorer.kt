@@ -177,19 +177,23 @@ class ProbabilisticScorer(
             val firstMatch = firstNamesMatch(firstA, firstB)
             val initialMatch = firstA != null && firstB != null &&
                 firstA.first() == firstB.first()
+            val anInitial = firstA != null && firstB != null && (firstA.length == 1 || firstB.length == 1)
             return when {
                 lastSim >= 0.90 && firstMatch -> Level.AGREE
                 lastSim >= 0.90 && (firstA == null || firstB == null) -> Level.PARTIAL
-                lastSim >= 0.90 && initialMatch -> Level.PARTIAL
+                lastSim >= 0.90 && anInitial && initialMatch -> Level.PARTIAL
+                // Same surname, two different first names: a household ("John" and "Mary Smith"
+                // on the home line), not one person. Without this a shared number alone merged them.
+                lastSim >= 0.90 && firstA != null && firstB != null && !anInitial -> Level.CONFLICT
                 lastSim < 0.85 && firstA != null && firstB != null -> Level.CONFLICT
                 else -> Level.ABSENT // ambiguous (surname typo, missing first) — no evidence
             }
         }
 
-        // Only first names available: weak corroboration at best, never a conflict
-        // (we may simply not know the nickname linking them).
+        // Only first names available ("Mom", "Dad", or one record without a surname): the same
+        // name, or a known nickname, is weak corroboration; two different names are two people.
         if (firstA != null && firstB != null) {
-            return if (firstNamesMatch(firstA, firstB)) Level.PARTIAL else Level.ABSENT
+            return if (firstNamesMatch(firstA, firstB)) Level.PARTIAL else Level.CONFLICT
         }
 
         return Level.ABSENT

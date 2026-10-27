@@ -188,6 +188,25 @@ object SuspectDetector {
     // Bad merges
     // ---------------------------------------------------------------------------------------
 
+    /**
+     * Whether two names are plainly two people: one surname with different full first names, or
+     * two different one-word names. An initial, a missing name or a likely spelling variant isn't.
+     */
+    internal fun differentPeopleByName(a: String, b: String): Boolean {
+        val ta = com.hereliesaz.cleanunderwear.network.NameValidator.tokenize(a).map { it.lowercase() }
+        val tb = com.hereliesaz.cleanunderwear.network.NameValidator.tokenize(b).map { it.lowercase() }
+        if (ta.isEmpty() || tb.isEmpty()) return false
+        val firstA = ta.first()
+        val firstB = tb.first()
+        if (firstA.length < 2 || firstB.length < 2) return false
+        if (StringSimilarity.jaroWinkler(firstA, firstB) >= 0.92) return false
+        return when {
+            ta.size >= 2 && tb.size >= 2 -> StringSimilarity.jaroWinkler(ta.last(), tb.last()) >= 0.90
+            ta.size == 1 && tb.size == 1 -> true
+            else -> false
+        }
+    }
+
     fun assessMerge(i: MergeCaseInput, now: Long): SuspectCase? {
         val suspicion = mutableListOf<Evidence>()
         val defense = mutableListOf<Evidence>()
@@ -204,8 +223,14 @@ object SuspectDetector {
             )
         }
 
+        // Two different first names under one surname (or two different one-word names) are two
+        // people sharing a line. Read from the names themselves, so merges recorded before the
+        // scorer weighed this (their contributions say nothing about it) are caught too.
+        val household = differentPeopleByName(i.survivorName, i.absorbedName)
         when (level("name")) {
-            "CONFLICT" -> suspicion += Evidence(
+            "CONFLICT" -> suspicion += if (household) Evidence(
+                "Different first names (\"${i.survivorName}\", \"${i.absorbedName}\"): likely two people sharing a line.", 3.0
+            ) else Evidence(
                 "The surnames disagreed (\"${i.survivorName}\" vs \"${i.absorbedName}\"); other fields outvoted them.", 3.0
             )
             "PARTIAL" -> suspicion += Evidence(
@@ -213,6 +238,9 @@ object SuspectDetector {
             )
             "AGREE" -> defense += Evidence(
                 "The names agree, allowing for nicknames (\"${i.survivorName}\" / \"${i.absorbedName}\").", 2.0
+            )
+            else -> if (household) suspicion += Evidence(
+                "Different first names (\"${i.survivorName}\", \"${i.absorbedName}\"): likely two people sharing a line.", 3.0
             )
         }
         if (sameNumber) defense += Evidence("Both entries had the same phone number.", 1.5)
