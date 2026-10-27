@@ -23,7 +23,8 @@ data class SearchResult(val records: List<CandidateRecord>, val failed: Boolean 
 }
 
 class SourceSearch @Inject constructor(
-    private val basicScraper: HtmlScraper
+    private val basicScraper: HtmlScraper,
+    private val names: OnDeviceResearchAgent
 ) {
     /**
      * Queries one source and returns every record on it that names the contact.
@@ -89,15 +90,15 @@ class SourceSearch @Inject constructor(
                     when (source.resultFormat) {
                         ResultFormat.JSON_RECORDS -> {
                             if (!StructuredRecords.jsonReadable(body, source)) return unreadable()
-                            return SearchResult(StructuredRecords.fromJson(body, source, first, last, kind, evidenceUrl))
+                            return SearchResult(StructuredRecords.fromJson(body, source, first, last, kind, evidenceUrl, names.getNicknames(first)))
                         }
                         ResultFormat.HTML_TABLE -> {
                             if (!StructuredRecords.tableReadable(body, source) && !BotWall.saysNoResults(body)) return unreadable()
-                            return SearchResult(StructuredRecords.fromTable(body, source, first, last, kind, evidenceUrl))
+                            return SearchResult(StructuredRecords.fromTable(body, source, first, last, kind, evidenceUrl, names.getNicknames(first)))
                         }
                         ResultFormat.REGEX_RECORDS -> {
                             if (!StructuredRecords.regexReadable(body, source) && !BotWall.saysNoResults(body)) return unreadable()
-                            val records = StructuredRecords.fromRegex(body, source, first, last, kind, evidenceUrl) +
+                            val records = StructuredRecords.fromRegex(body, source, first, last, kind, evidenceUrl, names.getNicknames(first)) +
                                 laterPages(source, fetchUrl, body, first, last, kind, evidenceUrl)
                             return SearchResult(records.distinctBy { it.recordKey })
                         }
@@ -115,7 +116,7 @@ class SourceSearch @Inject constructor(
         } ?: return SearchResult.FAILED
         val released = source.releasedPattern?.let { Regex(it, RegexOption.IGNORE_CASE) }
         val custody = source.custodyPattern?.let { Regex(it, RegexOption.IGNORE_CASE) }
-        return SearchResult(RecordExtractor.extract(text, first, last, kind, source.id, source.label, evidenceUrl)
+        return SearchResult(RecordExtractor.extract(text, first, last, kind, source.id, source.label, evidenceUrl, names.getNicknames(first))
             // On a roster the status sits just after the name (within one row).
             .filter { c ->
                 val snip = c.snippet.orEmpty()
@@ -150,7 +151,7 @@ class SourceSearch @Inject constructor(
                 SourceUrlBuilder.buildFormFields(source, first, last),
                 SourceUrlBuilder.buildBody(source, first, last)
             )?.takeUnless { BotWall.detected(it) } ?: break
-            out += StructuredRecords.fromRegex(body, source, first, last, kind, evidenceUrl)
+            out += StructuredRecords.fromRegex(body, source, first, last, kind, evidenceUrl, names.getNicknames(first))
             if (!StructuredRecords.reachesIntoWindow(body, source)) break
         }
         return out

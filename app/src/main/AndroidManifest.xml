@@ -20,7 +20,7 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@drawable/ic_launcher_foreground"
-        android:label="CleanUnderwear"
+        android:label="@string/app_name"
         android:roundIcon="@drawable/ic_launcher_foreground"
         android:supportsRtl="true"
         android:theme="@style/Theme.CleanUnderwear"

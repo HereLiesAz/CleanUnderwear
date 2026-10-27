@@ -315,7 +315,7 @@ fun TargetActionMenu(
             )
             else -> ListItem(
                 headlineContent = { Text("Archive") },
-                supportingContent = { Text("Stop checking and hide from the list. Turn on Archives to bring back.") },
+                supportingContent = { Text("Stop checking and hide from the list. Show archived (on the rail) brings it back.") },
                 colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
                 modifier = Modifier.clickable { viewModel.ignoreTarget(targetId); onDone() }
             )

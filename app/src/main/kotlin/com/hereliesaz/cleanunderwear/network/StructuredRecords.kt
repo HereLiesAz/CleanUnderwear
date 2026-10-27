@@ -25,6 +25,9 @@ import org.jsoup.Jsoup
  */
 object StructuredRecords {
 
+    /** A record id that is just a date or a timestamp ("2026-10-01", "10/01/2026 13:04"). */
+    private val DATE_ONLY = Regex("[0-9]{1,4}[-/.][0-9]{1,2}[-/.][0-9]{1,4}([ T][0-9:.]+Z?)?")
+
     /*
      * Whether a page has the shape a source's config expects: the records path in JSON, a table
      * with the configured name columns, at least one record block. A page with none of these, that
@@ -58,7 +61,8 @@ object StructuredRecords {
         first: String,
         last: String,
         kind: EventKind,
-        evidenceUrl: String
+        evidenceUrl: String,
+        firstVariants: List<String> = emptyList()
     ): List<CandidateRecord> {
         val root = try {
             JsonParser.parseString(body)
@@ -73,7 +77,7 @@ object StructuredRecords {
             val row = f.filterKeys { it != "records" }.mapValues { (_, path) ->
                 resolve(rec, path).firstOrNull()?.takeIf { it.isJsonPrimitive }?.asString
             }
-            build(row, rec.toString(), source, first, last, kind, evidenceUrl)
+            build(row, rec.toString(), source, first, last, kind, evidenceUrl, firstVariants)
         }
     }
 
@@ -90,7 +94,8 @@ object StructuredRecords {
         first: String,
         last: String,
         kind: EventKind,
-        evidenceUrl: String
+        evidenceUrl: String,
+        firstVariants: List<String> = emptyList()
     ): List<CandidateRecord> {
         val recordRe = source.recordRegex?.let { Regex(it, setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)) }
             ?: return emptyList()
@@ -100,7 +105,7 @@ object StructuredRecords {
             val row = fieldRes.mapValues { (_, re) ->
                 re.find(block)?.groupValues?.lastOrNull()?.let { Jsoup.parse(it).text().trim() }
             }
-            build(row, Jsoup.parse(block).text(), source, first, last, kind, evidenceUrl)
+            build(row, Jsoup.parse(block).text(), source, first, last, kind, evidenceUrl, firstVariants)
         }.toList()
     }
 
@@ -124,7 +129,8 @@ object StructuredRecords {
         first: String,
         last: String,
         kind: EventKind,
-        evidenceUrl: String
+        evidenceUrl: String,
+        firstVariants: List<String> = emptyList()
     ): List<CandidateRecord> {
         val patterns = source.tableColumns.mapValues { (_, p) -> Regex(p, RegexOption.IGNORE_CASE) }
         val out = mutableListOf<CandidateRecord>()
@@ -149,7 +155,7 @@ object StructuredRecords {
                 }
                 if (cells.isEmpty()) continue
                 val row = index.mapValues { (_, i) -> cells.getOrNull(i) }
-                build(row, cells.joinToString(" "), source, first, last, kind, evidenceUrl)?.let { out += it }
+                build(row, cells.joinToString(" "), source, first, last, kind, evidenceUrl, firstVariants)?.let { out += it }
             }
         }
         return out
@@ -162,7 +168,8 @@ object StructuredRecords {
         first: String,
         last: String,
         kind: EventKind,
-        evidenceUrl: String
+        evidenceUrl: String,
+        firstVariants: List<String> = emptyList()
     ): CandidateRecord? {
         val row = rawRow.mapValues { it.value?.trim()?.takeIf { v -> v.isNotEmpty() } }
         val rawName = row["name"]?.let { n ->
@@ -173,7 +180,10 @@ object StructuredRecords {
         val recLast = row["last"] ?: parsed?.third ?: return null
         val recMiddle = row["middle"] ?: parsed?.second
         val fold = StringSimilarity::foldDiacritics
-        if (!fold(recFirst.substringBefore(' ')).equals(fold(first), ignoreCase = true)) return null
+        val recordFirst = fold(recFirst.substringBefore(' '))
+        val exactFirst = recordFirst.equals(fold(first), ignoreCase = true)
+        // A nickname variant ("William" for "Bill") is accepted too, and marked: it counts for less.
+        if (!exactFirst && firstVariants.none { fold(it).equals(recordFirst, ignoreCase = true) }) return null
         if (fold(recLast).split(' ', '-').none { it.equals(fold(last), ignoreCase = true) }) return null
 
         // With a status field configured, only it decides (an empty release date
@@ -224,7 +234,18 @@ object StructuredRecords {
             state = UsStates.code(row["state"]),
             // The year of the death or filing, so two sources' reports of one event can be lined up.
             eventYear = row["date"]?.let(::parseDate)?.year,
-            recordKey = id?.let { "${source.id}:$it" }
+            nicknameOf = recFirst.substringBefore(' ').takeUnless { exactFirst },
+            // An id that is only a date (some jails key a booking by its date) isn't one person's:
+            // two people of the same name booked that day would share it, and dismissing one
+            // would hide the other. Their name and birth year make it theirs.
+            recordKey = id?.let {
+                if (DATE_ONLY.matches(it.trim())) {
+                    "${source.id}:$it:" + listOf(recFirst, recLast, (birthYear ?: age)?.toString().orEmpty())
+                        .joinToString("|") { p -> fold(p).trim().lowercase() }
+                } else {
+                    "${source.id}:$it"
+                }
+            }
                 ?: com.hereliesaz.cleanunderwear.match.RecordExtractor.personKey(
                     source.id, recFirst, recMiddle, recLast, birthYear ?: age, row["city"]
                 ),

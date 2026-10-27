@@ -155,7 +155,14 @@ fun TargetDetailScreen(
                 else "Not yet"
             )
             target.unreadSources?.let {
-                AppCaption("The last check couldn't read $it. It will try again within six hours.")
+                AppCaption(
+                    "The last check couldn't read $it. " +
+                        if (target.status == TargetStatus.POSSIBLE_MATCH || target.status == TargetStatus.WEAK_MATCH) {
+                            "Its match stays, and it is checked again within six hours."
+                        } else {
+                            "It is tried again at the next check."
+                        }
+                )
             }
             val plan = sourceCatalog.searchPlan(target.areaCode, target.residenceInfo)
             if (plan.automated && !plan.lockupAutomated) {
@@ -292,7 +299,7 @@ fun TargetDetailScreen(
             onConfirm = { confirming = null; onArchive(target.id) },
             onDismiss = { confirming = null }
         ) {
-            Text("$name won't be checked and won't appear in your list. Turn on Archives to see them and bring them back.")
+            Text("$name won't be checked and won't appear in your list. Choose Show archived on the rail to see them and bring them back.")
         }
         null -> Unit
     }
@@ -333,11 +340,9 @@ private fun openUrl(context: Context, url: String) {
 }
 
 /**
- * Identity-source IDs whose chips MUST open in the in-app WebView (not the
- * system browser) so requests carry the user's WebView UA + session cookies.
- * CBC and SmartBGC bot-block raw HTTP requests with non-WebView UAs; the
- * in-app BrowserScreen + WebViewIdentityInterceptor together guarantee
- * every CBC/SmartBGC request uses "the user's header" end-to-end.
+ * Identity-source IDs whose chips open in the in-app browser (not the system
+ * browser): CBC and SmartBGC block other clients, and the app's browser carries
+ * the session (and any CAPTCHA solved) that the lookups use.
  */
 private val BROWSER_HOSTED_IDENTITY_SOURCES = setOf(
     "cyberbgc_people_lookup",

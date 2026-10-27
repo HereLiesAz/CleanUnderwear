@@ -32,7 +32,7 @@ class NotificationHelper @Inject constructor(@ApplicationContext private val con
         // channel has a new id and the old high-importance one is deleted.
         private const val CHANNEL_ID = "possible_matches"
         private const val OLD_CHANNEL_ID = "panopticon_alerts"
-        private const val CHANNEL_NAME = "Possible matches"
+        private const val CHANNEL_NAME = "Possible matches and updates"
         const val EXTRA_TARGET_ID = "com.hereliesaz.cleanunderwear.TARGET_ID"
         const val PREFS = "clean_underwear_prefs"
         const val PREF_NOTIFY_DEATH = "notify_death"
@@ -87,7 +87,7 @@ class NotificationHelper @Inject constructor(@ApplicationContext private val con
         // What the lock screen shows instead: no name, no claim.
         val public = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(com.hereliesaz.cleanunderwear.R.drawable.ic_stat_briefs)
-            .setContentTitle("Clean Underwear")
+            .setContentTitle("CleanUnderwear")
             .setContentText("A contact needs your review.")
             .build()
 

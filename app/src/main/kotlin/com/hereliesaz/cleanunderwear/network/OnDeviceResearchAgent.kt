@@ -44,8 +44,15 @@ class OnDeviceResearchAgent @Inject constructor(
         }
     }
 
+    /**
+     * Every name that can stand for [name]: its own list, and every name whose list holds it
+     * (the table lists "william" under "bill" only one way round), with their lists too. So Bill
+     * finds William and William finds Bill.
+     */
     fun getNicknames(name: String): List<String> {
-        return nicknames[name.lowercase()] ?: emptyList()
+        val n = name.lowercase()
+        val related = (nicknames[n].orEmpty() + nicknames.filterValues { n in it }.keys).toSet()
+        return (related + related.flatMap { nicknames[it].orEmpty() }).minus(n).toList()
     }
 
     /**

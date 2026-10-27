@@ -394,7 +394,12 @@ class ScrapeTargetsUseCase @Inject constructor(
                 best?.candidate?.kind?.let { tally.match(target.displayName, it) }
             }
             if (newStatus == TargetStatus.WEAK_MATCH && target.status != TargetStatus.WEAK_MATCH) tally.weak()
-            if (newStatus != target.status && shouldNotify(target.status, newStatus)) {
+            // A pending match replaced by a different kind of record (custody, then an obituary)
+            // is news too, though the status stays "possible match".
+            val newKind = newStatus == TargetStatus.POSSIBLE_MATCH && target.status == TargetStatus.POSSIBLE_MATCH &&
+                target.matchKind != null && updatedTarget.matchKind != target.matchKind
+            if (newKind) best?.candidate?.kind?.let { tally.match(target.displayName, it) }
+            if ((newStatus != target.status && shouldNotify(target.status, newStatus)) || newKind) {
                 emitStep("notifying status change")
                 notifications.notifyStatusChange(updatedTarget, target.status)
             }

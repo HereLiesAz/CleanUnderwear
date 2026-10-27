@@ -56,6 +56,8 @@ class MatchVerifier(
         /** Prior odds, in bits, that a bare name hit is the contact. */
         val priorBits: Double = -8.0,
         val nameExact: Double = 2.0,
+        /** A nickname variant of the first name ("William" for "Bill"): many share one. */
+        val nameNickname: Double = 0.5,
         val middleAgree: Double = 4.0,
         val middleInitialAgree: Double = 2.0,
         val ageAgree: Double = 6.0,
@@ -83,8 +85,10 @@ class MatchVerifier(
         candidate: CandidateRecord,
         corroboratingSources: List<String> = emptyList()
     ): Verification {
-        val reasons = mutableListOf("Name matches")
-        var bits = config.priorBits + config.nameExact
+        val reasons = mutableListOf(
+            candidate.nicknameOf?.let { "Name matches, with a nickname (${it.lowercase().replaceFirstChar { c -> c.uppercase() }})" } ?: "Name matches"
+        )
+        var bits = config.priorBits + if (candidate.nicknameOf != null) config.nameNickname else config.nameExact
         for (signal in listOf(middleName(contact, candidate), age(contact, candidate))) {
             if (signal.rejects) return rejected(candidate, reasons + signal.reason!!)
             bits += signal.bits

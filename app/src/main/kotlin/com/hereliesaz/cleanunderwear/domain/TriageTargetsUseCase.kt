@@ -39,7 +39,8 @@ class TriageTargetsUseCase @Inject constructor(
         var noAutomatedSourceCount = 0
 
         var offset = 0
-        val chunkSize = 1000
+        // Under SQLite's 999-variable limit on Android 8-11 (an IN list of the chunk's ids, plus one).
+        val chunkSize = 900
 
         while (true) {
             val chunk = repository.getTargetWorkInfoPaged(chunkSize, offset)
@@ -124,7 +125,9 @@ class TriageTargetsUseCase @Inject constructor(
 
     private fun decide(target: TargetWorkInfo): Decision {
         val nameVerifiable = NameValidator.isVerifiable(target.displayName)
-        // A number the user ruled stale doesn't identify anyone; the contact must stand on its location.
+        // A number the user ruled stale doesn't identify anyone, so it doesn't count as a phone. Its
+        // area code still counts as a location: an old number still says where they lived, and is
+        // kept as that rough hint until a new number replaces it (see the Monitoring Guide).
         val hasPhone = !target.phoneIsStale && (target.phoneNumber?.filter { it.isDigit() }?.length ?: 0) >= 10
         val hasLocation = !target.residenceInfo.isNullOrBlank() ||
             (!target.areaCode.isNullOrBlank() && target.areaCode != "LOCAL")

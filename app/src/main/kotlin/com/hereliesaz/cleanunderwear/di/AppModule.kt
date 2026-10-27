@@ -13,7 +13,6 @@ import com.hereliesaz.cleanunderwear.data.RoomMergeLedger
 import com.hereliesaz.cleanunderwear.data.OfflineTargetRepository
 import com.hereliesaz.cleanunderwear.data.TargetDao
 import com.hereliesaz.cleanunderwear.data.TargetRepository
-import com.hereliesaz.cleanunderwear.network.WebViewIdentityInterceptor
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -64,16 +63,13 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(identityBridge: WebViewIdentityInterceptor): OkHttpClient =
+    fun provideOkHttpClient(): OkHttpClient =
         OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             // Bounds a whole search, redirects and token page included, so one slow site
             // can't hold a scrape slot indefinitely.
             .callTimeout(60, TimeUnit.SECONDS)
-            // Identity-bridge runs first so the User-Agent / Cookie rewrite
-            // is visible to the logging interceptor below it.
-            .addInterceptor(identityBridge)
             .apply {
                 // Request lines carry contacts' names in the query; never log them in release.
                 if (BuildConfig.DEBUG) {

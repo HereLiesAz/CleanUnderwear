@@ -147,7 +147,12 @@ class DeduplicateTargetsUseCase(
                 val losers = component.filter { it.id != winner.id }
                 // Ledger, survivor and deletions in one transaction: a merge interrupted halfway
                 // would leave a ledger entry for a row that still exists, and a split would copy it.
-                repository.inTransaction {
+                val applied = repository.inTransaction {
+                    // The rows were read before scoring; a decision the user made since (an
+                    // archive, a verdict) must not be overwritten by that copy. If any row changed,
+                    // this group waits for the next sweep, scored afresh.
+                    val now = repository.getTargetsByIds(component.map { it.id }).associateBy { it.id }
+                    if (component.any { now[it.id] != it }) return@inTransaction false
                     var acc = winner
                     for (loser in losers) {
                         val next = mergeFields(acc, loser)
@@ -159,8 +164,9 @@ class DeduplicateTargetsUseCase(
                         ledger?.reassignSurvivor(loser.id, winner.id)
                         repository.deleteTarget(loser)
                     }
+                    true
                 }
-                merged += losers.size
+                if (applied) merged += losers.size
             }
 
             processed++
