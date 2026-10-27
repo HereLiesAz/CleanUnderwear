@@ -82,4 +82,14 @@ class SourceCatalogAutomatabilityTest {
             obit.any { it.resultFormat == ResultFormat.NEWS_RSS && it.kind != SourceKind.MANUAL_LANDING }
         )
     }
+
+    @Test
+    fun anotherCountysJail_isSearchedButIsntTheContactsOwn() {
+        // New Orleans: Orleans Parish's jail and the state DOC are manual; the automated Louisiana
+        // jails are other parishes'. They're still searched, but don't count as covering the contact.
+        val plan = loadCatalog().searchPlan("504", "New Orleans, LA 70112")
+        assertEquals("Orleans Parish, LA", plan.ownCounty)
+        assertTrue(plan.lockup.any { it.kind == SourceKind.QUERY_TEMPLATE && it.county != null })
+        assertTrue(!plan.lockupAutomated)
+    }
 }

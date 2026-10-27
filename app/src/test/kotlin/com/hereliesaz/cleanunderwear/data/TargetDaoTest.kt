@@ -61,4 +61,23 @@ class TargetDaoTest {
         dao.unignore(id, 3)
         assertEquals(TargetStatus.DECEASED, dao.getTargetById(id)!!.status)
     }
+
+    @Test
+    fun sortOrders_doWhatTheySay() = runBlocking {
+        dao.insertTargets(
+            listOf(
+                Target(displayName = "zoe Adams", status = TargetStatus.MONITORING, lastScrapedTimestamp = 30, lastStatusChangeTimestamp = 99),
+                Target(displayName = "Adam Zed", status = TargetStatus.POSSIBLE_MATCH, lastScrapedTimestamp = 10),
+                Target(displayName = "Mia Mid", status = TargetStatus.DECEASED, lastScrapedTimestamp = 20)
+            )
+        )
+        suspend fun order(sort: String): List<String> {
+            val page = dao.searchTargets("", false, null, null, null, null, null, null, null, null, null, sort)
+                .load(androidx.paging.PagingSource.LoadParams.Refresh(null, 10, false))
+            return (page as androidx.paging.PagingSource.LoadResult.Page).data.map { it.displayName }
+        }
+        assertEquals(listOf("Adam Zed", "Mia Mid", "zoe Adams"), order("NAME"))
+        assertEquals(listOf("Adam Zed", "Mia Mid", "zoe Adams"), order("STATUS"))
+        assertEquals(listOf("zoe Adams", "Mia Mid", "Adam Zed"), order("DATE"))
+    }
 }

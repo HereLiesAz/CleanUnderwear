@@ -22,6 +22,7 @@ import com.hereliesaz.cleanunderwear.domain.BrowserMission
 import com.hereliesaz.cleanunderwear.network.NameValidator
 import com.hereliesaz.cleanunderwear.network.SourceCatalog
 import com.hereliesaz.cleanunderwear.network.SourceKind
+import com.hereliesaz.cleanunderwear.network.SourceScope
 import com.hereliesaz.cleanunderwear.network.SourceUrlBuilder
 import com.hereliesaz.cleanunderwear.util.CyberBackgroundChecks
 import java.net.URLEncoder
@@ -166,12 +167,13 @@ fun TargetDetailScreen(
             }
             val plan = sourceCatalog.searchPlan(target.areaCode, target.residenceInfo)
             if (plan.automated && !plan.lockupAutomated) {
+                val federal = if (plan.lockup.any { it.kind != SourceKind.MANUAL_LANDING && it.scope == SourceScope.MULTI_STATE }) "federal prisons, " else ""
                 AppCaption(
-                    if (plan.lockup.any { it.kind != SourceKind.MANUAL_LANDING }) {
-                        "Their own county's jail isn't searched on its own; only other jails in the state, and obituaries and news, are. " +
+                    if (plan.lockup.any { it.kind != SourceKind.MANUAL_LANDING && it.county != null }) {
+                        "Their own county's jail isn't searched on its own; only other jails in the state, ${federal}and obituaries and news, are. " +
                             "Its link is below, under Look them up yourself."
                     } else {
-                        "No jail or prison search for this area runs on its own, so only obituaries and news are checked."
+                        "No jail or state prison search for this area runs on its own, so only ${federal}obituaries and news are checked."
                     }
                 )
             }

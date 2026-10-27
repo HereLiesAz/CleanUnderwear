@@ -156,10 +156,14 @@ data class SearchPlan(
     /**
      * Whether a jail or prison search that covers the contact runs on its own: a statewide one,
      * or their own county's jail. Another county's jail elsewhere in the state is still searched,
-     * but doesn't count: it says nothing about the jail they'd most likely be in.
+     * but doesn't count: it says nothing about the jail they'd most likely be in. Nor does the
+     * federal prison locator: it's searched for everyone, and federal custody is the rare case.
      */
     val lockupAutomated: Boolean
-        get() = lockup.any { it.kind != SourceKind.MANUAL_LANDING && (it.county == null || it.county == ownCounty) }
+        get() = lockup.any {
+            it.kind != SourceKind.MANUAL_LANDING && it.scope != SourceScope.MULTI_STATE &&
+                (it.county == null || it.county == ownCounty)
+        }
 }
 
 data class LocaleResolution(
