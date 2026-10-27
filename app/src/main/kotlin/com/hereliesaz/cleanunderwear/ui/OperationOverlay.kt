@@ -69,6 +69,7 @@ fun OperationOverlay(
                             trackColor = MaterialTheme.colorScheme.outline
                         )
                     }
+                    FindingsSoFar(state.findings)
                 }
                 Column(
                     modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(Spacing.lg),
@@ -133,6 +134,9 @@ fun OperationBar(state: OperationState, onShow: () -> Unit, onCancel: () -> Unit
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    state.findings.firstOrNull()?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                     AppCaption(
                         if (state.continues == Continues.ANYWHERE) "Running. You can leave the app; it keeps going."
                         else "Running while you use the app."
@@ -140,6 +144,31 @@ fun OperationBar(state: OperationState, onShow: () -> Unit, onCancel: () -> Unit
                 }
                 if (state.cancellable) AppTextAction("Cancel", onCancel)
             }
+        }
+    }
+}
+
+/**
+ * What an operation has turned up so far, under its loader: the first line is the tally
+ * ("12 of 40 checked"), the rest what was found, one line each.
+ */
+@Composable
+fun FindingsSoFar(lines: List<String>, modifier: Modifier = Modifier) {
+    if (lines.isEmpty()) return
+    Column(
+        modifier = modifier.fillMaxWidth().padding(horizontal = Spacing.xl),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+    ) {
+        lines.forEachIndexed { i, line ->
+            Text(
+                line,
+                style = if (i == 0) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall,
+                color = if (i == 0) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }

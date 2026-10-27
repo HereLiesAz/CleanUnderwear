@@ -88,6 +88,8 @@ fun BrowserScreen(
     context: String? = null,
     /** Whether backing out ends a whole run of lookups, not just this page. */
     stopsBatch: Boolean = false,
+    /** What the run has turned up so far, shown under the loader while a page is read. */
+    findings: List<String> = emptyList(),
 ) {
     if (missions.isEmpty()) {
         // Defensive: nothing to do.
@@ -406,7 +408,13 @@ fun BrowserScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         MaterialTheme(colorScheme = SurveillanceDarkColorScheme, typography = MaterialTheme.typography) {
-                            LoadingCaption(if (!pageReady) "Loading the page…" else "Reading the page. Please don't touch it.")
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(Spacing.md)
+                            ) {
+                                LoadingCaption(if (!pageReady) "Loading the page…" else "Reading the page. Please don't touch it.")
+                                FindingsSoFar(findings)
+                            }
                             AppAction(
                                 "Cancel",
                                 ::cancel,
