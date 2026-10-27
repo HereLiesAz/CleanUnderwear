@@ -159,7 +159,14 @@ fun TargetDetailScreen(
             }
             val plan = sourceCatalog.searchPlan(target.areaCode, target.residenceInfo)
             if (plan.automated && !plan.lockupAutomated) {
-                AppCaption("No jail or prison search for this area runs on its own, so only obituaries and news are checked.")
+                AppCaption(
+                    if (plan.lockup.any { it.kind != SourceKind.MANUAL_LANDING }) {
+                        "Their own county's jail isn't searched on its own; only other jails in the state, and obituaries and news, are. " +
+                            "Its link is below, under Look them up yourself."
+                    } else {
+                        "No jail or prison search for this area runs on its own, so only obituaries and news are checked."
+                    }
+                )
             }
             Text("How often", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             val frequencies = linkedMapOf(24 to "Daily", 48 to "Every 2 days", 168 to "Weekly")

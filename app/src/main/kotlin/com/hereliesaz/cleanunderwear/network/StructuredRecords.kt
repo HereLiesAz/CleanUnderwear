@@ -25,6 +25,33 @@ import org.jsoup.Jsoup
  */
 object StructuredRecords {
 
+    /*
+     * Whether a page has the shape a source's config expects: the records path in JSON, a table
+     * with the configured name columns, at least one record block. A page with none of these, that
+     * doesn't say it found nobody either, wasn't read: the site changed, or answered with an error
+     * page. Reading such a page as "nobody there" would clear a pending match on bad data.
+     */
+
+    fun jsonReadable(body: String, source: Source): Boolean {
+        val root = try { JsonParser.parseString(body) } catch (e: Exception) { return false }
+        return resolve(root, source.jsonFields["records"].orEmpty()).isNotEmpty()
+    }
+
+    fun tableReadable(html: String, source: Source): Boolean {
+        val patterns = source.tableColumns.mapValues { (_, p) -> Regex(p, RegexOption.IGNORE_CASE) }
+        return Jsoup.parse(html).select("table").any { table ->
+            val rows = table.select("tr")
+            val headerRow = rows.firstOrNull { r -> r.select("td").isEmpty() && r.select("th").isNotEmpty() }
+                ?: rows.firstOrNull() ?: return@any false
+            val headers = headerRow.select("th, td").map { it.text().trim() }
+            fun has(key: String) = patterns[key]?.let { re -> headers.any { re.containsMatchIn(it) } } == true
+            has("name") || (has("first") && has("last"))
+        }
+    }
+
+    fun regexReadable(html: String, source: Source): Boolean =
+        source.recordRegex?.let { Regex(it, setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)).containsMatchIn(html) } == true
+
     fun fromJson(
         body: String,
         source: Source,
@@ -195,6 +222,8 @@ object StructuredRecords {
             birthYear = birthYear,
             city = row["city"],
             state = UsStates.code(row["state"]),
+            // The year of the death or filing, so two sources' reports of one event can be lined up.
+            eventYear = row["date"]?.let(::parseDate)?.year,
             recordKey = id?.let { "${source.id}:$it" }
                 ?: com.hereliesaz.cleanunderwear.match.RecordExtractor.personKey(
                     source.id, recFirst, recMiddle, recLast, birthYear ?: age, row["city"]

@@ -63,7 +63,7 @@ class ScrapeTargetsUseCase @Inject constructor(
     private val matchVerifier = MatchVerifier()
 
     /** What one run did, in words a person can read. */
-    data class Summary(val checked: Int, val newMatches: Int, val incomplete: Int) {
+    data class Summary(val checked: Int, val newMatches: Int, val incomplete: Int, val stillDue: Int = 0) {
         fun describe(): String = when {
             checked == 0 -> "Nothing was due for a check."
             else -> buildString {
@@ -74,6 +74,9 @@ class ScrapeTargetsUseCase @Inject constructor(
                 )
                 if (incomplete > 0) append("; $incomplete couldn't be fully checked: some sites didn't answer")
                 append('.')
+                // A run stopped by the system (or a contact limit) leaves some for next time; say so
+                // rather than let "checked N" read as everyone.
+                if (stillDue > 0) append(" $stillDue more ${if (stillDue == 1) "is" else "are"} due and will be checked first next time.")
             }
         }
     }
@@ -173,7 +176,8 @@ class ScrapeTargetsUseCase @Inject constructor(
             }
         }.awaitAll()
 
-        val summary = Summary(total, newMatches.get(), incomplete.get())
+        val stillDue = repository.getReadyDueTargets(System.currentTimeMillis(), limit).size
+        val summary = Summary(total, newMatches.get(), incomplete.get(), stillDue)
         onProgress(1f, summary.describe())
         summary
     }
@@ -262,6 +266,7 @@ class ScrapeTargetsUseCase @Inject constructor(
             if (lockupSources.isEmpty()) {
                 emitStep("no automated lockup source for area ${target.areaCode ?: "?"}")
             }
+            val homeState = UsStates.fromAddress(target.residenceInfo) ?: locale.state
             val searches = lockupSources.map { it to EventKind.CUSTODY } + obituarySources.map { it to EventKind.DEATH }
             for ((source, kind) in searches) {
                 // Dismissals made before per-record keys were stored the source's search URL;
@@ -270,7 +275,17 @@ class ScrapeTargetsUseCase @Inject constructor(
                 if (evidenceUrl in dismissedKeys) continue
                 emitStep("checking ${source.label}")
                 val result = sourceSearch.search(source, kind, firstName, lastName, corroboration, dismissedKeys)
-                candidates += result.records
+                // A state or county source's rows rarely name a place; the source itself is one.
+                // Only the contact's own state is written in (a second state they're tied to, by
+                // an old phone number, isn't evidence against them).
+                val sourceState = source.county?.substringAfterLast(", ")
+                    ?: plan.tiedStates.firstOrNull { st -> sourceCatalog.stateLockupSources(st).any { it.id == source.id } }
+                candidates += result.records.map { r ->
+                    r.copy(
+                        state = r.state ?: sourceState?.takeIf { it == homeState },
+                        ownCounty = source.county != null && source.county == plan.ownCounty
+                    )
+                }
                 if (result.failed) failedSources += source.label
             }
             if (failedSources.isNotEmpty()) {
@@ -287,7 +302,7 @@ class ScrapeTargetsUseCase @Inject constructor(
                 middleName = target.middleName,
                 age = verifier.approxAge(target.dateOfBirth),
                 city = cityOf(target.residenceInfo),
-                state = UsStates.fromAddress(target.residenceInfo) ?: locale.state,
+                state = homeState,
                 otherContactNames = allNames - target.displayName.trim()
             )
             val verified = matchVerifier.verifyAll(

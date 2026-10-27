@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notification icon: the app's mark as a single-colour silhouette (Android tints it). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M2,5h20v3.2c-3.6,1.1 -6,4.4 -7.1,10.8h-5.8C8,12.6 5.6,9.3 2,8.2z" />
+</vector>

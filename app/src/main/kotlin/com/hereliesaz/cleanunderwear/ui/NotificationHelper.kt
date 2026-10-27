@@ -86,13 +86,13 @@ class NotificationHelper @Inject constructor(@ApplicationContext private val con
 
         // What the lock screen shows instead: no name, no claim.
         val public = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(com.hereliesaz.cleanunderwear.R.drawable.ic_stat_briefs)
             .setContentTitle("Clean Underwear")
             .setContentText("A contact needs your review.")
             .build()
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(com.hereliesaz.cleanunderwear.R.drawable.ic_stat_briefs)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))

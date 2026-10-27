@@ -2,7 +2,6 @@ package com.hereliesaz.cleanunderwear.ui
 
 import android.app.Application
 import android.content.Context
-import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -545,6 +544,8 @@ class MainViewModel @Inject constructor(
                 repository.updateTarget(
                     target.copy(
                         phoneNumber = info.phone ?: target.phoneNumber,
+                        // The replaced number is remembered (see SuspectReview.adoptReplacement).
+                        stalePhone = if (info.phone != null && info.phone != target.phoneNumber) target.phoneNumber ?: target.stalePhone else target.stalePhone,
                         areaCode = info.phone
                             ?.let { com.hereliesaz.cleanunderwear.match.StringSimilarity.nanpAreaCode(it) }
                             ?: target.areaCode,
@@ -783,13 +784,8 @@ class MainViewModel @Inject constructor(
     }
 
     fun sweepContacts() {
-        val activeSources = mutableSetOf<String>()
-        if (_googleFilter.value != false) activeSources.add("Google")
-        if (_metaFilter.value != false) activeSources.add("Meta")
-        if (_appleFilter.value != false) activeSources.add("Apple")
-        if (_deviceFilter.value != false) activeSources.add("Device")
-
-        Log.d("MainViewModel", "Sweeping contacts with sources: $activeSources")
+        // Every account, always: the list's filter chips change what is shown, never what is
+        // read (hiding Google contacts from view used to skip them on the next import).
         // A sweep already queued or running covers this request too.
         if (sweepPending) return
         sweepPending = true
@@ -809,9 +805,12 @@ class MainViewModel @Inject constructor(
                         }
 
                         // 1. Ingest raw data from enabled sources
-                        harvestContactsUseCase(activeSources)
+                        val harvest = harvestContactsUseCase()
                         val read = repository.getTargetsPaged(limit = Int.MAX_VALUE, offset = 0).size
-                        note("$read contact${if (read == 1) "" else "s"} in the list (${(read - before).coerceAtLeast(0)} new)")
+                        note("$read contact${if (read == 1) "" else "s"} in the list (${(read - before + harvest.removed).coerceAtLeast(0)} new)")
+                        if (harvest.removed > 0) {
+                            note("${harvest.removed} no longer in your phone's contacts, so no longer checked")
+                        }
 
                         // 2. Consolidate and deduplicate the full registry
                         _operationState.value = _operationState.value.copy(description = "Merging duplicates...", progress = 0.4f)

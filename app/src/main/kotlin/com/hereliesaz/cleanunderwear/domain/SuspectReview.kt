@@ -5,7 +5,6 @@ import com.hereliesaz.cleanunderwear.data.MergeLedgerDao
 import com.hereliesaz.cleanunderwear.data.MergeSignature
 import com.hereliesaz.cleanunderwear.data.MergeState
 import com.hereliesaz.cleanunderwear.data.ContributionCodec
-import com.hereliesaz.cleanunderwear.data.MonitorabilityState
 import com.hereliesaz.cleanunderwear.data.SuspectDecision
 import com.hereliesaz.cleanunderwear.data.TargetRepository
 import com.hereliesaz.cleanunderwear.data.TargetSnapshot
@@ -131,7 +130,9 @@ class SuspectReview @Inject constructor(
                     name = t.displayName,
                     phone = phone,
                     email = t.email,
-                    lookupFailed = t.monitorabilityState == MonitorabilityState.ENRICHMENT_FAILED,
+                    // Only a search that said it found nobody at the number; a blocked or unreadable
+                    // page, or a card for someone else, says nothing about whether it's in use.
+                    lookupFailed = t.enrichmentProvenance?.let { it.startsWith("nobody found by") && "phone" in it } == true,
                     history = index?.statsFor(phone),
                     historyAvailable = historyAvailable,
                     historyCoverageMillis = coverage,
@@ -205,7 +206,9 @@ class SuspectReview @Inject constructor(
         repository.updateTarget(
             target.copy(
                 phoneNumber = phone,
-                areaCode = StringSimilarity.nanpAreaCode(phone) ?: target.areaCode
+                areaCode = StringSimilarity.nanpAreaCode(phone) ?: target.areaCode,
+                // Remembered, so the phone book's copy of the old number isn't read back as new.
+                stalePhone = target.phoneNumber?.takeIf { it != phone } ?: target.stalePhone
             )
         )
         decide(case, "ADOPTED")

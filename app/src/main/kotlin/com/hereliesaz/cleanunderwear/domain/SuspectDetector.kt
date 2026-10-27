@@ -67,9 +67,13 @@ data class SuspectCase(
             else -> Lean.TOSS_UP
         }
 
-    /** What the evidence says to do; null when it is too evenly balanced to say. */
+    /**
+     * What the evidence says to do; null when it is too evenly balanced to say, or when the side
+     * it tips to rests only on hints (no single reason that counts on its own). A pile of hints is
+     * a case to look at, not one to act on in bulk.
+     */
     val recommendation: Recommendation?
-        get() = when (lean) {
+        get() = if ((mainReason?.weight ?: 0.0) < SuspectDetector.RECOMMEND_MIN_REASON) null else when (lean) {
             Lean.TOSS_UP -> null
             Lean.LIKELY_PROBLEM -> when (kind) {
                 SuspicionKind.BAD_MERGE -> Recommendation.SEPARATE
@@ -162,6 +166,9 @@ data class StaleCaseInput(
  */
 object SuspectDetector {
     const val LEAN_MARGIN = 1.5
+
+    /** The weight one reason needs ("Counts", on the card) before a recommendation rests on it. */
+    const val RECOMMEND_MIN_REASON = 1.5
     const val MIN_SUSPICION = 2.0
 
     private const val DAY_MS = 86_400_000L

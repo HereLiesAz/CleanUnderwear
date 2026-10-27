@@ -77,12 +77,26 @@ class SourceSearch @Inject constructor(
                     if (!looksJson && BotWall.detected(body)) {
                         return SearchResult.FAILED
                     }
+                    // A page in none of the shapes the config expects, that doesn't say it found
+                    // nobody either, wasn't read: report it as such, not as an empty result.
+                    fun unreadable(): SearchResult {
+                        com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log(
+                            "${source.id}: page not in the expected shape; counted as unread",
+                            com.hereliesaz.cleanunderwear.util.DiagnosticLogger.LogEntry.LogLevel.WARN
+                        )
+                        return SearchResult.FAILED
+                    }
                     when (source.resultFormat) {
-                        ResultFormat.JSON_RECORDS ->
+                        ResultFormat.JSON_RECORDS -> {
+                            if (!StructuredRecords.jsonReadable(body, source)) return unreadable()
                             return SearchResult(StructuredRecords.fromJson(body, source, first, last, kind, evidenceUrl))
-                        ResultFormat.HTML_TABLE ->
+                        }
+                        ResultFormat.HTML_TABLE -> {
+                            if (!StructuredRecords.tableReadable(body, source) && !BotWall.saysNoResults(body)) return unreadable()
                             return SearchResult(StructuredRecords.fromTable(body, source, first, last, kind, evidenceUrl))
+                        }
                         ResultFormat.REGEX_RECORDS -> {
+                            if (!StructuredRecords.regexReadable(body, source) && !BotWall.saysNoResults(body)) return unreadable()
                             val records = StructuredRecords.fromRegex(body, source, first, last, kind, evidenceUrl) +
                                 laterPages(source, fetchUrl, body, first, last, kind, evidenceUrl)
                             return SearchResult(records.distinctBy { it.recordKey })

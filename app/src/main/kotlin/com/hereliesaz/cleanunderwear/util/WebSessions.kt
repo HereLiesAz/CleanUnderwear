@@ -27,10 +27,16 @@ object WebSessions {
             val url = "https://$host/"
             val names = cookies.getCookie(url)?.split(';')?.map { it.substringBefore('=').trim() }?.filter { it.isNotEmpty() }.orEmpty()
             for (name in names) {
-                for (domain in listOf(host, ".$host", ".${host.substringAfter('.')}")) {
-                    cookies.setCookie(url, "$name=; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Domain=$domain; Path=/")
+                // Expiring a cookie needs the attributes its prefix demands, or the browser ignores
+                // the deletion: __Secure- needs Secure; __Host- needs Secure, Path=/ and no Domain.
+                // Google's sign-in cookies are __Secure- ones. Secure costs nothing on https.
+                val expire = "$name=; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/; Secure"
+                if (!name.startsWith("__Host-")) {
+                    for (domain in listOf(host, ".$host", ".${host.substringAfter('.')}")) {
+                        cookies.setCookie(url, "$expire; Domain=$domain")
+                    }
                 }
-                cookies.setCookie(url, "$name=; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/")
+                cookies.setCookie(url, expire)
             }
         }
         cookies.flush()

@@ -41,7 +41,9 @@ data class CandidateRecord(
     val eventYear: Int? = null,
     val recordKey: String? = null,
     val evidenceUrl: String? = null,
-    val snippet: String? = null
+    val snippet: String? = null,
+    /** Found in the jail of the contact's own county: evidence of place where the row names none. */
+    val ownCounty: Boolean = false
 )
 
 /**

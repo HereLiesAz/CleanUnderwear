@@ -153,6 +153,8 @@ class MatchVerifier(
         return when {
             cCity != null && cCity == rCity && statesCompatible ->
                 Signal(config.cityAgree, "Same city (${candidate.city})")
+            // A county jail's rows name no place, but the jail is in one: their own county's.
+            candidate.ownCounty -> Signal(config.cityAgree, "Held in their own county's jail")
             cState != null && cState == rState -> Signal(config.stateAgree, "Same state ($rState)")
             cState != null && rState != null -> Signal(config.stateDisagree, "Different state ($rState vs $cState)")
             else -> Signal()
@@ -205,7 +207,11 @@ class MatchVerifier(
     }
 
     private fun sameEvent(a: CandidateRecord, b: CandidateRecord): Boolean {
-        val cityAgrees = a.city != null && a.city.equals(b.city, ignoreCase = true)
+        // The same city; or, where a source names no city at all (ObitsArchive lists only a
+        // state), the same state and the same year.
+        val cityAgrees = a.city != null && a.city.equals(b.city, ignoreCase = true) ||
+            (a.city == null || b.city == null) && a.state != null && a.state == b.state &&
+            a.eventYear != null && a.eventYear == b.eventYear
         val aBirth = recordBirthYear(a)
         val bBirth = recordBirthYear(b)
         val ageConflicts = aBirth != null && bBirth != null && abs(aBirth - bBirth) > config.ageTolerance + 1
