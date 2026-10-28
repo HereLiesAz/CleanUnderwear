@@ -11,9 +11,11 @@ import com.hereliesaz.cleanunderwear.util.CyberBackgroundChecks
  *
  * Two flows exist today:
  *
- *   - **CyberBackgroundChecks** (4 search modes): used to resolve UNVERIFIED
- *     contacts. Per the user, every contact has at least one searchable data
+ *   - **CyberBackgroundChecks** (4 search modes): used to fill in contacts'
+ *     details. Per the user, every contact has at least one searchable data
  *     point, so the enricher tries phone → email → address → name in order.
+ *     Each search's results list is read whole, every person on it, and the
+ *     user chooses which (if any) is the contact after the run.
  *
  *   - **Facebook friends harvest**: replaces the prior covert mbasic.facebook
  *     scrape. The user must be visibly logged in for this to work.
@@ -51,11 +53,11 @@ sealed class BrowserMission {
 
     /**
      * When true, BrowserScreen re-runs [extractionScript] after each in-page
-     * navigation (rather than once), letting a script drill from a results
-     * list into the first result's detail page before dumping. See the CBC
-     * missions and DRILL_TO_FIRST_RESULT_SCRIPT.
+     * navigation (rather than once): a script that walks to the page it reads
+     * (Instagram, Google), or a search whose results arrive only after a
+     * CAPTCHA or a redirect (the CBC lookups).
      */
-    open val drillToFirstResult: Boolean = false
+    open val rerunAfterNavigation: Boolean = false
 
     /**
      * How long the screen waits for [extractionScript] to hand back a page before unmasking and
@@ -80,29 +82,25 @@ sealed class BrowserMission {
     data class CbcByPhone(val phone: String) : BrowserMission() {
         override val initialUrl: String = CyberBackgroundChecks.getPhoneSearchUrl(phone)
         override val label: String = "Identity lookup · phone"
-        override val drillToFirstResult: Boolean = true
-        override val extractionScript: String = DRILL_TO_FIRST_RESULT_SCRIPT
+        override val rerunAfterNavigation: Boolean = true
     }
 
     data class CbcByEmail(val email: String) : BrowserMission() {
         override val initialUrl: String = CyberBackgroundChecks.getEmailSearchUrl(email)
         override val label: String = "Identity lookup · email"
-        override val drillToFirstResult: Boolean = true
-        override val extractionScript: String = DRILL_TO_FIRST_RESULT_SCRIPT
+        override val rerunAfterNavigation: Boolean = true
     }
 
     data class CbcByAddress(val address: String) : BrowserMission() {
         override val initialUrl: String = CyberBackgroundChecks.getAddressSearchUrl(address)
         override val label: String = "Identity lookup · address"
-        override val drillToFirstResult: Boolean = true
-        override val extractionScript: String = DRILL_TO_FIRST_RESULT_SCRIPT
+        override val rerunAfterNavigation: Boolean = true
     }
 
     data class CbcByName(val displayName: String) : BrowserMission() {
         override val initialUrl: String = CyberBackgroundChecks.getNameSearchUrl(displayName)
         override val label: String = "Identity lookup · name"
-        override val drillToFirstResult: Boolean = true
-        override val extractionScript: String = DRILL_TO_FIRST_RESULT_SCRIPT
+        override val rerunAfterNavigation: Boolean = true
     }
 
     /** WhatsApp Web: the user scans its QR code with their phone here, then the chat list is read. */
@@ -118,7 +116,7 @@ sealed class BrowserMission {
         override val initialUrl: String = com.hereliesaz.cleanunderwear.data.InstagramHarvester.URL
         override val label: String = "Import Instagram followers"
         override val extractionScript: String = com.hereliesaz.cleanunderwear.data.InstagramHarvester.SCRIPT
-        override val drillToFirstResult: Boolean = true
+        override val rerunAfterNavigation: Boolean = true
         override val watchdogMs: Long = 300_000L
     }
 
@@ -127,7 +125,7 @@ sealed class BrowserMission {
         override val initialUrl: String = com.hereliesaz.cleanunderwear.data.GoogleContactsHarvester.URL
         override val label: String = "Import Google Contacts"
         override val extractionScript: String = com.hereliesaz.cleanunderwear.data.GoogleContactsHarvester.SCRIPT
-        override val drillToFirstResult: Boolean = true
+        override val rerunAfterNavigation: Boolean = true
         override val watchdogMs: Long = 300_000L
     }
 
@@ -138,52 +136,6 @@ sealed class BrowserMission {
         override val watchdogMs: Long = 300_000L
     }
 }
-
-/**
- * CyberBackgroundChecks drill-in script. A CBC search lands on a results LIST;
- * the rich identity data (middle name, DOB) lives on the first result's DETAIL
- * page. This script is list-vs-detail aware and BrowserScreen re-runs it after
- * each navigation (see [BrowserMission.drillToFirstResult]):
- *   - On the list (a result card with a link is present) → navigate to the
- *     first result's detail page.
- *   - On the detail page (or when there are no results) → dump the DOM.
- * Selectors are deliberately permissive — CBC markup drifts, and the
- * downstream verify-before-merge rejects a wrong-person card anyway.
- */
-private val DRILL_TO_FIRST_RESULT_SCRIPT = """
-(function(){
-  // A result card's own link first. Only if no card carries one, a person link in the page
-  // body, skipping header/nav/footer so a "People search" menu item never wins.
-  var firstLink = document.querySelector(
-    '.person-card a[href], .result-card a[href], .search-result a[href], [data-result-card] a[href]'
-  );
-  if (!firstLink) {
-    var links = document.querySelectorAll('a[href*="/person"], a[href*="/people"]');
-    for (var i = 0; i < links.length; i++) {
-      if (!links[i].closest('header, nav, footer, [role="navigation"]')) { firstLink = links[i]; break; }
-    }
-  }
-  var hasList = document.querySelector(
-    '.person-card, .result-card, .search-result, [data-result-card]'
-  );
-  // A detail page may also contain a result card. Allow only one drill per
-  // lookup, so related-person links cannot turn extraction into a loop. The
-  // key is unique per lookup (BrowserExtractionGate.tagScript), so it is never
-  // cleared: clearing it on dump let a CAPTCHA on the detail page reset it,
-  // and once solved the script drilled again into a relative's page.
-  var drillKey = 'cleanunderwear-cbc-drill';
-  var drilled = false;
-  try { drilled = sessionStorage.getItem(drillKey) === '1'; } catch (_) {}
-  if (hasList && firstLink && firstLink.href &&
-      firstLink.href !== window.location.href && !drilled) {
-    try { sessionStorage.setItem(drillKey, '1'); } catch (_) {}
-    window.location.href = firstLink.href;
-    return;
-  }
-  // Detail page, already drilled, or no results: hand the DOM to the parser.
-  window.HTMLOUT.dump(document.documentElement.outerHTML);
-})();
-""".trimIndent()
 
 /**
  * Pagination + dump script for mbasic.facebook.com/me/friends. Walks every

@@ -73,7 +73,8 @@ class MainViewModel @Inject constructor(
     private val suspectReview: SuspectReview,
     private val alternateFinder: AlternateFinder,
     private val updateChecker: com.hereliesaz.cleanunderwear.update.UpdateChecker,
-    private val contactSyncer: com.hereliesaz.cleanunderwear.util.SystemContactSyncer
+    private val contactSyncer: com.hereliesaz.cleanunderwear.util.SystemContactSyncer,
+    private val lookupChoices: com.hereliesaz.cleanunderwear.domain.LookupChoiceStore
 ) : AndroidViewModel(application) {
 
     enum class SortOrder { NAME, STATUS, DATE }
@@ -498,6 +499,57 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    private val _choices = MutableStateFlow<List<com.hereliesaz.cleanunderwear.domain.LookupChoice>>(emptyList())
+
+    /** Contacts a details lookup found people for, waiting for the user to say which is them. */
+    val choices: StateFlow<List<com.hereliesaz.cleanunderwear.domain.LookupChoice>> = _choices
+
+    private val _openChoices = MutableStateFlow(false)
+
+    /** Set when a run of lookups ends with people to choose from; the app then opens the choices. */
+    val openChoices: StateFlow<Boolean> = _openChoices
+    fun consumeOpenChoices() { _openChoices.value = false }
+
+    init {
+        viewModelScope.launch(failSafe) { _choices.value = withContext(Dispatchers.IO) { lookupChoices.load() } }
+    }
+
+    /**
+     * The user's answer for one contact: [option] is them (its details fill the contact's gaps, as
+     * a confirmed lookup's always did), or, when null, none of the people found is. "None" is
+     * remembered, so later runs don't look the contact up again; its own Look up details still can.
+     */
+    fun chooseLookup(targetId: Int, option: com.hereliesaz.cleanunderwear.domain.LookupOption?) {
+        val choice = _choices.value.firstOrNull { it.targetId == targetId } ?: return
+        _choices.value = _choices.value.filter { it.targetId != targetId }
+        viewModelScope.launch(failSafe) {
+            withContext(Dispatchers.IO) { lookupChoices.remove(setOf(targetId)) }
+            pipelineCoordinator.runExclusive("lookup-choice") {
+                repository.inTransaction {
+                    val target = repository.getTargetById(targetId) ?: return@inTransaction
+                    repository.updateTarget(
+                        if (option != null) {
+                            cbcEnricher.adopt(target, option).copy(
+                                // Details resolve UNVERIFIED; any other status stands.
+                                status = if (target.status == TargetStatus.UNVERIFIED) TargetStatus.MONITORING else target.status,
+                                monitorabilityState = com.hereliesaz.cleanunderwear.data.MonitorabilityState.READY
+                            )
+                        } else {
+                            target.copy(
+                                enrichmentProvenance = cbcEnricher.noneOfThem(choice.options.size),
+                                monitorabilityState = if (target.status == TargetStatus.UNVERIFIED) {
+                                    com.hereliesaz.cleanunderwear.data.MonitorabilityState.ENRICHMENT_FAILED
+                                } else {
+                                    target.monitorabilityState
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+        }
+    }
+
     private val _alternates = MutableStateFlow<AlternateInfo?>(null)
 
     /** The lookup's offer for a contact whose number was just ruled out; null when none is pending. */
@@ -742,6 +794,8 @@ class MainViewModel @Inject constructor(
                 com.hereliesaz.cleanunderwear.util.DiagnosticLogger.clear()
                 _reviewState.value = ReviewState()
                 _alternates.value = null
+                withContext(Dispatchers.IO) { lookupChoices.clear() }
+                _choices.value = emptyList()
                 _operationState.value = OperationState(isRunning = false)
                 fun contacts(n: Int) = "$n contact${if (n == 1) "" else "s"}"
                 post(
@@ -893,17 +947,6 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Walks every UNVERIFIED contact, and every contact still missing an age or
-     * date of birth, and enriches them through the visible cyberbackgroundchecks
-     * browser flow, one mission at a time. Age is what lets
-     * [com.hereliesaz.cleanunderwear.match.MatchVerifier] tell two people with
-     * the same name apart, so it is gathered for everyone, not only on a match.
-     *
-     * Per the user's rule, this is *user-initiated*; the auto pipeline never
-     * triggers it. If the auto pipeline (or any other coordinator-protected
-     * job) is in flight, this batch queues until that finishes.
-     */
     /** How many contacts "Fill in details" would look up, for the confirmation before it starts. */
     suspend fun resolveCandidateCount(): Int = resolveCandidates().size
 
@@ -926,27 +969,36 @@ class MainViewModel @Inject constructor(
         return ids.chunked(500)
             .flatMap { repository.getTargetsByIds(it) }
             .filter { it.status == TargetStatus.UNVERIFIED || it.dateOfBirth.isNullOrBlank() }
-            // A contact the site already said it has nobody for isn't looked up again in every
-            // run; "Look up details" on its own screen still tries it.
-            .filterNot { it.enrichmentProvenance?.startsWith("nobody found by") == true }
+            // A contact the site already said it has nobody for, or whose results the user has
+            // answered, isn't looked up again in every run; "Look up details" on its own
+            // screen still tries it. Nor is one whose results are still waiting for an answer.
+            .filterNot {
+                it.enrichmentProvenance?.startsWith("nobody found by") == true ||
+                    it.enrichmentProvenance?.startsWith(com.hereliesaz.cleanunderwear.network.CyberBackgroundChecksEnricher.NONE_PREFIX) == true ||
+                    // Someone the user already picked: another search finds the same people.
+                    it.enrichmentProvenance?.contains(com.hereliesaz.cleanunderwear.network.CyberBackgroundChecksEnricher.CHOSEN_PREFIX) == true ||
+                    _choices.value.any { c -> c.targetId == it.id }
+            }
     }
 
     fun resolveUnverifiedBatch() = resolveContacts { resolveCandidates() }
-
-    /** What a verified lookup added to the contact, in a few words ("born ~1970, Gretna, LA"). */
-    private fun learnedFrom(before: Target, after: Target): String = listOfNotNull(
-        after.dateOfBirth?.takeIf { it != before.dateOfBirth }?.let { "born $it" },
-        after.middleName?.takeIf { it != before.middleName }?.let { "middle name $it" },
-        after.residenceInfo?.takeIf { it != before.residenceInfo },
-        after.phoneNumber?.takeIf { it != before.phoneNumber }?.let { "new number" },
-        after.displayName.takeIf { it != before.displayName }?.let { "named $it" }
-    ).joinToString(", ")
 
     /** Looks up one contact's missing details, from its detail screen. */
     fun resolveOne(id: Int) = resolveContacts { listOfNotNull(repository.getTargetById(id)) }
 
     @Volatile private var resolvePending = false
 
+    /**
+     * Looks up every contact [select] picks (UNVERIFIED ones, and any still missing an age, which
+     * is what lets [com.hereliesaz.cleanunderwear.match.MatchVerifier] tell two people with the
+     * same name apart) through the visible cyberbackgroundchecks browser, one contact at a time.
+     * Nothing is decided during the run: everyone each search turns up is kept in [choices], and
+     * when the queue is done (or stopped) the user is taken to choose, contact by contact, which
+     * person is theirs, if any. Contacts no search found anyone for are noted and passed over.
+     *
+     * Per the user's rule, this is *user-initiated*; the auto pipeline never triggers it. If the
+     * auto pipeline (or any other coordinator-protected job) is in flight, it queues until that finishes.
+     */
     private fun resolveContacts(select: suspend () -> List<Target>) {
         // One run of lookups at a time; a tap while one waits or runs doesn't queue another.
         if (resolvePending) {
@@ -972,19 +1024,30 @@ class MainViewModel @Inject constructor(
                     description = "Looking up 1 of $total on CyberBackgroundChecks...",
                     progress = 0f
                 ))
-                var filled = 0
+                // Contacts with people to choose from. Nobody is asked mid-run: every contact is
+                // looked up first, and the choosing comes after, all together.
+                var toChoose = 0
+                fun finish(message: String) {
+                    _operationState.value = OperationState(isRunning = false)
+                    if (toChoose > 0) {
+                        post("$message Choose who's who for $toChoose contact${if (toChoose == 1) "" else "s"}.")
+                        _openChoices.value = true
+                    } else {
+                        post(message)
+                    }
+                }
                 // What has turned up so far, newest first, under the loader and in the browser.
                 val results = ArrayDeque<String>()
                 fun noteResult(done: Int, line: String) {
                     results.addFirst(line)
                     while (results.size > RECENT_RESULTS) results.removeLast()
                     _operationState.value = _operationState.value.copy(
-                        findings = listOf("$done of $total looked up · details filled in for $filled") + results
+                        findings = listOf("$done of $total looked up · people found for $toChoose, to choose from at the end") + results
                     )
                 }
 
                 for ((index, lite) in unverified.withIndex()) {
-                    if (resolveCancellationRequested) return@runExclusive
+                    if (resolveCancellationRequested) { finish("Stopped after $index of $total."); return@runExclusive }
                     val target = repository.getTargetById(lite.id) ?: continue
                     val missions = cbcEnricher.pickAllMissions(target)
                     if (missions.isEmpty()) {
@@ -1014,8 +1077,7 @@ class MainViewModel @Inject constructor(
                         // User backed out mid-target — stop the whole batch
                         // rather than barrel through every UNVERIFIED contact
                         // without their attention.
-                        _operationState.value = OperationState(isRunning = false)
-                        post("Stopped after ${index} of $total. Details found so far were kept.")
+                        finish("Stopped after $index of $total.")
                         return@runExclusive
                     }
 
@@ -1029,68 +1091,51 @@ class MainViewModel @Inject constructor(
                             "CYBG: nobody found for ${target.displayName} (${nobody.joinToString { it.label }})"
                         )
                     }
+                    // Every person on every results page, not only the first: which one is the
+                    // contact is the user's call, made after the run.
                     val collected = withContext(Dispatchers.Default) {
-                        extracted.filterNot { (mission, _) -> mission in nobody }.mapNotNull { (mission, html) ->
-                            val findings = cbcEnricher.parseFindings(html)
+                        extracted.filterNot { (mission, _) -> mission in nobody }.flatMap { (mission, html) ->
+                            val people = cbcEnricher.parsePeople(html)
                             com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log(
-                                "CYBG parse ${mission.label}: ${cbcEnricher.describeParse(html, findings)}"
+                                "CYBG parse ${mission.label}: ${people.size} people · ${cbcEnricher.describeParse(html, people.firstOrNull())}"
                             )
-                            findings?.let { mission to it }
+                            people.map { mission to it }
                         }
                     }
-                    if (resolveCancellationRequested) return@runExclusive
+                    if (resolveCancellationRequested) { finish("Stopped after $index of $total."); return@runExclusive }
 
-                    // Verify-before-merge: only promote the contact when the CBC
-                    // card is corroborated as the *same person*. An unverified or
-                    // conflicting card (e.g. a recycled phone number returning a
-                    // stranger) is NOT written into the registry or the user's
-                    // system contacts — we keep it UNVERIFIED and record why.
-                    // Judged against the contact as it is now: the user may have spent minutes in
+                    if (collected.isNotEmpty()) {
+                        val options = cbcEnricher.options(target, collected)
+                        _choices.value = withContext(Dispatchers.IO) {
+                            lookupChoices.put(com.hereliesaz.cleanunderwear.domain.LookupChoice(target.id, target.displayName, options))
+                        }
+                        toChoose++
+                        noteResult(index + 1, "${target.displayName}: ${options.size} ${if (options.size == 1) "person" else "people"} found")
+                        continue
+                    }
+
+                    // Nobody to choose from: the search found no one, or its page couldn't be read.
+                    // Noted against the contact as it is now: the user may have spent minutes in
                     // the browser, and a check or an edit may have written it meanwhile.
                     val id = target.id
-                    val line = repository.inTransaction {
-                    @Suppress("NAME_SHADOWING")
-                    val target = repository.getTargetById(id) ?: return@inTransaction null
-                    val enrichment = cbcEnricher.enrich(target, collected, foundNobody = nobody)
-                    val learned = if (enrichment.verified) learnedFrom(target, enrichment.target) else ""
-                    if (enrichment.verified) {
-                        filled++
+                    repository.inTransaction {
+                        @Suppress("NAME_SHADOWING")
+                        val target = repository.getTargetById(id) ?: return@inTransaction
+                        val outcome = cbcEnricher.enrich(target, emptyList(), foundNobody = nobody)
                         repository.updateTarget(
-                            enrichment.target.copy(
-                                // Enrichment resolves UNVERIFIED; any other status stands.
-                                status = if (target.status == TargetStatus.UNVERIFIED) {
-                                    TargetStatus.MONITORING
-                                } else {
-                                    target.status
-                                },
-                                monitorabilityState =
-                                    com.hereliesaz.cleanunderwear.data.MonitorabilityState.READY
-                            )
-                        )
-                    } else if (target.status == TargetStatus.UNVERIFIED) {
-                        repository.updateTarget(
-                            enrichment.target.copy(
-                                monitorabilityState =
+                            outcome.target.copy(
+                                monitorabilityState = if (target.status == TargetStatus.UNVERIFIED) {
                                     com.hereliesaz.cleanunderwear.data.MonitorabilityState.ENRICHMENT_FAILED
+                                } else {
+                                    target.monitorabilityState
+                                }
                             )
                         )
-                    } else {
-                        // An unconfirmed card on an already-monitored contact is
-                        // simply not used; the contact keeps monitoring as before.
-                        repository.updateTarget(target.copy(enrichmentProvenance = enrichment.target.enrichmentProvenance))
                     }
-                    when {
-                        enrichment.verified -> "${target.displayName}: " + learned.ifEmpty { "confirmed, nothing new" }
-                        collected.isEmpty() && nobody.isNotEmpty() -> "${target.displayName}: nobody found"
-                        collected.isEmpty() -> "${target.displayName}: couldn't read the page"
-                        else -> "${target.displayName}: found someone else; not used"
-                    }
-                    }
-                    line?.let { noteResult(index + 1, it) }
+                    noteResult(index + 1, "${target.displayName}: " + if (nobody.isNotEmpty()) "nobody found" else "couldn't read the page")
                 }
 
-                _operationState.value = OperationState(isRunning = false)
-                post("Looked up $total contact${if (total == 1) "" else "s"}; filled in details for $filled.")
+                finish("Looked up $total contact${if (total == 1) "" else "s"}.")
                 } finally {
                     // Do not destroy the shared browser between contacts, only
                     // when the complete Resolve run finishes or is cancelled.

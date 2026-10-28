@@ -171,14 +171,14 @@ fun BrowserScreen(
     // (autoExtract == false) skip this entirely — the user dismisses them
     // manually via the back arrow.
     //
-    // Keyed on pageLoadCount so drill-in missions (CBC) re-run after each
-    // navigation: the script walks the results list into the first result's
-    // detail page, dumping only once it arrives. Non-drill missions still
-    // extract exactly once (the automationRan guard).
+    // Keyed on pageLoadCount so missions that re-run after navigation (CBC,
+    // whose results may arrive only after a CAPTCHA or a redirect; imports whose
+    // scripts walk to the list) extract from the new page. The rest extract
+    // exactly once (the automationRan guard).
     LaunchedEffect(batchId, currentIndex, pageLoadCount, paused) {
         if (!mission.autoExtract || batchComplete) return@LaunchedEffect
         if (paused || !pageReady) return@LaunchedEffect
-        if (!mission.drillToFirstResult && automationRan) return@LaunchedEffect
+        if (!mission.rerunAfterNavigation && automationRan) return@LaunchedEffect
         // Wait for the page to settle rather than a fixed beat: a slow SPA would otherwise be
         // dumped empty and read as "nothing found".
         awaitRenderedContent(webView)
@@ -395,8 +395,8 @@ fun BrowserScreen(
                                     paused = false
                                     DiagnosticLogger.log("BrowserScreen: page loaded while paused; resuming extraction")
                                 }
-                                // Each navigation bumps the counter so drill-in
-                                // missions re-trigger extraction on the new page.
+                                // Each navigation bumps the counter so missions that
+                                // re-run after navigation extract from the new page.
                                 pageLoadCount += 1
                                 DiagnosticLogger.log("BrowserScreen: loaded $url")
                             }

@@ -3,6 +3,7 @@ package com.hereliesaz.cleanunderwear.network
 import com.hereliesaz.cleanunderwear.data.Target
 import com.hereliesaz.cleanunderwear.data.isStalePhone
 import com.hereliesaz.cleanunderwear.domain.BrowserMission
+import com.hereliesaz.cleanunderwear.domain.LookupOption
 import com.hereliesaz.cleanunderwear.match.StringSimilarity
 import com.hereliesaz.cleanunderwear.util.DiagnosticLogger
 import org.jsoup.Jsoup
@@ -93,15 +94,12 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
         if (html.isBlank()) return null
         val doc = Jsoup.parse(html)
 
-        // Two page shapes feed this: a results LIST (a "first result card") and,
-        // after drilling into the first result, a person DETAIL page (where the
-        // middle name / DOB live). Prefer a result card; if none, fall back to
-        // the document body for the detail page. CSS classes drift across CBC
+        // Two page shapes feed this: a results LIST (its first card is read; [parsePeople]
+        // reads them all) and one person's own DETAIL page. Prefer a result card; if none,
+        // fall back to the document body for the detail page. CSS classes drift across CBC
         // redesigns, so the selectors stay deliberately permissive — and
         // verify-before-merge ([enrich]) guards against adopting a wrong card.
-        val root: Element = doc.selectFirst(
-            ".person-card, .result-card, .search-result, .card-person, [data-result-card]"
-        ) ?: doc.body() ?: return null
+        val root: Element = doc.selectFirst(CARD_SELECTORS) ?: doc.body() ?: return null
 
         // Generic h1/h2/h3 are only trustworthy inside a real result card. When
         // root fell back to doc.body() (e.g. a "No Results Found" page) those
@@ -151,6 +149,103 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
         if (finalName == null && finalAddress == null && finalPhone == null && finalDob == null) return null
         return Findings(name = finalName, address = finalAddress, phone = finalPhone, middleName = middleName, dob = finalDob)
     }
+
+    /**
+     * Every person a CBC page shows, in the site's order, up to [MAX_PEOPLE]: one [Findings] per
+     * result card on a results list. A page with no cards (one person's own page) gives what
+     * [parseFindings] reads, or every named schema.org person on it. A card without a name can't
+     * be told apart from the others, so it is left out. Empty when the page names nobody.
+     */
+    fun parsePeople(html: String): List<Findings> {
+        if (html.isBlank()) return emptyList()
+        val doc = Jsoup.parse(html)
+        // A card inside another card (a relatives strip) belongs to that card's person.
+        val cards = doc.select(CARD_SELECTORS).filter { card -> card.parents().none { it.`is`(CARD_SELECTORS) } }
+        if (cards.isNotEmpty()) return cards.mapNotNull(::readCard).distinctBy(::personKey).take(MAX_PEOPLE)
+        val structured = structuredPeople(doc).mapNotNull { p ->
+            val name = p.name?.let(::naturalOrder) ?: return@mapNotNull null
+            p.copy(name = name, middleName = middleFrom(name), dob = p.dob?.let(::pinAge))
+        }
+        if (structured.size > 1) return structured.distinctBy(::personKey).take(MAX_PEOPLE)
+        return listOfNotNull(parseFindings(html)?.takeIf { it.name != null })
+    }
+
+    private fun readCard(card: Element): Findings? {
+        val name = (card.selectFirst(NAME_SELECTORS) ?: card.selectFirst("h1, h2, h3, h4"))
+            ?.text()?.trim()?.takeIf { it.isNotBlank() }?.let(::naturalOrder) ?: return null
+        val dob = card.selectFirst(DOB_SELECTORS)?.text()?.trim()?.takeIf { it.isNotBlank() }
+            ?: DOB_TEXT.find(card.text())?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
+        return Findings(
+            name = name,
+            address = card.selectFirst(ADDRESS_SELECTORS)?.text()?.trim()?.takeIf { it.isNotBlank() },
+            phone = card.selectFirst(PHONE_SELECTORS)?.text()?.filter { it.isDigit() || it == '+' }?.takeIf { it.length >= 10 },
+            middleName = middleFrom(name),
+            dob = dob?.let(::pinAge)
+        )
+    }
+
+    /**
+     * The same person listed twice (on one page, or by two searches) has one key: first and last
+     * name (a listing may drop the middle), birth year and address.
+     */
+    private fun personKey(f: Findings): String = listOf(
+        f.name?.let { n ->
+            NameValidator.tokenize(StringSimilarity.foldDiacritics(n).lowercase())
+                .let { t -> if (t.size >= 2) "${t.first()} ${t.last()}" else t.joinToString(" ") }
+        },
+        f.dob?.let { Regex("(19|20)\\d{2}").find(it)?.value },
+        f.address?.lowercase()?.replace(Regex("\\s+"), " ")?.trim()
+    ).joinToString("|") { it.orEmpty() }
+
+    /**
+     * What the user picks from after a run of lookups: every person [found] for [target] across
+     * its searches, one entry per person however many searches turned them up, best fit first,
+     * each with what fits the contact and what doesn't. Nothing is decided here; the user decides.
+     */
+    fun options(target: Target, found: List<Pair<BrowserMission, Findings>>): List<LookupOption> {
+        val realName = NameValidator.isVerifiable(target.displayName)
+        val tokens = if (realName) NameValidator.tokenize(target.displayName) else emptyList()
+        val knownBirth = target.dateOfBirth?.let { Regex("(19|20)\\d{2}").find(it)?.value }
+        return found.groupBy { personKey(it.second) }.values.map { group ->
+            val f = group.first().second
+            val by = group.map { modeLabel(it.first) }.distinct()
+            val fits = mutableListOf<String>()
+            val differs = mutableListOf<String>()
+            var score = 0
+            if (realName && f.name != null) {
+                if (nameConsistent(tokens, f.name)) { fits += "Same name"; score += 2 }
+                else { differs += "A different name"; score -= 3 }
+            }
+            val phone = StringSimilarity.normalizePhone(f.phone)
+            when {
+                phone != null && phone == StringSimilarity.normalizePhone(target.usablePhone) -> { fits += "Same phone number"; score += 3 }
+                StringSimilarity.nanpAreaCode(f.phone)?.let { it == target.areaCode } == true -> { fits += "Same area code"; score += 1 }
+            }
+            if (target.residenceInfo != null && corroboratesPlace(target, f)) { fits += "Same city or ZIP"; score += 1 }
+            val birth = f.dob?.let { Regex("(19|20)\\d{2}").find(it)?.value }
+            if (knownBirth != null && birth != null) {
+                val gap = kotlin.math.abs(knownBirth.toInt() - birth.toInt())
+                if (gap <= 1) { fits += "Same age"; score += 2 } else { differs += "A different age"; score -= 2 }
+            }
+            if ("phone" in by || "email" in by) {
+                fits += "Came up for their ${by.filter { it == "phone" || it == "email" }.joinToString(" and ")}"
+                score += 2
+            }
+            LookupOption(f.name, f.middleName, f.dob, f.address, f.phone, by, fits, differs) to score
+        }.sortedByDescending { it.second }.map { it.first }.take(MAX_PEOPLE)
+    }
+
+    /**
+     * The contact with the details of the person the user picked: gaps filled, nothing the
+     * contact already has overwritten (as [merge]), and a note of where the details came from.
+     */
+    fun adopt(target: Target, option: LookupOption): Target = merge(
+        target,
+        Findings(option.name, option.address, option.phone, option.middleName, option.dob)
+    ).copy(enrichmentProvenance = "${option.foundBy.joinToString("+")} · $CHOSEN_PREFIX ${option.name ?: "a result"}")
+
+    /** The note left when the user said none of the people found is this contact. */
+    fun noneOfThem(count: Int): String = "$NONE_PREFIX $count result${if (count == 1) "" else "s"}"
 
     /**
      * One line for the diagnostic log: what [parseFindings] got from a page, or, when it got
@@ -490,6 +585,11 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
         if (phone != null && phone == StringSimilarity.normalizePhone(target.usablePhone)) return true
         val cardArea = StringSimilarity.nanpAreaCode(f.phone)
         if (cardArea != null && (cardArea == target.areaCode || cardArea == StringSimilarity.nanpAreaCode(target.phoneNumber))) return true
+        return corroboratesPlace(target, f)
+    }
+
+    /** Whether [f]'s address names the city or ZIP the contact's address names. */
+    private fun corroboratesPlace(target: Target, f: Findings): Boolean {
         val address = f.address?.lowercase() ?: return false
         val known = target.residenceInfo?.lowercase()?.split(',')?.map { it.trim() }?.filter { it.length >= 3 }.orEmpty()
         return known.any { part -> part.none(Char::isDigit) && Regex("\\b${Regex.escape(part)}\\b").containsMatchIn(address) } ||
@@ -594,28 +694,36 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
         val dob: String? = null
     )
 
-    private companion object {
+    companion object {
+        /** Starts the note on a contact whose details the user picked from a lookup. */
+        const val CHOSEN_PREFIX = "chosen by you:"
+        /** Starts the note on a contact the user said none of the lookup's people is. */
+        const val NONE_PREFIX = "none was them, of"
+
         // Class selectors are guesses at CBC's markup and drift with redesigns; the structured-
         // data fallback and [describeParse]'s log line exist for when they miss.
-        const val NAME_SELECTORS =
+        private const val NAME_SELECTORS =
             ".name, h1.full-name, .full-name, .person-name, [itemprop=name]"
-        const val ADDRESS_SELECTORS =
+        private const val ADDRESS_SELECTORS =
             ".address, .current-address, .address-current, .person-address, .city-state, [itemprop=address]"
-        const val PHONE_SELECTORS =
+        private const val PHONE_SELECTORS =
             ".phone, .phone-number, [itemprop=telephone], [href^=tel]"
-        const val DOB_SELECTORS =
+        private const val DOB_SELECTORS =
             ".dob, .date-of-birth, .born, .age, [data-dob], [itemprop=birthDate]"
-        const val MAX_JSON_DEPTH = 8
+        private const val MAX_JSON_DEPTH = 8
+        private const val CARD_SELECTORS = ".person-card, .result-card, .search-result, .card-person, [data-result-card]"
+        /** More than this many people for one contact is a list no one can choose from. */
+        const val MAX_PEOPLE = 10
 
         /**
          * "Age 45", "DOB 03/14/1961", "Born 1961": whole words only ("Page 1", "Usage 5" are
          * not ages), and an age must be adult-plausible so a stray digit isn't stored as one.
          */
-        val DOB_TEXT = Regex(
+        private val DOB_TEXT = Regex(
             "\\b(?:Age|DOB|Born)\\b[:\\s]+(\\d{1,2}/\\d{1,2}/\\d{4}|(?:19|20)\\d{2}|(?:1[89]|[2-9]\\d|1[01]\\d)\\b)",
             RegexOption.IGNORE_CASE
         )
-        val CLASS_HINT = Regex("name|addr|phone|age|dob|birth|person|result|card|resident", RegexOption.IGNORE_CASE)
+        private val CLASS_HINT = Regex("name|addr|phone|age|dob|birth|person|result|card|resident", RegexOption.IGNORE_CASE)
 
     }
 }
