@@ -39,6 +39,7 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
     val diagnosticLogs by viewModel.diagnosticLogs.collectAsState()
     val showIgnored by viewModel.showIgnored.collectAsState()
     val sortOrder by viewModel.sortOrder.collectAsState()
+    val choices by viewModel.choices.collectAsState()
 
     // Monochrome: the active item and focus share the one accent.
     val activeColor = MaterialTheme.colorScheme.primary
@@ -73,6 +74,7 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
             helpList = mapOf(
                 "registry" to "Everyone the app checks, with what the last check found.",
                 "review" to "Contacts that may be two people combined, or have an out-of-date number.",
+                "choices" to "People Fill in details found, waiting for you to say which is your contact.",
                 "harvest" to "Read the people saved on your phone into the app.",
                 "ingest" to "Add someone who isn't in your phone's contacts.",
                 "update" to "Run the daily check now instead of waiting for it.",
@@ -92,6 +94,9 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
             // Top-down: see the list, act on it, arrange it, then configure.
             azRailItem(id = "registry", text = "Contacts", route = "targetList", info = "Everyone the app checks.")
             azRailItem(id = "review", text = "Review", route = "review", info = "Possible wrong combinations and old numbers.")
+            if (choices.isNotEmpty()) {
+                azRailItem(id = "choices", text = "Who is it? (${choices.size})", route = "choices", info = "Say which person found is your contact.")
+            }
 
             azRailHostItem(id = "intelligence_ops", text = "Actions")
             azRailSubItem(id = "harvest", hostId = "intelligence_ops", text = "Import contacts", shape = AzButtonShape.NONE,
@@ -178,6 +183,14 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
 
             val startDestination = if (isOnboardingCompleted) "targetList" else "onboarding"
 
+            // A run of lookups that found people ends here, to choose who's who.
+            val openChoices by viewModel.openChoices.collectAsState()
+            LaunchedEffect(openChoices, isOnboardingCompleted) {
+                if (!openChoices || !isOnboardingCompleted) return@LaunchedEffect
+                navController.navigate("choices") { launchSingleTop = true }
+                viewModel.consumeOpenChoices()
+            }
+
             val openTarget by viewModel.openTarget.collectAsState()
             LaunchedEffect(openTarget, isOnboardingCompleted) {
                 val id = openTarget ?: return@LaunchedEffect
@@ -206,6 +219,12 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                 }
                 composable("review") {
                     ReviewScreen(
+                        viewModel = viewModel,
+                        onNavigateBack = { navController.popBackStack() }
+                    )
+                }
+                composable("choices") {
+                    ChoicesScreen(
                         viewModel = viewModel,
                         onNavigateBack = { navController.popBackStack() }
                     )
@@ -294,8 +313,9 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                 Text(
                     "Each contact missing a full name or an age is looked up on CyberBackgroundChecks, a people-search " +
                         "site, in the app's browser, using the name, number or email you have for them. It can take " +
-                        "a minute or more per contact, and you may be asked to solve CAPTCHAs. You can stop at any time; " +
-                        "what was found so far is kept."
+                        "a minute or more per contact, and you may be asked to solve CAPTCHAs. Everyone is looked up " +
+                        "first; then you choose, contact by contact, which person found is yours. You can stop at any " +
+                        "time and choose from what was found so far."
                 )
             }
         }

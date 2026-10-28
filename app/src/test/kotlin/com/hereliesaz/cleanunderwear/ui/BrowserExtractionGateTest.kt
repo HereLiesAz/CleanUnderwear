@@ -54,10 +54,9 @@ class BrowserExtractionGateTest {
     }
 
     @Test
-    fun scriptTagsEveryCallbackAndScopesDrillToMission() {
+    fun scriptTagsEveryCallback() {
         val gate = BrowserExtractionGate()
         val script = """
-            var drillKey = 'cleanunderwear-cbc-drill';
             window.HTMLOUT.dump('first');
             window.HTMLOUT.dump('second');
         """.trimIndent()
@@ -66,7 +65,6 @@ class BrowserExtractionGateTest {
 
         assertEquals(
             """
-            var drillKey = 'cleanunderwear-cbc-drill-29-3';
             window.HTMLOUT.dumpTagged('17','first');
             window.HTMLOUT.dumpTagged('17','second');
             """.trimIndent(),
