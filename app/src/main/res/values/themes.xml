@@ -1,8 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Dark window so a cold start doesn't flash white before Compose draws. -->
+    <!-- The window matches the app's own theme from the first frame (MainActivity picks one of
+         these from the saved preference before drawing), so a cold start never flashes the
+         other colour before Compose draws. -->
     <style name="Theme.CleanUnderwear" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">#FF0A0A0A</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+
+    <style name="Theme.CleanUnderwear.Light" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#FFF7F7F7</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>

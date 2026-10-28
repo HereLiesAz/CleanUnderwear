@@ -14,6 +14,20 @@ enum class SuspicionKind { BAD_MERGE, STALE_NUMBER }
 /** Which way the evidence on a case tips. */
 enum class Lean { LIKELY_PROBLEM, TOSS_UP, LIKELY_FINE }
 
+/**
+ * What to do about a case, when the evidence clearly tips one way. [label] is the button;
+ * [done] says what n of them did, for a summary ("2 separated", "1 number kept").
+ */
+enum class Recommendation(val label: String, private val one: String, private val many: String) {
+    SEPARATE("Separate them", "separated", "separated"),
+    KEEP_COMBINED("Keep them combined", "kept combined", "kept combined"),
+    USE_REPLACEMENT("Use the newer number", "switched to a newer number", "switched to a newer number"),
+    MARK_OUT_OF_DATE("Mark the number out of date", "number marked out of date", "numbers marked out of date"),
+    KEEP_NUMBER("Keep the number", "number kept", "numbers kept");
+
+    fun done(n: Int): String = "$n ${if (n == 1) one else many}"
+}
+
 /** One reason, in plain words, with how much it counts (roughly 1 = hint, 3+ = strong). */
 data class Evidence(val text: String, val weight: Double)
 
@@ -53,6 +67,33 @@ data class SuspectCase(
             net >= SuspectDetector.LEAN_MARGIN -> Lean.LIKELY_PROBLEM
             net <= -SuspectDetector.LEAN_MARGIN -> Lean.LIKELY_FINE
             else -> Lean.TOSS_UP
+        }
+
+    /**
+     * What the evidence says to do; null when it is too evenly balanced to say, or when the side
+     * it tips to rests only on hints (no single reason that counts on its own). A pile of hints is
+     * a case to look at, not one to act on in bulk.
+     */
+    val recommendation: Recommendation?
+        get() = if ((mainReason?.weight ?: 0.0) < SuspectDetector.RECOMMEND_MIN_REASON) null else when (lean) {
+            Lean.TOSS_UP -> null
+            Lean.LIKELY_PROBLEM -> when (kind) {
+                SuspicionKind.BAD_MERGE -> Recommendation.SEPARATE
+                SuspicionKind.STALE_NUMBER ->
+                    if (replacementPhone != null) Recommendation.USE_REPLACEMENT else Recommendation.MARK_OUT_OF_DATE
+            }
+            Lean.LIKELY_FINE -> when (kind) {
+                SuspicionKind.BAD_MERGE -> Recommendation.KEEP_COMBINED
+                SuspicionKind.STALE_NUMBER -> Recommendation.KEEP_NUMBER
+            }
+        }
+
+    /** The strongest reason on the side the recommendation follows, to say why in one line. */
+    val mainReason: Evidence?
+        get() = when (lean) {
+            Lean.LIKELY_PROBLEM -> suspicion.maxByOrNull { it.weight }
+            Lean.LIKELY_FINE -> defense.maxByOrNull { it.weight }
+            Lean.TOSS_UP -> null
         }
 }
 
@@ -127,6 +168,9 @@ data class StaleCaseInput(
  */
 object SuspectDetector {
     const val LEAN_MARGIN = 1.5
+
+    /** The weight one reason needs ("Counts", on the card) before a recommendation rests on it. */
+    const val RECOMMEND_MIN_REASON = 1.5
     const val MIN_SUSPICION = 2.0
 
     private const val DAY_MS = 86_400_000L
@@ -153,6 +197,25 @@ object SuspectDetector {
     // Bad merges
     // ---------------------------------------------------------------------------------------
 
+    /**
+     * Whether two names are plainly two people: one surname with different full first names, or
+     * two different one-word names. An initial, a missing name or a likely spelling variant isn't.
+     */
+    internal fun differentPeopleByName(a: String, b: String): Boolean {
+        val ta = com.hereliesaz.cleanunderwear.network.NameValidator.tokenize(a).map { it.lowercase() }
+        val tb = com.hereliesaz.cleanunderwear.network.NameValidator.tokenize(b).map { it.lowercase() }
+        if (ta.isEmpty() || tb.isEmpty()) return false
+        val firstA = ta.first()
+        val firstB = tb.first()
+        if (firstA.length < 2 || firstB.length < 2) return false
+        if (StringSimilarity.jaroWinkler(firstA, firstB) >= 0.92) return false
+        return when {
+            ta.size >= 2 && tb.size >= 2 -> StringSimilarity.jaroWinkler(ta.last(), tb.last()) >= 0.90
+            ta.size == 1 && tb.size == 1 -> true
+            else -> false
+        }
+    }
+
     fun assessMerge(i: MergeCaseInput, now: Long): SuspectCase? {
         val suspicion = mutableListOf<Evidence>()
         val defense = mutableListOf<Evidence>()
@@ -169,8 +232,14 @@ object SuspectDetector {
             )
         }
 
+        // Two different first names under one surname (or two different one-word names) are two
+        // people sharing a line. Read from the names themselves, so merges recorded before the
+        // scorer weighed this (their contributions say nothing about it) are caught too.
+        val household = differentPeopleByName(i.survivorName, i.absorbedName)
         when (level("name")) {
-            "CONFLICT" -> suspicion += Evidence(
+            "CONFLICT" -> suspicion += if (household) Evidence(
+                "Different first names (\"${i.survivorName}\", \"${i.absorbedName}\"): likely two people sharing a line.", 3.0
+            ) else Evidence(
                 "The surnames disagreed (\"${i.survivorName}\" vs \"${i.absorbedName}\"); other fields outvoted them.", 3.0
             )
             "PARTIAL" -> suspicion += Evidence(
@@ -178,6 +247,9 @@ object SuspectDetector {
             )
             "AGREE" -> defense += Evidence(
                 "The names agree, allowing for nicknames (\"${i.survivorName}\" / \"${i.absorbedName}\").", 2.0
+            )
+            else -> if (household) suspicion += Evidence(
+                "Different first names (\"${i.survivorName}\", \"${i.absorbedName}\"): likely two people sharing a line.", 3.0
             )
         }
         if (sameNumber) defense += Evidence("Both entries had the same phone number.", 1.5)

@@ -22,6 +22,7 @@ import com.hereliesaz.cleanunderwear.domain.BrowserMission
 import com.hereliesaz.cleanunderwear.network.NameValidator
 import com.hereliesaz.cleanunderwear.network.SourceCatalog
 import com.hereliesaz.cleanunderwear.network.SourceKind
+import com.hereliesaz.cleanunderwear.network.SourceScope
 import com.hereliesaz.cleanunderwear.network.SourceUrlBuilder
 import com.hereliesaz.cleanunderwear.util.CyberBackgroundChecks
 import java.net.URLEncoder
@@ -47,7 +48,7 @@ fun TargetDetailScreen(
     onNavigateBack: () -> Unit
 ) {
     val context = LocalContext.current
-    var confirming by remember { mutableStateOf<Verdict?>(null) }
+    var confirming by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<Verdict?>(null) }
     val name = target.displayName
 
     Scaffold(
@@ -155,11 +156,26 @@ fun TargetDetailScreen(
                 else "Not yet"
             )
             target.unreadSources?.let {
-                AppCaption("The last check couldn't read $it. It will try again within six hours.")
+                AppCaption(
+                    "The last check couldn't read $it. " +
+                        if (target.status == TargetStatus.POSSIBLE_MATCH || target.status == TargetStatus.WEAK_MATCH) {
+                            "Its match stays, and it is checked again within six hours."
+                        } else {
+                            "It is tried again at the next check."
+                        }
+                )
             }
             val plan = sourceCatalog.searchPlan(target.areaCode, target.residenceInfo)
             if (plan.automated && !plan.lockupAutomated) {
-                AppCaption("No jail or prison search for this area runs on its own, so only obituaries and news are checked.")
+                val federal = if (plan.lockup.any { it.kind != SourceKind.MANUAL_LANDING && it.scope == SourceScope.MULTI_STATE }) "federal prisons, " else ""
+                AppCaption(
+                    if (plan.lockup.any { it.kind != SourceKind.MANUAL_LANDING && it.county != null }) {
+                        "Their own county's jail isn't searched on its own; only other jails in the state, ${federal}and obituaries and news, are. " +
+                            "Its link is below, under Look them up yourself."
+                    } else {
+                        "No jail or state prison search for this area runs on its own, so only ${federal}obituaries and news are checked."
+                    }
+                )
             }
             Text("How often", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             val frequencies = linkedMapOf(24 to "Daily", 48 to "Every 2 days", 168 to "Weekly")
@@ -285,7 +301,7 @@ fun TargetDetailScreen(
             onConfirm = { confirming = null; onArchive(target.id) },
             onDismiss = { confirming = null }
         ) {
-            Text("$name won't be checked and won't appear in your list. Turn on Archives to see them and bring them back.")
+            Text("$name won't be checked and won't appear in your list. Choose Show archived on the rail to see them and bring them back.")
         }
         null -> Unit
     }
@@ -326,11 +342,9 @@ private fun openUrl(context: Context, url: String) {
 }
 
 /**
- * Identity-source IDs whose chips MUST open in the in-app WebView (not the
- * system browser) so requests carry the user's WebView UA + session cookies.
- * CBC and SmartBGC bot-block raw HTTP requests with non-WebView UAs; the
- * in-app BrowserScreen + WebViewIdentityInterceptor together guarantee
- * every CBC/SmartBGC request uses "the user's header" end-to-end.
+ * Identity-source IDs whose chips open in the in-app browser (not the system
+ * browser): CBC and SmartBGC block other clients, and the app's browser carries
+ * the session (and any CAPTCHA solved) that the lookups use.
  */
 private val BROWSER_HOSTED_IDENTITY_SOURCES = setOf(
     "cyberbgc_people_lookup",

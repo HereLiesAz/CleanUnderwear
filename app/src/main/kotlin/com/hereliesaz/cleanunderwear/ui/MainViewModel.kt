@@ -2,7 +2,6 @@ package com.hereliesaz.cleanunderwear.ui
 
 import android.app.Application
 import android.content.Context
-import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -74,7 +73,8 @@ class MainViewModel @Inject constructor(
     private val suspectReview: SuspectReview,
     private val alternateFinder: AlternateFinder,
     private val updateChecker: com.hereliesaz.cleanunderwear.update.UpdateChecker,
-    private val contactSyncer: com.hereliesaz.cleanunderwear.util.SystemContactSyncer
+    private val contactSyncer: com.hereliesaz.cleanunderwear.util.SystemContactSyncer,
+    private val lookupChoices: com.hereliesaz.cleanunderwear.domain.LookupChoiceStore
 ) : AndroidViewModel(application) {
 
     enum class SortOrder { NAME, STATUS, DATE }
@@ -232,7 +232,9 @@ class MainViewModel @Inject constructor(
         /** Whether Cancel can stop it partway without leaving a mess. */
         val cancellable: Boolean = true,
         /** Whether it keeps going if the user stops watching it. */
-        val continues: Continues = Continues.NO
+        val continues: Continues = Continues.NO,
+        /** What has turned up so far, a line each, shown under what is happening. */
+        val findings: List<String> = emptyList()
     )
 
     enum class Continues {
@@ -242,6 +244,19 @@ class MainViewModel @Inject constructor(
         IN_APP,
         /** Keeps going in the app and after the user leaves it (WorkManager). */
         ANYWHERE
+    }
+
+    /**
+     * Every operation runs under this: an error nothing else caught (a bad page, a full disk) is
+     * logged and reported in a line, and the busy screen cleared, instead of closing the app.
+     * Cancellation never reaches it.
+     */
+    private val failSafe = kotlinx.coroutines.CoroutineExceptionHandler { _, e ->
+        com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log(
+            "Operation failed: ${e.javaClass.simpleName}", com.hereliesaz.cleanunderwear.util.DiagnosticLogger.LogEntry.LogLevel.ERROR
+        )
+        _operationState.value = OperationState(isRunning = false)
+        post("Something went wrong and that stopped. What was done before is kept; the activity log has details.")
     }
 
     /** Stops the operation now running; set by [begin]. */
@@ -352,7 +367,7 @@ class MainViewModel @Inject constructor(
         val now = System.currentTimeMillis()
         if (!manual && now - prefs.getLong("last_update_check", 0L) < AUTO_UPDATE_CHECK_INTERVAL_MS) return
         if (_updateState.value.checking) return
-        viewModelScope.launch {
+        viewModelScope.launch(failSafe) {
             _updateState.value = _updateState.value.copy(checking = true)
             val result = updateChecker.check()
             // A failed check (offline, rate-limited) doesn't count: the next launch tries again.
@@ -387,7 +402,7 @@ class MainViewModel @Inject constructor(
 
     /** Re-scan for bad merges and stale numbers. Read-only; changes nothing. */
     fun refreshSuspects() {
-        viewModelScope.launch {
+        viewModelScope.launch(failSafe) {
             _reviewState.value = _reviewState.value.copy(loading = true)
             val report = pipelineCoordinator.runExclusive("suspect-scan") {
                 withContext(Dispatchers.Default) { suspectReview.find() }
@@ -399,7 +414,10 @@ class MainViewModel @Inject constructor(
     /** Undo the merge behind [case]; the absorbed contact comes back as its own row. */
     fun splitMerge(case: SuspectCase) {
         applyVerdict(case, rescan = true) {
-            case.ledgerId?.let { suspectReview.split(it) }
+            if (case.ledgerId?.let { suspectReview.split(it) } != true) {
+                post("Couldn't separate ${case.title}: that entry changed since the list was made. The list was refreshed.")
+                return@applyVerdict
+            }
             // Undoing a merge can take back a number the survivor had only through it; look one
             // up, reading the survivor after the split has landed.
             val survivor = repository.getTargetById(case.targetId)
@@ -422,6 +440,116 @@ class MainViewModel @Inject constructor(
 
     fun dismissSuspect(case: SuspectCase) = applyVerdict(case) { suspectReview.dismiss(case) }
 
+    /**
+     * Does what each of [cases] recommends, one after another, under the busy screen; cases with no
+     * recommendation (too close to call) are left alone. Merges go first: a number case on a contact
+     * that was just separated is set aside, since separating changes what that contact's numbers
+     * are, and the rescan afterwards raises it again if it still applies. Out-of-date numbers are
+     * only marked: looking up a current one needs the browser, contact by contact.
+     */
+    fun applyRecommendations(cases: List<SuspectCase>) {
+        val todo = cases.filter { it.recommendation != null }
+            .sortedBy { if (it.kind == com.hereliesaz.cleanunderwear.domain.SuspicionKind.BAD_MERGE) 0 else 1 }
+        if (todo.isEmpty()) return
+        viewModelScope.launch(failSafe) {
+            pipelineCoordinator.runExclusive("review-all") {
+                val done = linkedMapOf<com.hereliesaz.cleanunderwear.domain.Recommendation, Int>()
+                val separated = mutableSetOf<Int>()
+                var setAside = 0
+                var notApplied = 0
+                fun lines() = done.map { (rec, n) -> rec.done(n) } +
+                    listOfNotNull(
+                        setAside.takeIf { it > 0 }?.let { "$it left for a fresh look after separating" },
+                        notApplied.takeIf { it > 0 }?.let { "$it couldn't be done: the contact changed since the list was made" }
+                    )
+                try {
+                    begin(OperationState(description = "Applying recommendations…", progress = 0f))
+                    for ((i, case) in todo.withIndex()) {
+                        val rec = case.recommendation!!
+                        _operationState.value = _operationState.value.copy(
+                            description = "${rec.label}: ${case.title} (${i + 1} of ${todo.size})",
+                            progress = i.toFloat() / todo.size,
+                            findings = lines()
+                        )
+                        if (case.kind == com.hereliesaz.cleanunderwear.domain.SuspicionKind.STALE_NUMBER && case.targetId in separated) {
+                            setAside++
+                            continue
+                        }
+                        // Only what actually happened is counted: a merge already undone, or a
+                        // number no longer on the contact, is reported as not done.
+                        val applied = when (rec) {
+                            com.hereliesaz.cleanunderwear.domain.Recommendation.SEPARATE ->
+                                (case.ledgerId?.let { suspectReview.split(it) } == true).also { if (it) separated += case.targetId }
+                            com.hereliesaz.cleanunderwear.domain.Recommendation.KEEP_COMBINED ->
+                                case.ledgerId?.let { suspectReview.keepMerged(it); true } == true
+                            com.hereliesaz.cleanunderwear.domain.Recommendation.USE_REPLACEMENT -> suspectReview.adoptReplacement(case)
+                            com.hereliesaz.cleanunderwear.domain.Recommendation.MARK_OUT_OF_DATE -> { suspectReview.markStale(case); true }
+                            com.hereliesaz.cleanunderwear.domain.Recommendation.KEEP_NUMBER -> { suspectReview.dismiss(case); true }
+                        }
+                        if (applied) done[rec] = (done[rec] ?: 0) + 1 else notApplied++
+                    }
+                    _operationState.value = OperationState(isRunning = false)
+                    post(lines().joinToString("; ").replaceFirstChar { it.uppercase() } + ".")
+                } finally {
+                    if (_operationState.value.isRunning) _operationState.value = OperationState(isRunning = false)
+                    // Cancelled or not, what was done is done; the list shows what is left.
+                    refreshSuspects()
+                }
+            }
+        }
+    }
+
+    private val _choices = MutableStateFlow<List<com.hereliesaz.cleanunderwear.domain.LookupChoice>>(emptyList())
+
+    /** Contacts a details lookup found people for, waiting for the user to say which is them. */
+    val choices: StateFlow<List<com.hereliesaz.cleanunderwear.domain.LookupChoice>> = _choices
+
+    private val _openChoices = MutableStateFlow(false)
+
+    /** Set when a run of lookups ends with people to choose from; the app then opens the choices. */
+    val openChoices: StateFlow<Boolean> = _openChoices
+    fun consumeOpenChoices() { _openChoices.value = false }
+
+    init {
+        viewModelScope.launch(failSafe) { _choices.value = withContext(Dispatchers.IO) { lookupChoices.load() } }
+    }
+
+    /**
+     * The user's answer for one contact: [option] is them (its details fill the contact's gaps, as
+     * a confirmed lookup's always did), or, when null, none of the people found is. "None" is
+     * remembered, so later runs don't look the contact up again; its own Look up details still can.
+     */
+    fun chooseLookup(targetId: Int, option: com.hereliesaz.cleanunderwear.domain.LookupOption?) {
+        val choice = _choices.value.firstOrNull { it.targetId == targetId } ?: return
+        _choices.value = _choices.value.filter { it.targetId != targetId }
+        viewModelScope.launch(failSafe) {
+            withContext(Dispatchers.IO) { lookupChoices.remove(setOf(targetId)) }
+            pipelineCoordinator.runExclusive("lookup-choice") {
+                repository.inTransaction {
+                    val target = repository.getTargetById(targetId) ?: return@inTransaction
+                    repository.updateTarget(
+                        if (option != null) {
+                            cbcEnricher.adopt(target, option).copy(
+                                // Details resolve UNVERIFIED; any other status stands.
+                                status = if (target.status == TargetStatus.UNVERIFIED) TargetStatus.MONITORING else target.status,
+                                monitorabilityState = com.hereliesaz.cleanunderwear.data.MonitorabilityState.READY
+                            )
+                        } else {
+                            target.copy(
+                                enrichmentProvenance = cbcEnricher.noneOfThem(choice.options.size),
+                                monitorabilityState = if (target.status == TargetStatus.UNVERIFIED) {
+                                    com.hereliesaz.cleanunderwear.data.MonitorabilityState.ENRICHMENT_FAILED
+                                } else {
+                                    target.monitorabilityState
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+        }
+    }
+
     private val _alternates = MutableStateFlow<AlternateInfo?>(null)
 
     /** The lookup's offer for a contact whose number was just ruled out; null when none is pending. */
@@ -433,7 +561,7 @@ class MainViewModel @Inject constructor(
      * ever started by a review verdict or the "Look up alternates" button.
      */
     fun findAlternates(targetId: Int, stalePhone: String?) {
-        viewModelScope.launch {
+        viewModelScope.launch(failSafe) {
             pipelineCoordinator.runExclusive("find-alternates") {
                 resolveCancellationRequested = false
                 try {
@@ -482,12 +610,14 @@ class MainViewModel @Inject constructor(
 
     /** Write the offered number and/or address onto the contact. Only fills what the lookup found. */
     fun applyAlternates(info: AlternateInfo) {
-        viewModelScope.launch {
+        viewModelScope.launch(failSafe) {
             pipelineCoordinator.runExclusive("apply-alternates") {
                 val target = repository.getTargetById(info.targetId) ?: return@runExclusive
                 repository.updateTarget(
                     target.copy(
                         phoneNumber = info.phone ?: target.phoneNumber,
+                        // The replaced number is remembered (see SuspectReview.adoptReplacement).
+                        stalePhone = if (info.phone != null && info.phone != target.phoneNumber) target.phoneNumber ?: target.stalePhone else target.stalePhone,
                         areaCode = info.phone
                             ?.let { com.hereliesaz.cleanunderwear.match.StringSimilarity.nanpAreaCode(it) }
                             ?: target.areaCode,
@@ -506,7 +636,7 @@ class MainViewModel @Inject constructor(
 
     /** Runs a review verdict alongside the pipeline's other writers, then drops the case from the queue. */
     private fun applyVerdict(case: SuspectCase, rescan: Boolean = false, action: suspend () -> Unit) {
-        viewModelScope.launch {
+        viewModelScope.launch(failSafe) {
             pipelineCoordinator.runExclusive("review-verdict") { action() }
             val state = _reviewState.value
             _reviewState.value = state.copy(
@@ -522,7 +652,7 @@ class MainViewModel @Inject constructor(
      * that changes the status) is refused if the match itself changed since the user saw it.
      */
     fun updateTarget(shown: Target, change: (Target) -> Target) {
-        viewModelScope.launch {
+        viewModelScope.launch(failSafe) {
             val verdict = change(shown).status != shown.status
             val written = repository.inTransaction {
                 val current = repository.getTargetById(shown.id) ?: return@inTransaction null
@@ -543,14 +673,14 @@ class MainViewModel @Inject constructor(
     }
 
     fun ignoreTarget(id: Int) {
-        viewModelScope.launch {
+        viewModelScope.launch(failSafe) {
             repository.ignore(id, System.currentTimeMillis())
             syncNote(id)
         }
     }
 
     fun restoreTarget(id: Int) {
-        viewModelScope.launch {
+        viewModelScope.launch(failSafe) {
             repository.unignore(id, System.currentTimeMillis())
             syncNote(id)
         }
@@ -653,14 +783,30 @@ class MainViewModel @Inject constructor(
      * the notes it wrote into phone-book contacts, and site sign-ins. Settings are kept.
      */
     fun deleteEverything() {
-        viewModelScope.launch {
+        viewModelScope.launch(failSafe) {
             pipelineCoordinator.runExclusive("delete-everything") {
                 // Half a deletion is worse than none; it's quick, so it runs to the end.
                 begin(OperationState(description = "Deleting…", progress = -1f, cancellable = false))
                 val notes = withContext(Dispatchers.IO) { contactSyncer.removeAllBlocks() }
                 repository.wipeAll()
+                // What the app holds in memory goes too: the activity log names contacts, and the
+                // Review list and any lookup offer are about the list just deleted.
+                com.hereliesaz.cleanunderwear.util.DiagnosticLogger.clear()
+                _reviewState.value = ReviewState()
+                _alternates.value = null
+                withContext(Dispatchers.IO) { lookupChoices.clear() }
+                _choices.value = emptyList()
                 _operationState.value = OperationState(isRunning = false)
-                post("Deleted the app's data and its notes on $notes contact${if (notes == 1) "" else "s"}.")
+                fun contacts(n: Int) = "$n contact${if (n == 1) "" else "s"}"
+                post(
+                    when {
+                        notes.noAccess -> "Deleted the app's data. The notes it added to your contacts weren't removed: " +
+                            "the app can't see your contacts. Allow contacts access and run Delete everything again to remove them."
+                        notes.failed > 0 -> "Deleted the app's data and the notes on ${contacts(notes.removed)}. " +
+                            "The notes on ${contacts(notes.failed)} couldn't be changed; run Delete everything again to retry."
+                        else -> "Deleted the app's data and its notes on ${contacts(notes.removed)}."
+                    }
+                )
             }
             signOutOfSites()
         }
@@ -680,12 +826,13 @@ class MainViewModel @Inject constructor(
         _showManualEntryDialog.value = show
     }
 
+    /**
+     * Adds one person. A single insert, so it doesn't take the busy screen (which belongs to
+     * whatever longer operation may be running, and its Cancel); the next read of contacts
+     * folds the row in with any duplicate.
+     */
     fun addManualTarget(name: String, phone: String?, email: String?) {
-        viewModelScope.launch {
-            begin(OperationState(description = "Adding $name…", progress = -1f))
-            
-            // Re-use de-duplication and AI validation logic via UseCase if possible, 
-            // or just build a single Target and insert.
+        viewModelScope.launch(failSafe) {
             val target = Target(
                 displayName = name,
                 phoneNumber = phone,
@@ -705,24 +852,17 @@ class MainViewModel @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 post("Couldn't add $name. Try again.")
-            } finally {
-                _operationState.value = OperationState(isRunning = false)
             }
         }
     }
 
     fun sweepContacts() {
-        val activeSources = mutableSetOf<String>()
-        if (_googleFilter.value != false) activeSources.add("Google")
-        if (_metaFilter.value != false) activeSources.add("Meta")
-        if (_appleFilter.value != false) activeSources.add("Apple")
-        if (_deviceFilter.value != false) activeSources.add("Device")
-
-        Log.d("MainViewModel", "Sweeping contacts with sources: $activeSources")
+        // Every account, always: the list's filter chips change what is shown, never what is
+        // read (hiding Google contacts from view used to skip them on the next import).
         // A sweep already queued or running covers this request too.
         if (sweepPending) return
         sweepPending = true
-        viewModelScope.launch {
+        viewModelScope.launch(failSafe) {
             try {
                 // Serialised with the daily check and every other job that writes the registry,
                 // and run off the main thread: harvest, name checks and dedup are heavy.
@@ -730,20 +870,37 @@ class MainViewModel @Inject constructor(
                     begin(OperationState(description = "Reading contacts...", progress = 0.1f, continues = Continues.IN_APP))
                     val before = repository.getTargetsPaged(limit = Int.MAX_VALUE, offset = 0).size
                     withContext(Dispatchers.Default) {
+                        // What has turned up so far, under the loader.
+                        val found = mutableListOf<String>()
+                        fun note(line: String) {
+                            found += line
+                            _operationState.value = _operationState.value.copy(findings = found.toList())
+                        }
+
                         // 1. Ingest raw data from enabled sources
-                        harvestContactsUseCase(activeSources)
+                        val harvest = harvestContactsUseCase()
+                        val read = repository.getTargetsPaged(limit = Int.MAX_VALUE, offset = 0).size
+                        note("$read contact${if (read == 1) "" else "s"} in the list (${(read - before + harvest.removed).coerceAtLeast(0)} new)")
+                        if (harvest.removed > 0) {
+                            note("${harvest.removed} no longer in your phone's contacts, so no longer checked")
+                        }
 
                         // 2. Consolidate and deduplicate the full registry
                         _operationState.value = _operationState.value.copy(description = "Merging duplicates...", progress = 0.4f)
-                        deduplicateTargetsUseCase { sub, _ ->
+                        val merged = deduplicateTargetsUseCase { sub, _ ->
                             _operationState.value = _operationState.value.copy(progress = 0.4f + (sub * 0.3f))
                         }
+                        note(if (merged == 0) "No duplicates" else "Merged $merged duplicate${if (merged == 1) "" else "s"}")
 
                         // 3. Triage for monitorability
                         _operationState.value = _operationState.value.copy(description = "Preparing contacts for daily checks...", progress = 0.7f)
-                        triageTargetsUseCase { sub, _ ->
+                        val triaged = triageTargetsUseCase { sub, _ ->
                             _operationState.value = _operationState.value.copy(progress = 0.7f + (sub * 0.3f))
                         }
+                        note(
+                            "${triaged.ready} ready for daily checks" +
+                                if (triaged.needsEnrichment > 0) " · ${triaged.needsEnrichment} need more details" else ""
+                        )
                     }
                     val after = repository.getTargetsPaged(limit = Int.MAX_VALUE, offset = 0).size
                     _operationState.value = OperationState(isRunning = false)
@@ -767,7 +924,7 @@ class MainViewModel @Inject constructor(
     @Volatile private var sweepPending = false
 
     fun harvestFacebook() {
-        viewModelScope.launch {
+        viewModelScope.launch(failSafe) {
             pipelineCoordinator.runExclusive("facebook-harvest") {
                 try {
                     begin(OperationState(
@@ -790,17 +947,6 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Walks every UNVERIFIED contact, and every contact still missing an age or
-     * date of birth, and enriches them through the visible cyberbackgroundchecks
-     * browser flow, one mission at a time. Age is what lets
-     * [com.hereliesaz.cleanunderwear.match.MatchVerifier] tell two people with
-     * the same name apart, so it is gathered for everyone, not only on a match.
-     *
-     * Per the user's rule, this is *user-initiated*; the auto pipeline never
-     * triggers it. If the auto pipeline (or any other coordinator-protected
-     * job) is in flight, this batch queues until that finishes.
-     */
     /** How many contacts "Fill in details" would look up, for the confirmation before it starts. */
     suspend fun resolveCandidateCount(): Int = resolveCandidates().size
 
@@ -823,6 +969,16 @@ class MainViewModel @Inject constructor(
         return ids.chunked(500)
             .flatMap { repository.getTargetsByIds(it) }
             .filter { it.status == TargetStatus.UNVERIFIED || it.dateOfBirth.isNullOrBlank() }
+            // A contact the site already said it has nobody for, or whose results the user has
+            // answered, isn't looked up again in every run; "Look up details" on its own
+            // screen still tries it. Nor is one whose results are still waiting for an answer.
+            .filterNot {
+                it.enrichmentProvenance?.startsWith("nobody found by") == true ||
+                    it.enrichmentProvenance?.startsWith(com.hereliesaz.cleanunderwear.network.CyberBackgroundChecksEnricher.NONE_PREFIX) == true ||
+                    // Someone the user already picked: another search finds the same people.
+                    it.enrichmentProvenance?.contains(com.hereliesaz.cleanunderwear.network.CyberBackgroundChecksEnricher.CHOSEN_PREFIX) == true ||
+                    _choices.value.any { c -> c.targetId == it.id }
+            }
     }
 
     fun resolveUnverifiedBatch() = resolveContacts { resolveCandidates() }
@@ -830,8 +986,28 @@ class MainViewModel @Inject constructor(
     /** Looks up one contact's missing details, from its detail screen. */
     fun resolveOne(id: Int) = resolveContacts { listOfNotNull(repository.getTargetById(id)) }
 
+    @Volatile private var resolvePending = false
+
+    /**
+     * Looks up every contact [select] picks (UNVERIFIED ones, and any still missing an age, which
+     * is what lets [com.hereliesaz.cleanunderwear.match.MatchVerifier] tell two people with the
+     * same name apart) through the visible cyberbackgroundchecks browser, one contact at a time.
+     * Nothing is decided during the run: everyone each search turns up is kept in [choices], and
+     * when the queue is done (or stopped) the user is taken to choose, contact by contact, which
+     * person is theirs, if any. Contacts no search found anyone for are noted and passed over.
+     *
+     * Per the user's rule, this is *user-initiated*; the auto pipeline never triggers it. If the
+     * auto pipeline (or any other coordinator-protected job) is in flight, it queues until that finishes.
+     */
     private fun resolveContacts(select: suspend () -> List<Target>) {
-        viewModelScope.launch {
+        // One run of lookups at a time; a tap while one waits or runs doesn't queue another.
+        if (resolvePending) {
+            post("A lookup is already running or waiting to start.")
+            return
+        }
+        resolvePending = true
+        viewModelScope.launch(failSafe) {
+            try {
             pipelineCoordinator.runExclusive("user-enrichment") {
                 resolveCancellationRequested = false
                 try {
@@ -848,10 +1024,30 @@ class MainViewModel @Inject constructor(
                     description = "Looking up 1 of $total on CyberBackgroundChecks...",
                     progress = 0f
                 ))
-                var filled = 0
+                // Contacts with people to choose from. Nobody is asked mid-run: every contact is
+                // looked up first, and the choosing comes after, all together.
+                var toChoose = 0
+                fun finish(message: String) {
+                    _operationState.value = OperationState(isRunning = false)
+                    if (toChoose > 0) {
+                        post("$message Choose who's who for $toChoose contact${if (toChoose == 1) "" else "s"}.")
+                        _openChoices.value = true
+                    } else {
+                        post(message)
+                    }
+                }
+                // What has turned up so far, newest first, under the loader and in the browser.
+                val results = ArrayDeque<String>()
+                fun noteResult(done: Int, line: String) {
+                    results.addFirst(line)
+                    while (results.size > RECENT_RESULTS) results.removeLast()
+                    _operationState.value = _operationState.value.copy(
+                        findings = listOf("$done of $total looked up · people found for $toChoose, to choose from at the end") + results
+                    )
+                }
 
                 for ((index, lite) in unverified.withIndex()) {
-                    if (resolveCancellationRequested) return@runExclusive
+                    if (resolveCancellationRequested) { finish("Stopped after $index of $total."); return@runExclusive }
                     val target = repository.getTargetById(lite.id) ?: continue
                     val missions = cbcEnricher.pickAllMissions(target)
                     if (missions.isEmpty()) {
@@ -859,6 +1055,7 @@ class MainViewModel @Inject constructor(
                             target.id,
                             com.hereliesaz.cleanunderwear.data.MonitorabilityState.ENRICHMENT_FAILED
                         )
+                        noteResult(index + 1, "${target.displayName}: nothing to search by")
                         continue
                     }
 
@@ -880,65 +1077,65 @@ class MainViewModel @Inject constructor(
                         // User backed out mid-target — stop the whole batch
                         // rather than barrel through every UNVERIFIED contact
                         // without their attention.
-                        _operationState.value = OperationState(isRunning = false)
-                        post("Stopped after ${index} of $total. Details found so far were kept.")
+                        finish("Stopped after $index of $total.")
                         return@runExclusive
                     }
 
+                    // A search that says it found nobody is noted and passed over, not parsed:
+                    // its page chrome would only be mistaken for a person.
+                    val nobody = withContext(Dispatchers.Default) {
+                        extracted.filter { (_, html) -> cbcEnricher.foundNobody(html) }.map { it.first }
+                    }
+                    if (nobody.isNotEmpty()) {
+                        com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log(
+                            "CYBG: nobody found for ${target.displayName} (${nobody.joinToString { it.label }})"
+                        )
+                    }
+                    // Every person on every results page, not only the first: which one is the
+                    // contact is the user's call, made after the run.
                     val collected = withContext(Dispatchers.Default) {
-                        extracted.mapNotNull { (mission, html) ->
-                            val findings = cbcEnricher.parseFindings(html)
+                        extracted.filterNot { (mission, _) -> mission in nobody }.flatMap { (mission, html) ->
+                            val people = cbcEnricher.parsePeople(html)
                             com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log(
-                                "CYBG parse ${mission.label}: ${cbcEnricher.describeParse(html, findings)}"
+                                "CYBG parse ${mission.label}: ${people.size} people · ${cbcEnricher.describeParse(html, people.firstOrNull())}"
                             )
-                            findings?.let { mission to it }
+                            people.map { mission to it }
                         }
                     }
-                    if (resolveCancellationRequested) return@runExclusive
+                    if (resolveCancellationRequested) { finish("Stopped after $index of $total."); return@runExclusive }
 
-                    // Verify-before-merge: only promote the contact when the CBC
-                    // card is corroborated as the *same person*. An unverified or
-                    // conflicting card (e.g. a recycled phone number returning a
-                    // stranger) is NOT written into the registry or the user's
-                    // system contacts — we keep it UNVERIFIED and record why.
-                    // Judged against the contact as it is now: the user may have spent minutes in
+                    if (collected.isNotEmpty()) {
+                        val options = cbcEnricher.options(target, collected)
+                        _choices.value = withContext(Dispatchers.IO) {
+                            lookupChoices.put(com.hereliesaz.cleanunderwear.domain.LookupChoice(target.id, target.displayName, options))
+                        }
+                        toChoose++
+                        noteResult(index + 1, "${target.displayName}: ${options.size} ${if (options.size == 1) "person" else "people"} found")
+                        continue
+                    }
+
+                    // Nobody to choose from: the search found no one, or its page couldn't be read.
+                    // Noted against the contact as it is now: the user may have spent minutes in
                     // the browser, and a check or an edit may have written it meanwhile.
                     val id = target.id
                     repository.inTransaction {
-                    @Suppress("NAME_SHADOWING")
-                    val target = repository.getTargetById(id) ?: return@inTransaction
-                    val enrichment = cbcEnricher.enrich(target, collected)
-                    if (enrichment.verified) {
-                        filled++
+                        @Suppress("NAME_SHADOWING")
+                        val target = repository.getTargetById(id) ?: return@inTransaction
+                        val outcome = cbcEnricher.enrich(target, emptyList(), foundNobody = nobody)
                         repository.updateTarget(
-                            enrichment.target.copy(
-                                // Enrichment resolves UNVERIFIED; any other status stands.
-                                status = if (target.status == TargetStatus.UNVERIFIED) {
-                                    TargetStatus.MONITORING
-                                } else {
-                                    target.status
-                                },
-                                monitorabilityState =
-                                    com.hereliesaz.cleanunderwear.data.MonitorabilityState.READY
-                            )
-                        )
-                    } else if (target.status == TargetStatus.UNVERIFIED) {
-                        repository.updateTarget(
-                            enrichment.target.copy(
-                                monitorabilityState =
+                            outcome.target.copy(
+                                monitorabilityState = if (target.status == TargetStatus.UNVERIFIED) {
                                     com.hereliesaz.cleanunderwear.data.MonitorabilityState.ENRICHMENT_FAILED
+                                } else {
+                                    target.monitorabilityState
+                                }
                             )
                         )
-                    } else {
-                        // An unconfirmed card on an already-monitored contact is
-                        // simply not used; the contact keeps monitoring as before.
-                        repository.updateTarget(target.copy(enrichmentProvenance = enrichment.target.enrichmentProvenance))
                     }
-                    }
+                    noteResult(index + 1, "${target.displayName}: " + if (nobody.isNotEmpty()) "nobody found" else "couldn't read the page")
                 }
 
-                _operationState.value = OperationState(isRunning = false)
-                post("Looked up $total contact${if (total == 1) "" else "s"}; filled in details for $filled.")
+                finish("Looked up $total contact${if (total == 1) "" else "s"}.")
                 } finally {
                     // Do not destroy the shared browser between contacts, only
                     // when the complete Resolve run finishes or is cancelled.
@@ -950,6 +1147,9 @@ class MainViewModel @Inject constructor(
                         _operationState.value = OperationState(isRunning = false)
                     }
                 }
+            }
+            } finally {
+                resolvePending = false
             }
         }
     }
@@ -1007,7 +1207,7 @@ class MainViewModel @Inject constructor(
      * service needs it, and imports what [parse] reads from the page it hands back.
      */
     private fun harvestInBrowser(key: String, mission: BrowserMission, what: String, hosts: List<String>, parse: (String) -> List<Target>) {
-        viewModelScope.launch {
+        viewModelScope.launch(failSafe) {
             pipelineCoordinator.runExclusive(key) {
                 try {
                     begin(OperationState(description = "Importing $what. Sign in if asked.", progress = -1f))
@@ -1034,7 +1234,7 @@ class MainViewModel @Inject constructor(
         if (watchingManualCheck) return
         watchingManualCheck = true
 
-        viewModelScope.launch {
+        viewModelScope.launch(failSafe) {
             try {
                 workManager.getWorkInfosForUniqueWorkFlow("manual_check")
                     // This run, or one already in progress that the tap joined; never an old result.
@@ -1056,6 +1256,10 @@ class MainViewModel @Inject constructor(
         when (workInfo?.state) {
             androidx.work.WorkInfo.State.RUNNING -> {
                 if (manualCheckCancelled) return
+                // The worker reports once it has the pipeline; until then it is queued behind
+                // whatever holds the screen (a contact read), which keeps it.
+                val started = workInfo.progress.getString(ScrapingWorker.DESCRIPTION) != null
+                if (!started && _operationState.value.isRunning) return
                 if (!_operationState.value.isRunning) _operationInBackground.value = false
                 // The check runs in WorkManager, not here: Cancel stops the work itself.
                 cancelRunning = {
@@ -1064,9 +1268,10 @@ class MainViewModel @Inject constructor(
                 }
                 _operationState.value = OperationState(
                     isRunning = true,
-                    description = workInfo.progress.getString("description") ?: "Checking records…",
-                    progress = workInfo.progress.getFloat("progress", -1f),
-                    continues = Continues.ANYWHERE
+                    description = workInfo.progress.getString(ScrapingWorker.DESCRIPTION) ?: "Checking records…",
+                    progress = workInfo.progress.getFloat(ScrapingWorker.PROGRESS, -1f),
+                    continues = Continues.ANYWHERE,
+                    findings = workInfo.progress.getStringArray(ScrapingWorker.FINDINGS)?.toList().orEmpty()
                 )
             }
             androidx.work.WorkInfo.State.SUCCEEDED -> {
@@ -1122,6 +1327,9 @@ class MainViewModel @Inject constructor(
         )
     }
 }
+
+/** How many contacts' results Fill in details keeps on screen, newest first. */
+private const val RECENT_RESULTS = 5
 
 /** Automatic update checks run at most this often; the manual check in Settings ignores it. */
 private const val AUTO_UPDATE_CHECK_INTERVAL_MS = 12L * 60 * 60 * 1000

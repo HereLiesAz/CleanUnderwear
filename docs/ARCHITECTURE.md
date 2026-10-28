@@ -16,7 +16,7 @@ A single-module Android app: Kotlin, Jetpack Compose, Hilt, Room, WorkManager, O
 - **Review**: `SuspectDetector` (pure) finds suspect merges and stale numbers; `SuspectReview` applies the user's verdicts.
 
 ### Data (`data/`, `network/`, `util/`)
-- **Room** (`CleanUnderwearDatabase`, version 15): `Target` (the Registry) and `MergeRecord` (the merge ledger). Schemas are exported to `app/schemas`; `MigrationTest` upgrades databases built at versions 13 and 14 from those schemas. `TargetRepository` wraps the DAO and runs multi-step writes in transactions.
+- **Room** (`CleanUnderwearDatabase`, version 15): `Target` (the Registry) and `MergeRecord` (the merge ledger). Schemas are exported to `app/schemas` (only 15 so far); `MigrationTest` rebuilds versions 13 and 14 from 15's schema, less the columns later migrations added, and upgrades them. Migrations 1-12 are untested. `TargetRepository` wraps the DAO and runs multi-step writes in transactions.
 - **Network**: raw OkHttp, built in `di/AppModule`. `SourceCatalog` reads `assets/sources.json` and plans which sources a contact is searched in; `SourceSearch` and `HtmlScraper` run them; `StructuredRecords` and `NewsFeed` parse the results. Gson parses JSON.
 - **Contacts**: `ContactHarvester` reads the phone's contacts; `SystemContactSyncer` writes the status block back into their notes.
 

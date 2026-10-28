@@ -53,13 +53,16 @@ interface TargetDao {
             (:pendingEnrichF = 0 AND monitorability_state = 'READY')
         )
         ORDER BY
-            last_status_change_timestamp DESC,
-            CASE :sort
-                WHEN 'NAME' THEN display_name
-                WHEN 'STATUS' THEN status
-                WHEN 'DATE' THEN last_scraped_timestamp
-                ELSE display_name
-            END ASC
+            CASE WHEN :sort = 'STATUS' THEN
+                CASE status
+                    WHEN 'POSSIBLE_MATCH' THEN 0 WHEN 'WEAK_MATCH' THEN 1
+                    WHEN 'INCARCERATED' THEN 2 WHEN 'DECEASED' THEN 3
+                    WHEN 'MONITORING' THEN 4 WHEN 'UNKNOWN' THEN 5
+                    WHEN 'UNVERIFIED' THEN 6 ELSE 7
+                END
+            END ASC,
+            CASE WHEN :sort = 'DATE' THEN last_scraped_timestamp END DESC,
+            display_name COLLATE NOCASE ASC
     """
     )
     fun searchTargets(

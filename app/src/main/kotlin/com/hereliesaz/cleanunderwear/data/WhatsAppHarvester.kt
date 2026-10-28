@@ -39,18 +39,32 @@ class WhatsAppHarvester @Inject constructor() {
                     setTimeout(poll, 1500);
                     return;
                 }
-                let lastCount = -1;
-                function scroll() {
-                    grid.scrollTop = grid.scrollHeight;
-                    const rows = grid.querySelectorAll('div[role="listitem"]');
-                    if (rows.length === lastCount) {
-                        window.HTMLOUT.dump(document.documentElement.outerHTML);
+                // The list is virtualised: only the rows in view exist. Walk it a screen at a
+                // time, keeping every row seen (by title), and hand back all of them at the end.
+                // A group chat's row is marked, so it isn't read as a person.
+                const seen = new Map();
+                function collect() {
+                    grid.querySelectorAll('div[role="listitem"]').forEach(function(row) {
+                        const t = row.querySelector('span[title]');
+                        const key = t ? t.getAttribute('title') : row.textContent.slice(0, 80);
+                        if (!key || seen.has(key)) return;
+                        const copy = row.cloneNode(true);
+                        if (row.querySelector('[data-icon*="group"]')) copy.setAttribute('data-cu-group', '1');
+                        seen.set(key, copy.outerHTML);
+                    });
+                }
+                let lastTop = -1;
+                function step() {
+                    collect();
+                    if (grid.scrollTop === lastTop || Date.now() - start > giveUpAfterMs) {
+                        window.HTMLOUT.dump('<div>' + Array.from(seen.values()).join('') + '</div>');
                         return;
                     }
-                    lastCount = rows.length;
-                    setTimeout(scroll, 1200);
+                    lastTop = grid.scrollTop;
+                    grid.scrollTop = grid.scrollTop + Math.max(grid.clientHeight - 40, 200);
+                    setTimeout(step, 900);
                 }
-                scroll();
+                step();
             }
             poll();
         })();
@@ -64,6 +78,8 @@ class WhatsAppHarvester @Inject constructor() {
 
         val rows = doc.select("div[role=listitem]")
         for (row in rows) {
+            // A group chat ("Book Club") is not a person.
+            if (row.hasAttr("data-cu-group")) continue
             val title = row.select("span[title]").firstOrNull()?.attr("title")?.trim()
                 ?: row.select("span[dir=auto]").firstOrNull()?.text()?.trim()
                 ?: continue

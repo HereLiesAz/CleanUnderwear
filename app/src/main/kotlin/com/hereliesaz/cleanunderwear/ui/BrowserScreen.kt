@@ -88,6 +88,8 @@ fun BrowserScreen(
     context: String? = null,
     /** Whether backing out ends a whole run of lookups, not just this page. */
     stopsBatch: Boolean = false,
+    /** What the run has turned up so far, shown under the loader while a page is read. */
+    findings: List<String> = emptyList(),
 ) {
     if (missions.isEmpty()) {
         // Defensive: nothing to do.
@@ -169,14 +171,14 @@ fun BrowserScreen(
     // (autoExtract == false) skip this entirely — the user dismisses them
     // manually via the back arrow.
     //
-    // Keyed on pageLoadCount so drill-in missions (CBC) re-run after each
-    // navigation: the script walks the results list into the first result's
-    // detail page, dumping only once it arrives. Non-drill missions still
-    // extract exactly once (the automationRan guard).
+    // Keyed on pageLoadCount so missions that re-run after navigation (CBC,
+    // whose results may arrive only after a CAPTCHA or a redirect; imports whose
+    // scripts walk to the list) extract from the new page. The rest extract
+    // exactly once (the automationRan guard).
     LaunchedEffect(batchId, currentIndex, pageLoadCount, paused) {
         if (!mission.autoExtract || batchComplete) return@LaunchedEffect
         if (paused || !pageReady) return@LaunchedEffect
-        if (!mission.drillToFirstResult && automationRan) return@LaunchedEffect
+        if (!mission.rerunAfterNavigation && automationRan) return@LaunchedEffect
         // Wait for the page to settle rather than a fixed beat: a slow SPA would otherwise be
         // dumped empty and read as "nothing found".
         awaitRenderedContent(webView)
@@ -238,6 +240,30 @@ fun BrowserScreen(
                 }
             }
             webView = null
+        }
+    }
+
+    // System Back: on a page waiting for the user (a sign-in, a CAPTCHA), one page back in the
+    // site, as in any browser; otherwise the same as the top bar's Stop, asked first so a stray
+    // gesture doesn't end a run of lookups. Without this, Back closed the app mid-run.
+    var confirmStop by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    androidx.activity.compose.BackHandler {
+        val view = webView
+        if (paused && view?.canGoBack() == true) view.goBack() else confirmStop = true
+    }
+    if (confirmStop) {
+        AppDialog(
+            title = when {
+                stopsBatch -> "Stop the lookups?"
+                mission.autoExtract -> "Stop this lookup?"
+                else -> "Close the page?"
+            },
+            confirm = if (mission.autoExtract || stopsBatch) "Stop" else "Close",
+            onConfirm = { confirmStop = false; cancel() },
+            onDismiss = { confirmStop = false },
+            dismiss = "Keep going"
+        ) {
+            if (stopsBatch) Text("Every lookup left is skipped. What was found so far is kept.")
         }
     }
 
@@ -369,8 +395,8 @@ fun BrowserScreen(
                                     paused = false
                                     DiagnosticLogger.log("BrowserScreen: page loaded while paused; resuming extraction")
                                 }
-                                // Each navigation bumps the counter so drill-in
-                                // missions re-trigger extraction on the new page.
+                                // Each navigation bumps the counter so missions that
+                                // re-run after navigation extract from the new page.
                                 pageLoadCount += 1
                                 DiagnosticLogger.log("BrowserScreen: loaded $url")
                             }
@@ -406,7 +432,13 @@ fun BrowserScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         MaterialTheme(colorScheme = SurveillanceDarkColorScheme, typography = MaterialTheme.typography) {
-                            LoadingCaption(if (!pageReady) "Loading the page…" else "Reading the page. Please don't touch it.")
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(Spacing.md)
+                            ) {
+                                LoadingCaption(if (!pageReady) "Loading the page…" else "Reading the page. Please don't touch it.")
+                                FindingsSoFar(findings)
+                            }
                             AppAction(
                                 "Cancel",
                                 ::cancel,

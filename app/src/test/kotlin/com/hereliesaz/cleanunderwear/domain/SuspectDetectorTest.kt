@@ -3,6 +3,7 @@ package com.hereliesaz.cleanunderwear.domain
 import com.hereliesaz.cleanunderwear.data.HistoryStats
 import com.hereliesaz.cleanunderwear.match.FieldContribution
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -228,5 +229,52 @@ class SuspectDetectorTest {
     fun keys_areStablePerNumber() {
         assertEquals(SuspectDetector.staleKey(3, "(504) 555-0303"), SuspectDetector.staleKey(3, "504-555-0303"))
         assertTrue(SuspectDetector.staleKey(3, "504-555-0303") != SuspectDetector.staleKey(3, "504-555-0404"))
+    }
+
+    private fun case(kind: SuspicionKind, against: Double, inFavour: Double, replacement: String? = null) = SuspectCase(
+        key = "k", kind = kind, targetId = 1, ledgerId = 1, title = "Jane Doe", headline = "",
+        identities = emptyList(),
+        suspicion = listOf(Evidence("Two different numbers", against)),
+        defense = listOf(Evidence("Same email", inFavour)),
+        replacementPhone = replacement
+    )
+
+    @Test
+    fun recommendation_followsTheSideTheEvidenceTipsTo() {
+        assertEquals(Recommendation.SEPARATE, case(SuspicionKind.BAD_MERGE, 4.0, 1.0).recommendation)
+        assertEquals(Recommendation.KEEP_COMBINED, case(SuspicionKind.BAD_MERGE, 1.0, 4.0).recommendation)
+        assertEquals(Recommendation.MARK_OUT_OF_DATE, case(SuspicionKind.STALE_NUMBER, 4.0, 1.0).recommendation)
+        assertEquals(Recommendation.USE_REPLACEMENT, case(SuspicionKind.STALE_NUMBER, 4.0, 1.0, "504-555-0101").recommendation)
+        assertEquals(Recommendation.KEEP_NUMBER, case(SuspicionKind.STALE_NUMBER, 1.0, 4.0).recommendation)
+    }
+
+    @Test
+    fun aCloseCall_hasNoRecommendationAndNoMainReason() {
+        val close = case(SuspicionKind.BAD_MERGE, 2.0, 1.5)
+        assertEquals(null, close.recommendation)
+        assertEquals(null, close.mainReason)
+        assertEquals("Two different numbers", case(SuspicionKind.BAD_MERGE, 4.0, 1.0).mainReason?.text)
+    }
+
+    @Test
+    fun householdNames_areTwoPeople_butInitialsAndSpellingsAreNot() {
+        assertTrue(SuspectDetector.differentPeopleByName("John Smith", "Mary Smith"))
+        assertTrue(SuspectDetector.differentPeopleByName("Mom", "Dad"))
+        assertFalse(SuspectDetector.differentPeopleByName("J Smith", "John Smith"))
+        assertFalse(SuspectDetector.differentPeopleByName("Jon Smith", "John Smith"))
+        assertFalse(SuspectDetector.differentPeopleByName("John Smith", "John Jones"))
+    }
+
+    @Test
+    fun hintsAlone_makeACaseNotARecommendation() {
+        // Two hints (1.0 each) tip it, but nothing that counts on its own: look, don't act in bulk.
+        val hints = SuspectCase(
+            key = "k", kind = SuspicionKind.STALE_NUMBER, targetId = 1, ledgerId = null, title = "Mom", headline = "",
+            identities = emptyList(),
+            suspicion = listOf(Evidence("Not on WhatsApp", 1.0), Evidence("A lookup found no one", 1.0)),
+            defense = emptyList()
+        )
+        assertEquals(Lean.LIKELY_PROBLEM, hints.lean)
+        assertNull(hints.recommendation)
     }
 }

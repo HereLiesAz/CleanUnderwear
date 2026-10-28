@@ -63,7 +63,7 @@ class ScrapeTargetsUseCase @Inject constructor(
     private val matchVerifier = MatchVerifier()
 
     /** What one run did, in words a person can read. */
-    data class Summary(val checked: Int, val newMatches: Int, val incomplete: Int) {
+    data class Summary(val checked: Int, val newMatches: Int, val incomplete: Int, val stillDue: Int = 0) {
         fun describe(): String = when {
             checked == 0 -> "Nothing was due for a check."
             else -> buildString {
@@ -74,17 +74,65 @@ class ScrapeTargetsUseCase @Inject constructor(
                 )
                 if (incomplete > 0) append("; $incomplete couldn't be fully checked: some sites didn't answer")
                 append('.')
+                // A run stopped by the system (or a contact limit) leaves some for next time; say so
+                // rather than let "checked N" read as everyone.
+                if (stillDue > 0) append(" $stillDue more ${if (stillDue == 1) "is" else "are"} due and will be checked first next time.")
             }
         }
     }
 
     private val newMatches = java.util.concurrent.atomic.AtomicInteger()
     private val incomplete = java.util.concurrent.atomic.AtomicInteger()
+    private val tally = Tally()
 
-    suspend operator fun invoke(onProgress: (Float, String) -> Unit = { _, _ -> }): Summary = coroutineScope {
+    /**
+     * What the run has found so far, as lines for the busy screen: how many are checked, each new
+     * possible match by name and kind, weak matches, and contacts whose sites didn't answer.
+     */
+    private class Tally {
+        private val matches = mutableListOf<String>()
+        private var weak = 0
+        private var unread = 0
+
+        @Synchronized fun reset() { matches.clear(); weak = 0; unread = 0 }
+        @Synchronized fun match(name: String, kind: EventKind) { matches += "$name: ${kindWords(kind)}" }
+        @Synchronized fun weak() { weak++ }
+        @Synchronized fun unread() { unread++ }
+
+        @Synchronized fun lines(checked: Int, total: Int): List<String> = buildList {
+            add("$checked of $total checked")
+            if (matches.isEmpty()) {
+                add("No possible matches so far")
+            } else {
+                add("${matches.size} possible match${if (matches.size == 1) "" else "es"} to review:")
+                matches.take(MAX_NAMED).forEach { add(it) }
+                if (matches.size > MAX_NAMED) add("and ${matches.size - MAX_NAMED} more")
+            }
+            if (weak > 0) add("$weak weak match${if (weak == 1) "" else "es"} (no alert; shown in the list)")
+            if (unread > 0) add("Some sites didn't answer for $unread contact${if (unread == 1) "" else "s"}")
+        }
+
+        private fun kindWords(kind: EventKind) = when (kind) {
+            EventKind.DEATH -> "obituary"
+            EventKind.ARREST -> "arrest or court record"
+            else -> "jail or prison record"
+        }
+
+        private companion object { const val MAX_NAMED = 4 }
+    }
+
+    /**
+     * Runs the check. [onFindings] gets [Tally.lines] after each contact, so the person watching
+     * sees what has turned up, not only what is being searched.
+     */
+    suspend operator fun invoke(
+        onProgress: (Float, String) -> Unit = { _, _ -> },
+        onFindings: (List<String>) -> Unit = {}
+    ): Summary = coroutineScope {
         val now = System.currentTimeMillis()
         newMatches.set(0)
         incomplete.set(0)
+        tally.reset()
         // The user's Contact Limit: only the first N contacts (by when they were added) are
         // checked at all; 0 means no limit.
         val limit = context.getSharedPreferences("clean_underwear_prefs", android.content.Context.MODE_PRIVATE)
@@ -118,7 +166,8 @@ class ScrapeTargetsUseCase @Inject constructor(
             async {
                 semaphore.withPermit {
                     processTarget(target, now, allNames) { step -> emit(target.displayName, step) }
-                    completionLock.withLock { completedCount++ }
+                    val done = completionLock.withLock { ++completedCount }
+                    onFindings(tally.lines(done, total))
                     onProgress(
                         completedCount.toFloat() / total,
                         "$completedCount/$total · ${target.displayName} · done"
@@ -127,7 +176,8 @@ class ScrapeTargetsUseCase @Inject constructor(
             }
         }.awaitAll()
 
-        val summary = Summary(total, newMatches.get(), incomplete.get())
+        val stillDue = repository.getReadyDueTargets(System.currentTimeMillis(), limit).size
+        val summary = Summary(total, newMatches.get(), incomplete.get(), stillDue)
         onProgress(1f, summary.describe())
         summary
     }
@@ -216,6 +266,7 @@ class ScrapeTargetsUseCase @Inject constructor(
             if (lockupSources.isEmpty()) {
                 emitStep("no automated lockup source for area ${target.areaCode ?: "?"}")
             }
+            val homeState = UsStates.fromAddress(target.residenceInfo) ?: locale.state
             val searches = lockupSources.map { it to EventKind.CUSTODY } + obituarySources.map { it to EventKind.DEATH }
             for ((source, kind) in searches) {
                 // Dismissals made before per-record keys were stored the source's search URL;
@@ -224,7 +275,17 @@ class ScrapeTargetsUseCase @Inject constructor(
                 if (evidenceUrl in dismissedKeys) continue
                 emitStep("checking ${source.label}")
                 val result = sourceSearch.search(source, kind, firstName, lastName, corroboration, dismissedKeys)
-                candidates += result.records
+                // A state or county source's rows rarely name a place; the source itself is one.
+                // Only the contact's own state is written in (a second state they're tied to, by
+                // an old phone number, isn't evidence against them).
+                val sourceState = source.county?.substringAfterLast(", ")
+                    ?: plan.tiedStates.firstOrNull { st -> sourceCatalog.stateLockupSources(st).any { it.id == source.id } }
+                candidates += result.records.map { r ->
+                    r.copy(
+                        state = r.state ?: sourceState?.takeIf { it == homeState },
+                        ownCounty = source.county != null && source.county == plan.ownCounty
+                    )
+                }
                 if (result.failed) failedSources += source.label
             }
             if (failedSources.isNotEmpty()) {
@@ -241,7 +302,7 @@ class ScrapeTargetsUseCase @Inject constructor(
                 middleName = target.middleName,
                 age = verifier.approxAge(target.dateOfBirth),
                 city = cityOf(target.residenceInfo),
-                state = UsStates.fromAddress(target.residenceInfo) ?: locale.state,
+                state = homeState,
                 otherContactNames = allNames - target.displayName.trim()
             )
             val verified = matchVerifier.verifyAll(
@@ -265,13 +326,21 @@ class ScrapeTargetsUseCase @Inject constructor(
             // match to protect, the check stands (unread sources noted), so a site that is always
             // down can't hold a contact at "Not checked yet".
             val pendingMatch = target.status == TargetStatus.POSSIBLE_MATCH || target.status == TargetStatus.WEAK_MATCH
-            val inconclusive = best == null && (noteClaim || (failedSources.isNotEmpty() && pendingMatch))
+            // A pending obituary or arrest isn't undone by its absence: obituary, court and news
+            // searches only look back so far (60 days for most), so a record that stops showing has
+            // aged out of the window, not left the world. Only a custody record (a jail or prison
+            // roster) disappearing means something: the person was released. The user settles the rest.
+            val pendingEvent = pendingMatch && (target.matchKind == EventKind.DEATH.name || target.matchKind == EventKind.ARREST.name)
+            val inconclusive = best == null && (noteClaim || pendingEvent || (failedSources.isNotEmpty() && pendingMatch))
             val nextCheck = now + if (inconclusive && failedSources.isNotEmpty()) {
                 minOf(target.checkFrequencyHours, RETRY_HOURS) * 3600000L
             } else {
                 target.checkFrequencyHours * 3600000L
             }
-            if (failedSources.isNotEmpty()) incomplete.incrementAndGet()
+            if (failedSources.isNotEmpty()) {
+                incomplete.incrementAndGet()
+                tally.unread()
+            }
             if (inconclusive) {
                 if (failedSources.isNotEmpty()) {
                     emitStep("couldn't read ${failedSources.size} source${if (failedSources.size == 1) "" else "s"} — will retry")
@@ -320,8 +389,17 @@ class ScrapeTargetsUseCase @Inject constructor(
                 )
             } ?: return
 
-            if (newStatus == TargetStatus.POSSIBLE_MATCH && target.status != TargetStatus.POSSIBLE_MATCH) newMatches.incrementAndGet()
-            if (newStatus != target.status && shouldNotify(target.status, newStatus)) {
+            if (newStatus == TargetStatus.POSSIBLE_MATCH && target.status != TargetStatus.POSSIBLE_MATCH) {
+                newMatches.incrementAndGet()
+                best?.candidate?.kind?.let { tally.match(target.displayName, it) }
+            }
+            if (newStatus == TargetStatus.WEAK_MATCH && target.status != TargetStatus.WEAK_MATCH) tally.weak()
+            // A pending match replaced by a different kind of record (custody, then an obituary)
+            // is news too, though the status stays "possible match".
+            val newKind = newStatus == TargetStatus.POSSIBLE_MATCH && target.status == TargetStatus.POSSIBLE_MATCH &&
+                target.matchKind != null && updatedTarget.matchKind != target.matchKind
+            if (newKind) best?.candidate?.kind?.let { tally.match(target.displayName, it) }
+            if ((newStatus != target.status && shouldNotify(target.status, newStatus)) || newKind) {
                 emitStep("notifying status change")
                 notifications.notifyStatusChange(updatedTarget, target.status)
             }

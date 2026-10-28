@@ -67,12 +67,22 @@ fun TargetListScreen(
     fun granted() = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_CONTACTS) ==
         android.content.pm.PackageManager.PERMISSION_GRANTED
     var contactsAllowed by remember { mutableStateOf(granted()) }
-    var askedBefore by rememberSaveable { mutableStateOf(false) }
     val contactsPermission = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
     ) { result ->
         contactsAllowed = granted()
-        if (result[android.Manifest.permission.READ_CONTACTS] == true) viewModel.sweepContacts()
+        if (result[android.Manifest.permission.READ_CONTACTS] == true) {
+            viewModel.sweepContacts()
+        } else if ((context as? android.app.Activity)?.let {
+                !androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(it, android.Manifest.permission.READ_CONTACTS)
+            } == true
+        ) {
+            // Android answered without asking (refused for good before): system settings can still allow it.
+            context.startActivity(
+                android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                    .setData(android.net.Uri.fromParts("package", context.packageName, null))
+            )
+        }
     }
     // Re-read when coming back from system settings.
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
@@ -86,6 +96,15 @@ fun TargetListScreen(
 
     Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
         if (showDiagnosticLog) DiagnosticLogView(diagnosticLogs)
+        if (!rememberNotificationsAllowed()) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.md, vertical = Spacing.xs),
+                verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+            ) {
+                Text(ALERTS_OFF, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                AppTextAction("Turn on alerts", { openNotificationSettings(context) })
+            }
+        }
 
         AzTextBox(
             value = searchQuery,
@@ -141,16 +160,7 @@ fun TargetListScreen(
                             textAlign = TextAlign.Center
                         )
                         AppAction("Allow access to contacts", {
-                            if (askedBefore) {
-                                // Android won't ask again after a refusal; system settings can still allow it.
-                                context.startActivity(
-                                    android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                                        .setData(android.net.Uri.fromParts("package", context.packageName, null))
-                                )
-                            } else {
-                                askedBefore = true
-                                contactsPermission.launch(arrayOf(android.Manifest.permission.READ_CONTACTS, android.Manifest.permission.WRITE_CONTACTS))
-                            }
+                            contactsPermission.launch(arrayOf(android.Manifest.permission.READ_CONTACTS, android.Manifest.permission.WRITE_CONTACTS))
                         })
                         AppTextAction("Add someone by hand", { viewModel.setShowManualEntryDialog(true) })
                     } else {
@@ -167,9 +177,11 @@ fun TargetListScreen(
                 }
             }
         } else {
+            // The bottom clears the navigation bar (the app draws edge to edge).
+            val navBar = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
             LazyColumn(
                 modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(Spacing.md),
+                contentPadding = PaddingValues(start = Spacing.md, top = Spacing.md, end = Spacing.md, bottom = Spacing.md + navBar),
                 verticalArrangement = Arrangement.spacedBy(Spacing.sm)
             ) {
                 items(count = targets.itemCount, key = targets.itemKey { it.id }) { index ->
@@ -303,7 +315,7 @@ fun TargetActionMenu(
             )
             else -> ListItem(
                 headlineContent = { Text("Archive") },
-                supportingContent = { Text("Stop checking and hide from the list. Turn on Archives to bring back.") },
+                supportingContent = { Text("Stop checking and hide from the list. Show archived (on the rail) brings it back.") },
                 colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
                 modifier = Modifier.clickable { viewModel.ignoreTarget(targetId); onDone() }
             )
@@ -387,10 +399,10 @@ fun ManualEntryDialog(
     onDismiss: () -> Unit,
     onConfirm: (String, String?, String?) -> Unit
 ) {
-    var name by remember { mutableStateOf("") }
-    var phone by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
-    var missing by remember { mutableStateOf(false) }
+    var name by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
+    var phone by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
+    var email by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
+    var missing by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
 
     AppDialog(
         title = "Add someone",

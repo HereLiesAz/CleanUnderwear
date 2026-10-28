@@ -41,7 +41,11 @@ data class CandidateRecord(
     val eventYear: Int? = null,
     val recordKey: String? = null,
     val evidenceUrl: String? = null,
-    val snippet: String? = null
+    val snippet: String? = null,
+    /** Found in the jail of the contact's own county: evidence of place where the row names none. */
+    val ownCounty: Boolean = false,
+    /** The record's first name when it is a nickname variant of the contact's ("William" for "Bill"). */
+    val nicknameOf: String? = null
 )
 
 /**

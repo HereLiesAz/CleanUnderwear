@@ -32,6 +32,9 @@
 -keep class com.hereliesaz.cleanunderwear.data.MergeSummary { *; }
 -keep class com.hereliesaz.cleanunderwear.data.MergeVeto { *; }
 -keep enum com.hereliesaz.cleanunderwear.data.MergeState { *; }
+# Lookup choices are saved as JSON (Gson reads field names reflectively).
+-keep class com.hereliesaz.cleanunderwear.domain.LookupChoice { *; }
+-keep class com.hereliesaz.cleanunderwear.domain.LookupOption { *; }
 
 # ---------------------------------------------------------------------------
 # Hilt / Dagger
@@ -97,15 +100,6 @@
     volatile <fields>;
 }
 -dontwarn kotlinx.coroutines.debug.**
-
-# ---------------------------------------------------------------------------
-# TensorFlow Lite (LiteRT)
-# ---------------------------------------------------------------------------
-# OnDeviceResearchAgent loads research_agent.tflite at runtime. The interpreter
-# resolves native ops by class-name reflection.
--keep class org.tensorflow.lite.** { *; }
--keep class com.google.ai.edge.litert.** { *; }
--dontwarn org.tensorflow.lite.**
 
 # ---------------------------------------------------------------------------
 # Jsoup

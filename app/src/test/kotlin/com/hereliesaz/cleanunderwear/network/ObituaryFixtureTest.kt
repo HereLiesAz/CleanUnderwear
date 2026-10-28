@@ -70,4 +70,17 @@ class ObituaryFixtureTest {
     fun firstPageStillInWindow_soTheNextPageIsFetched() {
         assertTrue(StructuredRecords.reachesIntoWindow(fixture("obitsarchive_john_smith_2026-10-23.html"), source("obitsarchive_obit")))
     }
+
+    @Test
+    fun aPageWithRecords_orSayingItFoundNobody_isRead_andAnythingElseIsNot() {
+        for (id in listOf("echovita_obit", "obitsarchive_obit")) {
+            val src = source(id)
+            val hits = fixture(if (id == "echovita_obit") "echovita_john_smith_2026-10-23.html" else "obitsarchive_john_smith_2026-10-23.html")
+            val none = fixture(if (id == "echovita_obit") "echovita_no_results.html" else "obitsarchive_no_results.html")
+            assertTrue(id, StructuredRecords.regexReadable(hits, src))
+            assertTrue(id, !StructuredRecords.regexReadable(none, src) && BotWall.saysNoResults(none))
+            val redesigned = "<html><body><div class=\"new-layout\">Results for John Smith</div></body></html>"
+            assertTrue(id, !StructuredRecords.regexReadable(redesigned, src) && !BotWall.saysNoResults(redesigned))
+        }
+    }
 }

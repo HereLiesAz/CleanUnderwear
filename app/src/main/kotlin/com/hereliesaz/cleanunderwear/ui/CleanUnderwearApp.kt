@@ -39,12 +39,13 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
     val diagnosticLogs by viewModel.diagnosticLogs.collectAsState()
     val showIgnored by viewModel.showIgnored.collectAsState()
     val sortOrder by viewModel.sortOrder.collectAsState()
+    val choices by viewModel.choices.collectAsState()
 
     // Monochrome: the active item and focus share the one accent.
     val activeColor = MaterialTheme.colorScheme.primary
     val highlightedColor = MaterialTheme.colorScheme.onSurfaceVariant
     val backgroundColor = MaterialTheme.colorScheme.background
-    var confirmLookUp by remember { mutableStateOf<Int?>(null) }
+    var confirmLookUp by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<Int?>(null) }
     val scope = rememberCoroutineScope()
 
     AzHostActivityLayout(
@@ -73,10 +74,16 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
             helpList = mapOf(
                 "registry" to "Everyone the app checks, with what the last check found.",
                 "review" to "Contacts that may be two people combined, or have an out-of-date number.",
+                "choices" to "People Fill in details found, waiting for you to say which is your contact.",
                 "harvest" to "Read the people saved on your phone into the app.",
                 "ingest" to "Add someone who isn't in your phone's contacts.",
                 "update" to "Run the daily check now instead of waiting for it.",
                 "resolve" to "Look up missing names, numbers and ages on a people-search site, contact by contact. Asks first.",
+                "intelligence_ops" to "Things to do with your contacts: import, add, check, fill in.",
+                "sort_host" to "The order of the contact list. The current one is ticked.",
+                "sort_name" to "A to Z by name.",
+                "sort_status" to "What needs you first: possible matches, then weak ones, then confirmed, then the rest.",
+                "sort_date" to "Most recently checked first.",
                 "archives" to "Show or hide contacts you archived.",
                 "settings" to "Alerts, check time, imports, your data.",
                 "diagnostic_log" to "Show what the app is doing, step by step."
@@ -87,6 +94,9 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
             // Top-down: see the list, act on it, arrange it, then configure.
             azRailItem(id = "registry", text = "Contacts", route = "targetList", info = "Everyone the app checks.")
             azRailItem(id = "review", text = "Review", route = "review", info = "Possible wrong combinations and old numbers.")
+            if (choices.isNotEmpty()) {
+                azRailItem(id = "choices", text = "Who is it? (${choices.size})", route = "choices", info = "Say which person found is your contact.")
+            }
 
             azRailHostItem(id = "intelligence_ops", text = "Actions")
             azRailSubItem(id = "harvest", hostId = "intelligence_ops", text = "Import contacts", shape = AzButtonShape.NONE,
@@ -98,12 +108,14 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
             azRailSubItem(id = "resolve", hostId = "intelligence_ops", text = "Fill in details", shape = AzButtonShape.NONE,
                 onClick = { scope.launch { confirmLookUp = viewModel.resolveCandidateCount() } })
 
+            // The active sort is ticked, so the list's order is never a guess.
+            fun sortLabel(order: MainViewModel.SortOrder, text: String) = if (sortOrder == order) "✓ $text" else text
             azRailHostItem(id = "sort_host", text = "Sort")
-            azRailSubItem(id = "sort_name", hostId = "sort_host", text = "By name", shape = AzButtonShape.NONE,
+            azRailSubItem(id = "sort_name", hostId = "sort_host", text = sortLabel(MainViewModel.SortOrder.NAME, "By name"), shape = AzButtonShape.NONE,
                 onClick = { viewModel.setSortOrder(MainViewModel.SortOrder.NAME) })
-            azRailSubItem(id = "sort_status", hostId = "sort_host", text = "By status", shape = AzButtonShape.NONE,
+            azRailSubItem(id = "sort_status", hostId = "sort_host", text = sortLabel(MainViewModel.SortOrder.STATUS, "By status"), shape = AzButtonShape.NONE,
                 onClick = { viewModel.setSortOrder(MainViewModel.SortOrder.STATUS) })
-            azRailSubItem(id = "sort_date", hostId = "sort_host", text = "By last check", shape = AzButtonShape.NONE,
+            azRailSubItem(id = "sort_date", hostId = "sort_host", text = sortLabel(MainViewModel.SortOrder.DATE, "By last check"), shape = AzButtonShape.NONE,
                 onClick = { viewModel.setSortOrder(MainViewModel.SortOrder.DATE) })
 
             azRailToggle(
@@ -164,11 +176,20 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                         isBlocked = batch.isBlocked,
                         context = operationState.description.takeIf { operationState.isRunning },
                         stopsBatch = batch.retainBrowserForResolve,
+                        findings = if (operationState.isRunning) operationState.findings else emptyList(),
                     )
                 return@onscreen
             }
 
             val startDestination = if (isOnboardingCompleted) "targetList" else "onboarding"
+
+            // A run of lookups that found people ends here, to choose who's who.
+            val openChoices by viewModel.openChoices.collectAsState()
+            LaunchedEffect(openChoices, isOnboardingCompleted) {
+                if (!openChoices || !isOnboardingCompleted) return@LaunchedEffect
+                navController.navigate("choices") { launchSingleTop = true }
+                viewModel.consumeOpenChoices()
+            }
 
             val openTarget by viewModel.openTarget.collectAsState()
             LaunchedEffect(openTarget, isOnboardingCompleted) {
@@ -198,6 +219,12 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                 }
                 composable("review") {
                     ReviewScreen(
+                        viewModel = viewModel,
+                        onNavigateBack = { navController.popBackStack() }
+                    )
+                }
+                composable("choices") {
+                    ChoicesScreen(
                         viewModel = viewModel,
                         onNavigateBack = { navController.popBackStack() }
                     )
@@ -286,8 +313,9 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                 Text(
                     "Each contact missing a full name or an age is looked up on CyberBackgroundChecks, a people-search " +
                         "site, in the app's browser, using the name, number or email you have for them. It can take " +
-                        "a minute or more per contact, and you may be asked to solve CAPTCHAs. You can stop at any time; " +
-                        "what was found so far is kept."
+                        "a minute or more per contact, and you may be asked to solve CAPTCHAs. Everyone is looked up " +
+                        "first; then you choose, contact by contact, which person found is yours. You can stop at any " +
+                        "time and choose from what was found so far."
                 )
             }
         }

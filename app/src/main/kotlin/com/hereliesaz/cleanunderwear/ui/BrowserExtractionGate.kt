@@ -43,17 +43,12 @@ internal class BrowserExtractionGate {
         finished = true
     }
 
-    /**
-     * Bind every dump in the mission script to this extraction. CBC drilling
-     * uses a separate sessionStorage key per contact/mode: an interrupted
-     * lookup must never suppress the first drill of a later lookup.
-     */
+    /** Bind every dump in the mission script to this extraction, so a late dump from an earlier page is ignored. */
     fun tagScript(script: String, token: String, missionKey: String): String {
         require(script.contains(DUMP_CALL)) { "Mission script has no HTML dump callback" }
         require(token.all { it in '0'..'9' || it in 'a'..'f' } && missionKey.all { it.isDigit() || it == '-' })
         return script
             .replace(DUMP_CALL, "window.HTMLOUT.dumpTagged('$token',")
-            .replace("'cleanunderwear-cbc-drill'", "'cleanunderwear-cbc-drill-$missionKey'")
     }
 
     private companion object {
