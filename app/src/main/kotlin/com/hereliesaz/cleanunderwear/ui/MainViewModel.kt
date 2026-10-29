@@ -780,6 +780,17 @@ class MainViewModel @Inject constructor(
     fun setNotifyDeath(on: Boolean) { prefs.edit { putBoolean(NotificationHelper.PREF_NOTIFY_DEATH, on) }; _notifyDeath.value = on }
     fun setNotifyCustody(on: Boolean) { prefs.edit { putBoolean(NotificationHelper.PREF_NOTIFY_CUSTODY, on) }; _notifyCustody.value = on }
 
+    /** Whether the app writes its status line into contacts' notes (Settings); on until turned off. */
+    private val _noteWriteBack = MutableStateFlow(
+        prefs.getBoolean(com.hereliesaz.cleanunderwear.util.SystemContactSyncer.PREF_NOTE_WRITE_BACK_ENABLED, true)
+    )
+    val noteWriteBack: StateFlow<Boolean> = _noteWriteBack
+
+    fun setNoteWriteBack(on: Boolean) {
+        prefs.edit { putBoolean(com.hereliesaz.cleanunderwear.util.SystemContactSyncer.PREF_NOTE_WRITE_BACK_ENABLED, on) }
+        _noteWriteBack.value = on
+    }
+
     /** The hour of day the daily check aims for; the OS may run it later (battery, network). */
     private val _checkHour = MutableStateFlow(prefs.getInt("check_hour", 9))
     val checkHour: StateFlow<Int> = _checkHour
