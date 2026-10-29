@@ -6,7 +6,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
@@ -19,7 +19,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
@@ -100,52 +99,82 @@ fun TargetListScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+    val refresh = targets.loadState.refresh
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))
+            .contentWidth()
+    ) {
         if (showDiagnosticLog) DiagnosticLogView(diagnosticLogs)
         if (!rememberNotificationsAllowed()) {
             Column(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.md, vertical = Spacing.xs),
                 verticalArrangement = Arrangement.spacedBy(Spacing.xs)
             ) {
-                Text(ALERTS_OFF, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                AppTextAction("Turn on alerts", { openNotificationSettings(context) })
+                Text(stringResource(R.string.alerts_off), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                AppTextAction(stringResource(R.string.turn_on_alerts), { openNotificationSettings(context) })
             }
         }
 
+        // No historyContext: it would keep what is searched (contacts' names) in the search
+        // box's history, outside the app's database where Delete everything would not reach it.
         AzTextBox(
             value = searchQuery,
             onValueChange = { viewModel.setSearchQuery(it) },
-            hint = "Search contacts",
+            hint = stringResource(R.string.list_search_hint),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = Spacing.md, vertical = Spacing.xs),
-            historyContext = "registry_search",
             onSubmit = { viewModel.setSearchQuery(it) }
         )
 
+        // "Clear filters" is pinned at the end, outside the scrolling chips: it used to be
+        // inserted at the front of the row, which pushed every chip along under the finger
+        // after the first tap.
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = Spacing.md, vertical = Spacing.xs)
-                .horizontalScroll(rememberScrollState()),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.md, vertical = Spacing.xs),
+            verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
         ) {
+            Row(
+                modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+            ) {
+                TriStateFilterChip(state = googleFilter, onToggle = { viewModel.setGoogleFilter(it) }, label = stringResource(R.string.filter_google))
+                TriStateFilterChip(state = metaFilter, onToggle = { viewModel.setMetaFilter(it) }, label = stringResource(R.string.filter_meta))
+                TriStateFilterChip(state = appleFilter, onToggle = { viewModel.setAppleFilter(it) }, label = stringResource(R.string.filter_apple))
+                TriStateFilterChip(state = deviceFilter, onToggle = { viewModel.setDeviceFilter(it) }, label = stringResource(R.string.filter_this_phone))
+                TriStateFilterChip(state = namelessFilter, onToggle = { viewModel.setNamelessFilter(it) }, label = stringResource(R.string.filter_no_name))
+                TriStateFilterChip(state = emailOnlyFilter, onToggle = { viewModel.setEmailOnlyFilter(it) }, label = stringResource(R.string.filter_email_only))
+                TriStateFilterChip(state = hasEmailFilter, onToggle = { viewModel.setEmailFilter(it) }, label = stringResource(R.string.filter_has_email))
+                TriStateFilterChip(state = hasAddressFilter, onToggle = { viewModel.setAddressFilter(it) }, label = stringResource(R.string.filter_has_address))
+                TriStateFilterChip(state = pendingEnrichmentFilter, onToggle = { viewModel.setPendingEnrichmentFilter(it) }, label = stringResource(R.string.filter_needs_details))
+            }
             if (filtering) {
-                AssistChip(onClick = { viewModel.clearFilters() }, label = { Text("Clear filters") },
+                AssistChip(onClick = { viewModel.clearFilters() }, label = { Text(stringResource(R.string.filter_clear)) },
                     leadingIcon = { Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) })
             }
-            TriStateFilterChip(state = googleFilter, onToggle = { viewModel.setGoogleFilter(it) }, label = "Google")
-            TriStateFilterChip(state = metaFilter, onToggle = { viewModel.setMetaFilter(it) }, label = "Meta")
-            TriStateFilterChip(state = appleFilter, onToggle = { viewModel.setAppleFilter(it) }, label = "Apple")
-            TriStateFilterChip(state = deviceFilter, onToggle = { viewModel.setDeviceFilter(it) }, label = "This phone")
-            TriStateFilterChip(state = namelessFilter, onToggle = { viewModel.setNamelessFilter(it) }, label = "No name")
-            TriStateFilterChip(state = emailOnlyFilter, onToggle = { viewModel.setEmailOnlyFilter(it) }, label = "Email only")
-            TriStateFilterChip(state = hasEmailFilter, onToggle = { viewModel.setEmailFilter(it) }, label = "Has email")
-            TriStateFilterChip(state = hasAddressFilter, onToggle = { viewModel.setAddressFilter(it) }, label = "Has address")
-            TriStateFilterChip(state = pendingEnrichmentFilter, onToggle = { viewModel.setPendingEnrichmentFilter(it) }, label = "Needs details")
         }
 
-        if (targets.itemCount == 0 && targets.loadState.refresh is LoadState.NotLoading) {
+        if (targets.itemCount == 0 && refresh is LoadState.Loading) {
+            // The first read of the list: not an empty list, so no "start by importing" yet.
+            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                LoadingCaption(stringResource(R.string.list_loading))
+            }
+        } else if (targets.itemCount == 0 && refresh is LoadState.Error) {
+            Box(
+                modifier = Modifier.weight(1f).fillMaxWidth().padding(Spacing.xl),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                    Text(stringResource(R.string.list_load_failed), style = MaterialTheme.typography.titleMedium)
+                    AppCaption(stringResource(R.string.list_load_failed_caption))
+                    AppAction(stringResource(R.string.try_again), { targets.retry() })
+                }
+            }
+        } else if (targets.itemCount == 0 && refresh is LoadState.NotLoading) {
             // A search or filter that matched nothing, versus an empty list: the latter is where
             // a new user lands after onboarding, so it says what to do next.
             Box(
@@ -154,42 +183,50 @@ fun TargetListScreen(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
                     if (searchQuery.isNotBlank() || filtering) {
-                        Text("No contacts match.", style = MaterialTheme.typography.titleMedium)
-                        AppCaption("A filter tapped once shows only those contacts, twice hides them, three times clears it.")
-                        AppTextAction("Clear search and filters", { viewModel.setSearchQuery(""); viewModel.clearFilters() })
+                        Text(stringResource(R.string.list_no_match), style = MaterialTheme.typography.titleMedium)
+                        AppCaption(stringResource(R.string.list_filter_hint))
+                        AppTextAction(stringResource(R.string.list_clear_search_and_filters), { viewModel.setSearchQuery(""); viewModel.clearFilters() })
                     } else if (!contactsAllowed) {
-                        Text("The app can't see your contacts.", style = MaterialTheme.typography.titleMedium)
+                        Text(stringResource(R.string.list_cant_see_contacts), style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "Allow access to read the people on your phone. You can still add someone by hand.",
+                            stringResource(R.string.list_allow_access_body),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
                         )
-                        AppAction("Allow access to contacts", {
+                        AppAction(stringResource(R.string.list_allow_access), {
                             contactsPermission.launch(arrayOf(android.Manifest.permission.READ_CONTACTS, android.Manifest.permission.WRITE_CONTACTS))
                         })
-                        AppTextAction("Add someone by hand", { viewModel.setShowManualEntryDialog(true) })
+                        AppTextAction(stringResource(R.string.list_add_by_hand), { viewModel.setShowManualEntryDialog(true) })
                     } else {
-                        Text("Start by importing your contacts.", style = MaterialTheme.typography.titleMedium)
+                        Text(stringResource(R.string.list_start_importing), style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "This reads the people saved on your phone. You can also add someone by hand.",
+                            stringResource(R.string.list_start_importing_body),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
                         )
-                        AppAction("Import contacts", { viewModel.sweepContacts() })
-                        AppTextAction("Add someone by hand", { viewModel.setShowManualEntryDialog(true) })
+                        AppAction(stringResource(R.string.list_import_contacts), { viewModel.sweepContacts() })
+                        AppTextAction(stringResource(R.string.list_add_by_hand), { viewModel.setShowManualEntryDialog(true) })
                     }
                 }
             }
         } else {
-            // The bottom clears the navigation bar (the app draws edge to edge).
+            // The bottom clears the navigation bar (the app draws edge to edge) and the bar of an
+            // operation put aside, which is drawn over the bottom of the screen.
             val navBar = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+            val bottomBar = LocalBottomBarHeight.current
             LazyColumn(
                 modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(start = Spacing.md, top = Spacing.md, end = Spacing.md, bottom = Spacing.md + navBar),
+                contentPadding = PaddingValues(start = Spacing.md, top = Spacing.md, end = Spacing.md, bottom = Spacing.md + navBar + bottomBar),
                 verticalArrangement = Arrangement.spacedBy(Spacing.sm)
             ) {
+                if (refresh is LoadState.Error) {
+                    // The list on screen is from before; say it could not be refreshed.
+                    item {
+                        LoadFailedRow(stringResource(R.string.list_refresh_failed), onRetry = { targets.retry() })
+                    }
+                }
                 items(count = targets.itemCount, key = targets.itemKey { it.id }) { index ->
                     val target: TargetLite? = targets[index]
                     if (target != null) {
@@ -204,6 +241,10 @@ fun TargetListScreen(
                     item {
                         Box(Modifier.fillMaxWidth().padding(Spacing.md), contentAlignment = Alignment.Center) { AzLoad() }
                     }
+                } else if (targets.loadState.append is LoadState.Error) {
+                    item {
+                        LoadFailedRow(stringResource(R.string.list_more_failed), onRetry = { targets.retry() })
+                    }
                 }
             }
         }
@@ -217,6 +258,29 @@ fun TargetListScreen(
                 viewModel.setShowManualEntryDialog(false)
             }
         )
+    }
+
+    if (explainSettings) {
+        // Android won't show its question again; say why the settings page opens next.
+        AppDialog(
+            title = stringResource(R.string.list_settings_title),
+            confirm = stringResource(R.string.list_open_settings),
+            onConfirm = {
+                explainSettings = false
+                try {
+                    context.startActivity(
+                        android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                            .setData(android.net.Uri.fromParts("package", context.packageName, null))
+                    )
+                } catch (e: android.content.ActivityNotFoundException) {
+                    // Nothing on this device opens settings.
+                }
+            },
+            onDismiss = { explainSettings = false },
+            dismiss = stringResource(R.string.not_now)
+        ) {
+            Text(stringResource(R.string.list_settings_body))
+        }
     }
 
     selectedTargetIdForActions?.let { selectedId ->
@@ -236,48 +300,67 @@ fun TargetListScreen(
 }
 
 @Composable
+private fun LoadFailedRow(message: String, onRetry: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+    ) {
+        Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
+        AppTextAction(stringResource(R.string.try_again), onRetry)
+    }
+}
+
+@Composable
 private fun DiagnosticLogView(logs: List<DiagnosticLogger.LogEntry>) {
     val clipboard = LocalClipboard.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val logListState = rememberLazyListState()
+    val logTitle = stringResource(R.string.log_title)
+    val shareTitle = stringResource(R.string.log_share_title)
+    // A third of the screen's height, within bounds, so the panel neither fills a phone on its
+    // side nor shrinks to nothing at a large font size.
+    val panelHeight = (LocalConfiguration.current.screenHeightDp.dp * 0.3f).coerceIn(140.dp, 280.dp)
+    val keys = remember(logs) { activityLogKeys(logs) }
 
-    // Entries are newest first: follow the top as they arrive (keyed on the newest entry,
-    // since the count stops changing once the log is full).
+    // Entries are newest first: follow the top as they arrive (keyed on the newest entry, since
+    // the count stops changing once the log is full), but not while the reader has scrolled down
+    // to older lines. Jumping, not animating: an animation restarted by every entry never settles.
     LaunchedEffect(logs.firstOrNull()) {
-        if (logs.isNotEmpty()) logListState.animateScrollToItem(0)
+        if (logs.isNotEmpty() && logListState.firstVisibleItemIndex <= 1) logListState.scrollToItem(0)
     }
 
     Surface(
-        modifier = Modifier.fillMaxWidth().height(220.dp),
+        modifier = Modifier.fillMaxWidth().height(panelHeight),
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(start = Spacing.sm)) {
-                AppSection("Activity log", Modifier.weight(1f))
+                AppSection(logTitle, Modifier.weight(1f))
                 val fullLog = { logs.joinToString("\n") { "[${it.timestamp}] ${it.message}" } }
                 IconButton(onClick = {
                     scope.launch {
                         clipboard.setClipEntry(
-                            androidx.compose.ui.platform.ClipEntry(android.content.ClipData.newPlainText("Activity log", fullLog()))
+                            androidx.compose.ui.platform.ClipEntry(android.content.ClipData.newPlainText(logTitle, fullLog()))
                         )
                     }
-                }) { Icon(Icons.Default.ContentCopy, contentDescription = "Copy log") }
+                }) { Icon(Icons.Default.ContentCopy, contentDescription = stringResource(R.string.log_copy)) }
                 IconButton(onClick = {
                     val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
                         type = "text/plain"
                         putExtra(android.content.Intent.EXTRA_TEXT, fullLog())
                     }
-                    context.startActivity(android.content.Intent.createChooser(intent, "Share activity log"))
-                }) { Icon(Icons.Default.Share, contentDescription = "Share log") }
+                    context.startActivity(android.content.Intent.createChooser(intent, shareTitle))
+                }) { Icon(Icons.Default.Share, contentDescription = stringResource(R.string.log_share)) }
             }
-            AppCaption("Contacts' names appear here. Share it only with someone you'd show your contacts to.", Modifier.padding(horizontal = Spacing.sm))
+            AppCaption(stringResource(R.string.log_caption), Modifier.padding(horizontal = Spacing.sm))
             LazyColumn(
                 state = logListState,
                 modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = Spacing.sm)
             ) {
-                items(logs) { entry ->
+                itemsIndexed(logs, key = { index, _ -> keys[index] }) { _, entry ->
                     Text(
                         text = "[${entry.timestamp}] ${entry.message}",
                         style = MaterialTheme.typography.bodySmall,
@@ -303,11 +386,14 @@ fun TargetActionMenu(
     viewModel: MainViewModel
 ) {
     val fullTarget by viewModel.observeTarget(targetId).collectAsState(initial = null)
+    val snackbars = LocalAppSnackbars.current
+    val archivedMessage = stringResource(R.string.list_archived_snackbar, fullTarget?.displayName.orEmpty())
+    val undoLabel = stringResource(R.string.undo)
     Column(modifier = Modifier.fillMaxWidth().padding(bottom = Spacing.xl)) {
         fullTarget?.let { Text(it.displayName, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = Spacing.md)) }
         ListItem(
-            headlineContent = { Text("Open") },
-            supportingContent = { Text("Details, checks and searches") },
+            headlineContent = { Text(stringResource(R.string.menu_open)) },
+            supportingContent = { Text(stringResource(R.string.menu_open_caption)) },
             colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
             modifier = Modifier.clickable(onClick = onOpen)
         )
@@ -315,15 +401,20 @@ fun TargetActionMenu(
         when (fullTarget?.status) {
             null -> Unit
             TargetStatus.IGNORED -> ListItem(
-                headlineContent = { Text("Bring back to daily checks") },
+                headlineContent = { Text(stringResource(R.string.bring_back_to_checks)) },
                 colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
                 modifier = Modifier.clickable { viewModel.restoreTarget(targetId); onDone() }
             )
             else -> ListItem(
-                headlineContent = { Text("Archive") },
-                supportingContent = { Text("Stop checking and hide from the list. Show archived (on the rail) brings it back.") },
+                headlineContent = { Text(stringResource(R.string.archive)) },
+                supportingContent = { Text(stringResource(R.string.menu_archive_caption)) },
                 colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                modifier = Modifier.clickable { viewModel.ignoreTarget(targetId); onDone() }
+                modifier = Modifier.clickable {
+                    viewModel.ignoreTarget(targetId)
+                    // Undo is the existing restore, which brings back the status it replaced.
+                    snackbars?.show(archivedMessage, undoLabel) { viewModel.restoreTarget(targetId) }
+                    onDone()
+                }
             )
         }
     }
@@ -339,8 +430,9 @@ fun TargetItem(target: TargetLite, onClick: () -> Unit, onLongClick: () -> Unit)
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick,
-                onClickLabel = "Open",
-                onLongClickLabel = "Archive or bring back"
+                onClickLabel = stringResource(R.string.menu_open),
+                // The long press opens a menu: Open, and Archive or Bring back.
+                onLongClickLabel = stringResource(R.string.list_more_actions)
             ),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, if (spec.needsUser) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outlineVariant)
@@ -354,7 +446,9 @@ fun TargetItem(target: TargetLite, onClick: () -> Unit, onLongClick: () -> Unit)
                 Text(target.displayName, style = MaterialTheme.typography.titleMedium)
                 target.phoneNumber?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                 target.email?.let { AppCaption(it) }
-                target.areaCode?.let { AppCaption(if (it == "LOCAL") "Local number" else "Area code $it") }
+                target.areaCode?.let {
+                    AppCaption(if (it == "LOCAL") stringResource(R.string.list_local_number) else stringResource(R.string.list_area_code, it))
+                }
             }
             StatusBadge(spec)
         }
@@ -382,8 +476,8 @@ fun TriStateFilterChip(
         label = {
             Text(
                 when (state) {
-                    true -> "Only: $label"
-                    false -> "Hide: $label"
+                    true -> stringResource(R.string.filter_only, label)
+                    false -> stringResource(R.string.filter_hide, label)
                     null -> label
                 }
             )
@@ -408,21 +502,40 @@ fun ManualEntryDialog(
     var name by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
     var phone by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
     var email by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
-    var missing by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var problem by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<ManualEntryProblem?>(null) }
+
+    // The same check for the Add button and the keyboard's Done.
+    fun submit() {
+        val found = validateManualEntry(name, phone, email)
+        if (found != null) problem = found
+        else onConfirm(name.trim(), phone.trim().takeIf { it.isNotEmpty() }, email.trim().takeIf { it.isNotEmpty() })
+    }
 
     AppDialog(
-        title = "Add someone",
-        confirm = "Add",
-        onConfirm = {
-            if (name.isBlank() || (phone.isBlank() && email.isBlank())) missing = true
-            else onConfirm(name.trim(), phone.takeIf { it.isNotBlank() }, email.takeIf { it.isNotBlank() })
-        },
+        title = stringResource(R.string.add_title),
+        confirm = stringResource(R.string.add_confirm),
+        onConfirm = { submit() },
         onDismiss = onDismiss
     ) {
-        AppCaption("For someone who isn't in your phone's contacts. A full name and a phone number or email are needed to check them.")
-        AzTextBox(value = name, onValueChange = { name = it; missing = false }, hint = "Full name", modifier = Modifier.fillMaxWidth(), onSubmit = {})
-        AzTextBox(value = phone, onValueChange = { phone = it; missing = false }, hint = "Phone number", modifier = Modifier.fillMaxWidth(), onSubmit = {})
-        AzTextBox(value = email, onValueChange = { email = it; missing = false }, hint = "Email", modifier = Modifier.fillMaxWidth(), onSubmit = {})
-        if (missing) Text("Add a name, and a phone number or an email.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+        AppCaption(stringResource(R.string.add_caption))
+        AzTextBox(value = name, onValueChange = { name = it; problem = null }, hint = stringResource(R.string.add_full_name), modifier = Modifier.fillMaxWidth(), onSubmit = { submit() })
+        AzTextBox(value = phone, onValueChange = { phone = it; problem = null }, hint = stringResource(R.string.add_phone), modifier = Modifier.fillMaxWidth(), onSubmit = { submit() })
+        AzTextBox(value = email, onValueChange = { email = it; problem = null }, hint = stringResource(R.string.add_email), modifier = Modifier.fillMaxWidth(), onSubmit = { submit() })
+        problem?.let { found ->
+            Text(
+                stringResource(
+                    when (found) {
+                        ManualEntryProblem.NAME -> R.string.add_problem_name
+                        ManualEntryProblem.NO_PHONE_OR_EMAIL -> R.string.add_problem_contact
+                        ManualEntryProblem.PHONE -> R.string.add_problem_phone
+                        ManualEntryProblem.EMAIL -> R.string.add_problem_email
+                    }
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                // Said aloud when it appears, not only drawn.
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+            )
+        }
     }
 }
