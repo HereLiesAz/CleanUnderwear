@@ -97,7 +97,7 @@ class DeduplicateTargetsUseCase(
                 tallyFrequencies(t, phoneFreq, emailFreq, surnameFreq)
             }
             offset += chunkSize
-            onProgress(0.1f, "Scanning registry for duplicates ($offset)...")
+            onProgress(0.1f, "Scanning registry for duplicates ($offset)…")
         }
 
         val collisions = groups.values.filter { it.size > 1 }
@@ -136,7 +136,7 @@ class DeduplicateTargetsUseCase(
                 // are exactly the rows we must not blindly fuse — leave them for manual review.
                 ambiguousSkipped += fullGroup.size
                 processed++
-                onProgress(processed.toFloat() / totalSteps, "Skipping ambiguous block (${fullGroup.size} rows)...")
+                onProgress(processed.toFloat() / totalSteps, "Skipping ambiguous block (${fullGroup.size} rows)…")
                 continue
             }
 
@@ -172,7 +172,7 @@ class DeduplicateTargetsUseCase(
             processed++
             onProgress(
                 processed.toFloat() / totalSteps,
-                "Resolving duplicates ($processed/$totalSteps)..."
+                "Resolving duplicates ($processed/$totalSteps)…"
             )
         }
 

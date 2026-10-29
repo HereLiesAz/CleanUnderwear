@@ -166,13 +166,52 @@ private fun OptionCard(option: LookupOption, selected: Boolean, onSelect: () -> 
                 option.address?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                 option.phone?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                 if (option.fits.isNotEmpty()) {
-                    AppCaption(stringResource(R.string.choices_fits, option.fits.joinToString(", ") { it.replaceFirstChar { c -> c.lowercase() } }))
+                    val fits = option.fits.map { lookupReason(it) }
+                    AppCaption(stringResource(R.string.choices_fits, fits.joinToString(", ") { it.replaceFirstChar { c -> c.lowercase() } }))
                 }
                 if (option.differs.isNotEmpty()) {
-                    AppCaption(stringResource(R.string.choices_differs, option.differs.joinToString(", ") { it.replaceFirstChar { c -> c.lowercase() } }))
+                    val differs = option.differs.map { lookupReason(it) }
+                    AppCaption(stringResource(R.string.choices_differs, differs.joinToString(", ") { it.replaceFirstChar { c -> c.lowercase() } }))
                 }
-                AppCaption(stringResource(R.string.choices_found_by, option.foundBy.joinToString(" and ")))
+                AppCaption(stringResource(R.string.choices_found_by, lookupModes(option.foundBy)))
             }
         }
     }
+}
+
+// What a lookup saves for a found person: plain-English keys for the reasons it fits or differs and
+// for the searches that turned them up. The choices outlive an app update, so what is saved is
+// never a resource id; the words the user reads come from the resources, below.
+private const val CAME_UP_FOR = "Came up for their "
+
+/** The words for one saved reason; a key this version doesn't know is shown as saved. */
+@Composable
+private fun lookupReason(key: String): String = when (key) {
+    "Same name" -> stringResource(R.string.choices_fit_same_name)
+    "Same phone number" -> stringResource(R.string.choices_fit_same_phone)
+    "Same area code" -> stringResource(R.string.choices_fit_same_area_code)
+    "Same city or ZIP" -> stringResource(R.string.choices_fit_same_place)
+    "Same age" -> stringResource(R.string.choices_fit_same_age)
+    "A different name" -> stringResource(R.string.choices_differs_name)
+    "A different age" -> stringResource(R.string.choices_differs_age)
+    else -> if (key.startsWith(CAME_UP_FOR)) {
+        stringResource(R.string.choices_fit_came_up, lookupModes(key.removePrefix(CAME_UP_FOR).split(" and ")))
+    } else {
+        key
+    }
+}
+
+/** The searches that turned a person up ("phone", "name"), in words, joined with "and". */
+@Composable
+private fun lookupModes(keys: List<String>): String {
+    val words = keys.map { key ->
+        when (key) {
+            "phone" -> stringResource(R.string.choices_mode_phone)
+            "email" -> stringResource(R.string.choices_mode_email)
+            "address" -> stringResource(R.string.choices_mode_address)
+            "name" -> stringResource(R.string.choices_mode_name)
+            else -> key
+        }
+    }
+    return words.joinToString(stringResource(R.string.list_and))
 }

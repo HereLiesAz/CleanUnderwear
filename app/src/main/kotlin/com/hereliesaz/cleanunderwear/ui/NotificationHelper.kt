@@ -9,6 +9,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.hereliesaz.cleanunderwear.MainActivity
+import com.hereliesaz.cleanunderwear.R
 import com.hereliesaz.cleanunderwear.data.Target
 import com.hereliesaz.cleanunderwear.data.TargetStatus
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -32,7 +33,6 @@ class NotificationHelper @Inject constructor(@ApplicationContext private val con
         // channel has a new id and the old high-importance one is deleted.
         private const val CHANNEL_ID = "possible_matches"
         private const val OLD_CHANNEL_ID = "panopticon_alerts"
-        private const val CHANNEL_NAME = "Possible matches and updates"
         /**
          * Alerts are posted under this tag, with the contact's id as the notification id. The
          * tag keeps them apart from untagged notifications, such as the daily check's ongoing
@@ -51,8 +51,10 @@ class NotificationHelper @Inject constructor(@ApplicationContext private val con
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(CHANNEL_ID, CHANNEL_NAME, NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "When a public record may be about one of your contacts, or an earlier one is gone."
+            val channel = NotificationChannel(
+                CHANNEL_ID, context.getString(R.string.notif_channel_name), NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = context.getString(R.string.notif_channel_description)
                 lockscreenVisibility = android.app.Notification.VISIBILITY_PRIVATE
             }
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -68,16 +70,16 @@ class NotificationHelper @Inject constructor(@ApplicationContext private val con
                 val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 if (isDeath && !prefs.getBoolean(PREF_NOTIFY_DEATH, true)) return
                 if (!isDeath && !prefs.getBoolean(PREF_NOTIFY_CUSTODY, true)) return
-                val what = when (target.matchKind) {
-                    "DEATH" -> "an obituary"
-                    "ARREST" -> "an arrest or court record"
-                    else -> "a jail or prison record"
+                val found = when (target.matchKind) {
+                    "DEATH" -> R.string.notif_match_obituary
+                    "ARREST" -> R.string.notif_match_arrest
+                    else -> R.string.notif_match_custody
                 }
-                "Possible match for ${target.displayName}" to
-                    "Found $what that resembles ${target.displayName}. It may be someone else with the same name. Tap to check."
+                context.getString(R.string.notif_match_title, target.displayName) to
+                    context.getString(found, target.displayName)
             }
             TargetStatus.MONITORING -> if (oldStatus == TargetStatus.POSSIBLE_MATCH) {
-                "Record no longer found" to "The record that resembled ${target.displayName} is gone from its source."
+                context.getString(R.string.notif_cleared_title) to context.getString(R.string.notif_cleared_body, target.displayName)
             } else return
             else -> return
         }
@@ -93,8 +95,8 @@ class NotificationHelper @Inject constructor(@ApplicationContext private val con
         // What the lock screen shows instead: no name, no claim.
         val public = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(com.hereliesaz.cleanunderwear.R.drawable.ic_stat_briefs)
-            .setContentTitle("CleanUnderwear")
-            .setContentText("A contact needs your review.")
+            .setContentTitle(context.getString(R.string.app_name))
+            .setContentText(context.getString(R.string.notif_public_text))
             .build()
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)

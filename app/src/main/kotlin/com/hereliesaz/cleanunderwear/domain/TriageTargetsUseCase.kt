@@ -47,7 +47,7 @@ class TriageTargetsUseCase @Inject constructor(
             if (chunk.isEmpty()) break
 
             val totalProcessed = offset + chunk.size
-            onProgress(0.1f, "Triaging contacts ($totalProcessed)...")
+            onProgress(0.1f, "Triaging contacts ($totalProcessed)…")
 
             val decisions = withContext(Dispatchers.Default) {
                 chunk.map { target ->

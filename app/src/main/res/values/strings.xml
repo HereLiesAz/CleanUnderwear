@@ -433,4 +433,204 @@
     <string name="onboarding_permissions_note">Next, Android asks to let the app read and update your contacts, and to send you alerts.</string>
     <string name="onboarding_continue">Continue</string>
     <string name="onboarding_next">Next</string>
+
+    <!-- Review recommendations (domain/SuspectDetector.kt Recommendation) -->
+    <string name="rec_separate">Separate them</string>
+    <string name="rec_keep_combined">Keep them combined</string>
+    <string name="rec_use_replacement">Use the newer number</string>
+    <string name="rec_mark_out_of_date">Mark the number out of date</string>
+    <string name="rec_keep_number">Keep the number</string>
+    <plurals name="rec_done_separate">
+        <item quantity="one">%d separated</item>
+        <item quantity="other">%d separated</item>
+    </plurals>
+    <plurals name="rec_done_keep_combined">
+        <item quantity="one">%d kept combined</item>
+        <item quantity="other">%d kept combined</item>
+    </plurals>
+    <plurals name="rec_done_use_replacement">
+        <item quantity="one">%d switched to a newer number</item>
+        <item quantity="other">%d switched to a newer number</item>
+    </plurals>
+    <plurals name="rec_done_mark_out_of_date">
+        <item quantity="one">%d number marked out of date</item>
+        <item quantity="other">%d numbers marked out of date</item>
+    </plurals>
+    <plurals name="rec_done_keep_number">
+        <item quantity="one">%d number kept</item>
+        <item quantity="other">%d numbers kept</item>
+    </plurals>
+
+    <!-- What the lookup for a replacement number found (domain/AlternateFinder.kt AlternateInfo) -->
+    <string name="alt_basis_nothing_to_search">nothing to search on</string>
+    <string name="alt_basis_nothing_found">no other search found anything</string>
+
+    <!-- Messages and progress (ui/MainViewModel.kt) -->
+    <string name="vm_failed">Something went wrong and that stopped. What was done before is kept; the activity log has details.</string>
+    <string name="vm_stopped">Stopped. What was done before stopping is kept.</string>
+    <string name="vm_queued_generic">%1$s will start once the job now running is done.</string>
+    <string name="vm_queued_behind">%1$s will start once this is done: %2$s</string>
+    <string name="vm_sentence_end">%1$s.</string>
+    <string name="vm_two_sentences">%1$s %2$s</string>
+    <string name="vm_list_separator">"; "</string>
+    <string name="vm_what_apply_recs">Applying the recommendations</string>
+    <string name="vm_what_alternates">The lookup for a replacement number</string>
+    <string name="vm_what_delete_everything">Delete everything</string>
+    <string name="vm_what_reading_contacts">Reading your contacts</string>
+    <string name="vm_what_lookups">The lookups</string>
+    <string name="vm_what_importing">Importing %1$s</string>
+    <string name="vm_source_facebook">Facebook friends</string>
+    <string name="vm_source_whatsapp">WhatsApp chats</string>
+    <string name="vm_source_instagram">Instagram followers</string>
+    <string name="vm_source_google">Google Contacts</string>
+    <string name="vm_split_failed">Couldn\'t separate %1$s: that entry changed since the list was made. The list was refreshed.</string>
+    <string name="vm_applying_recs">Applying recommendations…</string>
+    <string name="vm_applying_rec_item">%1$s: %2$s (%3$d of %4$d)</string>
+    <plurals name="vm_left_for_fresh_look">
+        <item quantity="one">%d left for a fresh look after separating</item>
+        <item quantity="other">%d left for a fresh look after separating</item>
+    </plurals>
+    <plurals name="vm_rec_not_applied">
+        <item quantity="one">%d couldn\'t be done: the contact changed since the list was made</item>
+        <item quantity="other">%d couldn\'t be done: the contact changed since the list was made</item>
+    </plurals>
+    <string name="vm_looking_up_name">Looking up %1$s…</string>
+    <string name="vm_changed_meanwhile">%1$s changed while you were looking. Check it again.</string>
+    <string name="vm_signed_out">Signed out of every site used in the app\'s browser.</string>
+    <string name="vm_no_signins">There were no site sign-ins to remove.</string>
+    <string name="vm_deleting">Deleting…</string>
+    <plurals name="vm_contacts_count">
+        <item quantity="one">%d contact</item>
+        <item quantity="other">%d contacts</item>
+    </plurals>
+    <string name="vm_delete_no_access">Deleted the app\'s data. The notes it added to your contacts weren\'t removed: the app can\'t see your contacts. Allow contacts access and run Delete everything again to remove them.</string>
+    <string name="vm_delete_partial">Deleted the app\'s data and the notes on %1$s. The notes on %2$s couldn\'t be changed; run Delete everything again to retry.</string>
+    <string name="vm_delete_done">Deleted the app\'s data and its notes on %1$s.</string>
+    <string name="vm_added">Added %1$s.</string>
+    <string name="vm_add_failed">Couldn\'t add %1$s. Try again.</string>
+    <string name="vm_reading_contacts">Reading contacts…</string>
+    <plurals name="vm_found_in_list">
+        <item quantity="one">%1$d contact in the list (%2$d new)</item>
+        <item quantity="other">%1$d contacts in the list (%2$d new)</item>
+    </plurals>
+    <string name="vm_found_removed">%1$d no longer in your phone\'s contacts, so no longer checked</string>
+    <string name="vm_merging">Merging duplicates…</string>
+    <string name="vm_no_duplicates">No duplicates</string>
+    <plurals name="vm_merged_duplicates">
+        <item quantity="one">Merged %d duplicate</item>
+        <item quantity="other">Merged %d duplicates</item>
+    </plurals>
+    <string name="vm_preparing">Preparing contacts for daily checks…</string>
+    <string name="vm_triage_ready">%1$d ready for daily checks</string>
+    <string name="vm_triage_ready_needs_details">%1$d ready for daily checks · %2$d need more details</string>
+    <plurals name="vm_imported_new">
+        <item quantity="one">Imported %1$d new contact; %2$d in all.</item>
+        <item quantity="other">Imported %1$d new contacts; %2$d in all.</item>
+    </plurals>
+    <string name="vm_no_new_contacts">No new contacts; %1$d in all.</string>
+    <string name="vm_import_failed">Importing contacts failed. Try again; if it keeps failing, the activity log shows where.</string>
+    <string name="vm_importing_sign_in">Importing %1$s. Sign in if asked.</string>
+    <string name="vm_reading_found">Reading what was found in %1$s…</string>
+    <string name="vm_import_nothing">Nothing was read from %1$s. If you weren\'t signed in, try again.</string>
+    <string name="vm_import_read">Read %1$d from %2$s.</string>
+    <string name="vm_lookup_already">A lookup is already running or waiting to start.</string>
+    <string name="vm_lookup_none_needed">Every contact already has its details filled in.</string>
+    <string name="vm_lookup_first">Looking up 1 of %1$d on CyberBackgroundChecks…</string>
+    <string name="vm_lookup_item">Looking up %1$s (%2$d of %3$d)</string>
+    <plurals name="vm_choose_whos_who">
+        <item quantity="one">Choose who\'s who for %d contact.</item>
+        <item quantity="other">Choose who\'s who for %d contacts.</item>
+    </plurals>
+    <string name="vm_lookup_progress">%1$d of %2$d looked up · people found for %3$d, to choose from at the end</string>
+    <string name="vm_lookup_stopped">Stopped after %1$d of %2$d.</string>
+    <string name="vm_lookup_nothing_to_search">%1$s: nothing to search by</string>
+    <plurals name="vm_lookup_people_found">
+        <item quantity="one">%1$s: %2$d person found</item>
+        <item quantity="other">%1$s: %2$d people found</item>
+    </plurals>
+    <string name="vm_lookup_nobody">%1$s: nobody found</string>
+    <string name="vm_lookup_unreadable">%1$s: couldn\'t read the page</string>
+    <plurals name="vm_lookup_done">
+        <item quantity="one">Looked up %d contact.</item>
+        <item quantity="other">Looked up %d contacts.</item>
+    </plurals>
+    <plurals name="vm_browser_gave_up">
+        <item quantity="one">The browser sat waiting for you for %d minute, so that was stopped. Start it again when you\'re ready.</item>
+        <item quantity="other">The browser sat waiting for you for %d minutes, so that was stopped. Start it again when you\'re ready.</item>
+    </plurals>
+    <string name="vm_checking_records">Checking records…</string>
+    <string name="vm_check_failed">The check stopped with an error. It will run again with the next daily check.</string>
+
+    <!-- The browser screen (ui/BrowserScreen.kt) -->
+    <string name="browser_stop">Stop</string>
+    <string name="browser_skip">Skip</string>
+    <string name="browser_keep_going">Keep going</string>
+    <string name="browser_stop_lookups_title">Stop the lookups?</string>
+    <string name="browser_stop_import_title">Stop the import?</string>
+    <string name="browser_stop_lookup_title">Stop this lookup?</string>
+    <string name="browser_close_page_title">Close the page?</string>
+    <string name="browser_stop_lookups_body">Every lookup left is skipped. What was found so far is kept.</string>
+    <string name="browser_title_of">%1$s (%2$d of %3$d)</string>
+    <string name="browser_stop_all_lookups">Stop all lookups</string>
+    <string name="browser_loading">Loading the page…</string>
+    <string name="browser_checking_signed_in">Checking that you\'re signed in…</string>
+    <string name="browser_reading">Reading the page. Please don\'t touch it.</string>
+    <string name="browser_let_me_use">Let me use the page</string>
+    <string name="browser_paused">This page needs you, or didn\'t load. If it shows a CAPTCHA or a sign-in, complete it and the lookup carries on by itself.</string>
+    <string name="browser_paused_caption_batch">Try again reloads this page. Skip moves on without it. Stop ends every lookup left; what was found so far is kept.</string>
+    <string name="browser_paused_caption">Try again reloads this page. Skip moves on without it. Stop closes it.</string>
+    <string name="browser_signin_caption">Nothing is read until you\'re in. Back steps back through the pages you visit.</string>
+    <string name="mission_lookup_phone">Identity lookup · phone</string>
+    <string name="mission_lookup_email">Identity lookup · email</string>
+    <string name="mission_lookup_address">Identity lookup · address</string>
+    <string name="mission_lookup_name">Identity lookup · name</string>
+    <string name="mission_signin_whatsapp">Link WhatsApp here. Under the code, tap \"Link with phone number\", then enter the code it shows in WhatsApp on this phone (Settings, Linked devices, Link a device). Or scan the code with a second device. The import carries on by itself once your chats appear.</string>
+    <string name="mission_signin_instagram">Sign in to Instagram here. The import carries on by itself once you\'re in.</string>
+    <string name="mission_signin_google">Sign in to Google here. The import carries on by itself once your contacts appear.</string>
+    <string name="mission_signin_facebook">Sign in to Facebook here. The import carries on by itself once you\'re in.</string>
+
+    <!-- Why a found person fits, or doesn't (saved as plain-English keys; shown through these; ui/ChoicesScreen.kt) -->
+    <string name="choices_fit_same_name">Same name</string>
+    <string name="choices_fit_same_phone">Same phone number</string>
+    <string name="choices_fit_same_area_code">Same area code</string>
+    <string name="choices_fit_same_place">Same city or ZIP</string>
+    <string name="choices_fit_same_age">Same age</string>
+    <string name="choices_fit_came_up">Came up for their %1$s</string>
+    <string name="choices_differs_name">A different name</string>
+    <string name="choices_differs_age">A different age</string>
+    <string name="choices_mode_phone">phone</string>
+    <string name="choices_mode_email">email</string>
+    <string name="choices_mode_address">address</string>
+    <string name="choices_mode_name">name</string>
+    <string name="list_and">" and "</string>
+
+    <!-- Update announcement and check (ui/UpdateUi.kt, update/UpdateChecker.kt) -->
+    <string name="update_title">Update available</string>
+    <string name="update_open_release">Open the release</string>
+    <string name="update_later">Later</string>
+    <string name="update_body_play">Version %1$s is on Google Play. You have %2$s.</string>
+    <string name="update_body_github">Version %1$s is out. You have %2$s. On the release page, download the file ending in .apk and open it to install; Android may ask you to allow installs from your browser.</string>
+    <string name="update_channel_play">Google Play</string>
+    <string name="update_channel_github">GitHub</string>
+    <string name="update_failed_play">Google Play couldn\'t be reached</string>
+    <string name="update_failed_github_code">GitHub answered %1$d</string>
+    <string name="update_failed_github_reply">GitHub\'s reply couldn\'t be read</string>
+    <string name="update_failed_github_unreachable">GitHub couldn\'t be reached</string>
+
+    <!-- Alerts (ui/NotificationHelper.kt) -->
+    <string name="notif_channel_name">Possible matches and updates</string>
+    <string name="notif_channel_description">When a public record may be about one of your contacts, or an earlier one is gone.</string>
+    <string name="notif_match_title">Possible match for %1$s</string>
+    <string name="notif_match_obituary">Found an obituary that resembles %1$s. It may be someone else with the same name. Tap to check.</string>
+    <string name="notif_match_arrest">Found an arrest or court record that resembles %1$s. It may be someone else with the same name. Tap to check.</string>
+    <string name="notif_match_custody">Found a jail or prison record that resembles %1$s. It may be someone else with the same name. Tap to check.</string>
+    <string name="notif_cleared_title">Record no longer found</string>
+    <string name="notif_cleared_body">The record that resembled %1$s is gone from its source.</string>
+    <string name="notif_public_text">A contact needs your review.</string>
+
+    <!-- After a crash (MainActivity.kt) -->
+    <string name="crash_title">The app closed unexpectedly</string>
+    <string name="crash_send">Send report</string>
+    <string name="crash_dont_send">Don\'t send</string>
+    <string name="crash_body">A report opens on GitHub in your browser, where you can read it before posting. It holds the app and Android versions and where in the code it failed; no contact names, numbers or other details.</string>
 </resources>

@@ -1,5 +1,8 @@
 package com.hereliesaz.cleanunderwear.domain
 
+import androidx.annotation.PluralsRes
+import androidx.annotation.StringRes
+import com.hereliesaz.cleanunderwear.R
 import com.hereliesaz.cleanunderwear.data.HistoryStats
 import com.hereliesaz.cleanunderwear.match.FieldContribution
 import com.hereliesaz.cleanunderwear.match.MatchRecord
@@ -15,17 +18,16 @@ enum class SuspicionKind { BAD_MERGE, STALE_NUMBER }
 enum class Lean { LIKELY_PROBLEM, TOSS_UP, LIKELY_FINE }
 
 /**
- * What to do about a case, when the evidence clearly tips one way. [label] is the button;
- * [done] says what n of them did, for a summary ("2 separated", "1 number kept").
+ * What to do about a case, when the evidence clearly tips one way. [labelRes] is the button;
+ * [doneRes] is a plural saying what n of them did, for a summary ("2 separated", "1 number
+ * kept"). Both are resources, resolved where the words are shown.
  */
-enum class Recommendation(val label: String, private val one: String, private val many: String) {
-    SEPARATE("Separate them", "separated", "separated"),
-    KEEP_COMBINED("Keep them combined", "kept combined", "kept combined"),
-    USE_REPLACEMENT("Use the newer number", "switched to a newer number", "switched to a newer number"),
-    MARK_OUT_OF_DATE("Mark the number out of date", "number marked out of date", "numbers marked out of date"),
-    KEEP_NUMBER("Keep the number", "number kept", "numbers kept");
-
-    fun done(n: Int): String = "$n ${if (n == 1) one else many}"
+enum class Recommendation(@StringRes val labelRes: Int, @PluralsRes val doneRes: Int) {
+    SEPARATE(R.string.rec_separate, R.plurals.rec_done_separate),
+    KEEP_COMBINED(R.string.rec_keep_combined, R.plurals.rec_done_keep_combined),
+    USE_REPLACEMENT(R.string.rec_use_replacement, R.plurals.rec_done_use_replacement),
+    MARK_OUT_OF_DATE(R.string.rec_mark_out_of_date, R.plurals.rec_done_mark_out_of_date),
+    KEEP_NUMBER(R.string.rec_keep_number, R.plurals.rec_done_keep_number)
 }
 
 /** One reason, in plain words, with how much it counts (roughly 1 = hint, 3+ = strong). */

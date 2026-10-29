@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
 import com.hereliesaz.cleanunderwear.ui.AppDialog
 import com.hereliesaz.cleanunderwear.ui.AppTypography
@@ -72,8 +73,8 @@ class MainActivity : ComponentActivity() {
                     var crash by remember(onboarded) { mutableStateOf(if (onboarded) CrashReport.pending(this) else null) }
                     crash?.let { report ->
                         AppDialog(
-                            title = "The app closed unexpectedly",
-                            confirm = "Send report",
+                            title = stringResource(R.string.crash_title),
+                            confirm = stringResource(R.string.crash_send),
                             onConfirm = {
                                 crash = null
                                 CrashReport.discard(this)
@@ -84,13 +85,9 @@ class MainActivity : ComponentActivity() {
                                 }
                             },
                             onDismiss = { crash = null; CrashReport.discard(this) },
-                            dismiss = "Don't send"
+                            dismiss = stringResource(R.string.crash_dont_send)
                         ) {
-                            Text(
-                                "A report opens on GitHub in your browser, where you can read it before posting. " +
-                                    "It holds the app and Android versions and where in the code it failed; no " +
-                                    "contact names, numbers or other details."
-                            )
+                            Text(stringResource(R.string.crash_body))
                         }
                     }
                 }

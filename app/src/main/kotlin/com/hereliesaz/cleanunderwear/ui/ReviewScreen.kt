@@ -193,7 +193,7 @@ private fun ApplyAllDialog(cases: List<SuspectCase>, onConfirm: () -> Unit, onDi
         onDismiss = onDismiss
     ) {
         Recommendation.entries.forEach { rec ->
-            byRec[rec]?.let { n -> Text(stringResource(R.string.review_rec_count, rec.label, n), style = MaterialTheme.typography.bodyMedium) }
+            byRec[rec]?.let { n -> Text(stringResource(R.string.review_rec_count, stringResource(rec.labelRes), n), style = MaterialTheme.typography.bodyMedium) }
             byRec[rec]?.let { AppCaption(stringResource(whatItDoes(rec, bulk = true))) }
         }
         if (left > 0) AppCaption(pluralStringResource(R.plurals.review_left_for_you, left, left))
@@ -269,7 +269,7 @@ private fun SuspectCard(
             BalanceBar(case.suspicion.size, case.defense.size, case.suspicionScore, case.defenseScore)
             RecommendationLine(case)
         }
-        case.recommendation?.let { rec -> AppAction(rec.label, { pending = rec.toPending() }) }
+        case.recommendation?.let { rec -> AppAction(stringResource(rec.labelRes), { pending = rec.toPending() }) }
 
         if (expanded) {
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -347,7 +347,7 @@ private fun RecommendationLine(case: SuspectCase) {
             Text(stringResource(R.string.review_no_recommendation), style = MaterialTheme.typography.titleMedium)
             AppCaption(stringResource(R.string.review_balanced))
         } else {
-            Text(stringResource(R.string.review_recommended, rec.label), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.review_recommended, stringResource(rec.labelRes)), style = MaterialTheme.typography.titleMedium)
             case.mainReason?.let { AppCaption(stringResource(R.string.review_mainly_because, it.text.replaceFirstChar { c -> c.lowercase() })) }
             AppCaption(stringResource(whatItDoes(rec)))
         }
@@ -451,6 +451,6 @@ private fun AlternatesDialog(info: AlternateInfo, onApply: () -> Unit, onDismiss
         info.phone?.let { Text(stringResource(R.string.review_alt_number, it), style = MaterialTheme.typography.titleMedium) }
         info.address?.let { Text(stringResource(R.string.review_alt_address, it), style = MaterialTheme.typography.titleMedium) }
         if (!info.hasReplacement) Text(stringResource(R.string.review_alt_nothing, info.name), style = MaterialTheme.typography.bodyMedium)
-        AppCaption(info.basis)
+        AppCaption(info.basisRes?.let { stringResource(it) } ?: info.basis)
     }
 }

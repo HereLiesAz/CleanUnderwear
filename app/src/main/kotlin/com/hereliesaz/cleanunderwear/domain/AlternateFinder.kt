@@ -1,5 +1,7 @@
 package com.hereliesaz.cleanunderwear.domain
 
+import androidx.annotation.StringRes
+import com.hereliesaz.cleanunderwear.R
 import com.hereliesaz.cleanunderwear.data.Target
 import com.hereliesaz.cleanunderwear.match.StringSimilarity
 import com.hereliesaz.cleanunderwear.network.CyberBackgroundChecksEnricher
@@ -24,7 +26,9 @@ data class AlternateInfo(
     val phone: String?,
     val address: String?,
     /** Why the replacement was or wasn't trusted (the enricher's provenance). */
-    val basis: String
+    val basis: String,
+    /** When set, the words to show instead of [basis] (the lookup's own two plain outcomes). */
+    @StringRes val basisRes: Int? = null
 ) {
     val hasReplacement: Boolean get() = phone != null || address != null
 }
@@ -63,7 +67,8 @@ class AlternateFinder @Inject constructor(
         if (ownCards.isEmpty()) {
             return AlternateInfo(
                 target.id, target.displayName, stalePhone, holder, holderDiffers,
-                phone = null, address = null, basis = "no other search found anything"
+                phone = null, address = null, basis = "no other search found anything",
+                basisRes = R.string.alt_basis_nothing_found
             )
         }
 
