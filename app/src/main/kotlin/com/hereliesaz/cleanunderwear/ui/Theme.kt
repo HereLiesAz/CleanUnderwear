@@ -15,13 +15,37 @@ import androidx.compose.ui.unit.sp
  * that need the user (a possible match) and for errors.
  */
 
-private val Ink = Color(0xFF0A0A0A)
-private val Coal = Color(0xFF141414)
-private val Graphite = Color(0xFF1F1F1F)
-private val Iron = Color(0xFF3A3A3A)
-private val Ash = Color(0xFF9A9A9A)
-private val Bone = Color(0xFFEDEDED)
-private val Paper = Color(0xFFF7F7F7)
+/**
+ * The greys as plain ARGB numbers, so a unit test can check their contrast (ThemeContrastTest)
+ * without building a colour scheme. Backgrounds first, then what is drawn on them.
+ */
+internal object ThemeArgb {
+    const val INK = 0xFF0A0A0AL
+    const val COAL = 0xFF141414L
+    const val GRAPHITE = 0xFF1F1F1FL
+    const val ASH = 0xFF9A9A9AL
+    const val BONE = 0xFFEDEDEDL
+    const val PAPER = 0xFFF7F7F7L
+    const val WHITE = 0xFFFFFFFFL
+    const val LIGHT_CONTAINER_HIGH = 0xFFF0F0F0L
+    const val LIGHT_VARIANT = 0xFFECECECL
+
+    /**
+     * Outlines (a badge's border, a progress track, a field's edge). Each is at least 3:1 against
+     * every background of its theme, the most the grey ramp lets a boundary be without a new hue:
+     * dark 3.3:1 on the lightest dark surface, light 3.3:1 on the darkest light one.
+     */
+    const val OUTLINE_DARK = 0xFF707070L
+    const val OUTLINE_LIGHT = 0xFF808080L
+}
+
+private val Ink = Color(ThemeArgb.INK)
+private val Coal = Color(ThemeArgb.COAL)
+private val Graphite = Color(ThemeArgb.GRAPHITE)
+private val Iron = Color(ThemeArgb.OUTLINE_DARK)
+private val Ash = Color(ThemeArgb.ASH)
+private val Bone = Color(ThemeArgb.BONE)
+private val Paper = Color(ThemeArgb.PAPER)
 
 /** The one non-grey: a possible match, an error. Dark red reads as grave without shouting. */
 private val AlertDark = Color(0xFFE5675A)
@@ -61,17 +85,17 @@ val SurveillanceLightColorScheme = lightColorScheme(
     onTertiary = Paper,
     background = Paper,
     onBackground = Ink,
-    surface = Color.White,
+    surface = Color(ThemeArgb.WHITE),
     onSurface = Ink,
-    surfaceVariant = Color(0xFFECECEC),
+    surfaceVariant = Color(ThemeArgb.LIGHT_VARIANT),
     onSurfaceVariant = Color(0xFF555555),
-    surfaceContainer = Color.White,
-    surfaceContainerHigh = Color(0xFFF0F0F0),
-    primaryContainer = Color(0xFFECECEC),
+    surfaceContainer = Color(ThemeArgb.WHITE),
+    surfaceContainerHigh = Color(ThemeArgb.LIGHT_CONTAINER_HIGH),
+    primaryContainer = Color(ThemeArgb.LIGHT_VARIANT),
     onPrimaryContainer = Ink,
-    secondaryContainer = Color(0xFFECECEC),
+    secondaryContainer = Color(ThemeArgb.LIGHT_VARIANT),
     onSecondaryContainer = Ink,
-    outline = Color(0xFFB0B0B0),
+    outline = Color(ThemeArgb.OUTLINE_LIGHT),
     outlineVariant = Color(0xFFDDDDDD),
     error = AlertLight,
     onError = Paper

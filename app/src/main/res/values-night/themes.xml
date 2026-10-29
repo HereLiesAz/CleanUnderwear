@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Launch theme when the phone is in night mode: see values/themes.xml. -->
+    <style name="Theme.CleanUnderwear.Launch" parent="Theme.CleanUnderwear">
+        <item name="android:windowBackground">#FF0A0A0A</item>
+    </style>
+</resources>

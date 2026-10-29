@@ -59,4 +59,24 @@ class NotificationHelperTest {
         helper.notifyStatusChange(match("ARREST"), TargetStatus.MONITORING)
         assertEquals(0, shadowOf(manager).allNotifications.size)
     }
+
+    @Test
+    fun anAlertDoesNotReplaceAnUntaggedNotificationWithTheSameId() {
+        // The daily check's ongoing notification is untagged with a fixed id; a contact whose id
+        // is the same must neither replace it nor be replaced by it.
+        val ongoing = androidx.core.app.NotificationCompat.Builder(context, "checks_running")
+            .setSmallIcon(com.hereliesaz.cleanunderwear.R.drawable.ic_stat_briefs)
+            .setContentTitle("Checking records")
+            .build()
+        manager.notify(4101, ongoing)
+
+        NotificationHelper(context).notifyStatusChange(
+            Target(id = 4101, displayName = "Jane Doe", status = TargetStatus.POSSIBLE_MATCH, matchKind = "DEATH"),
+            TargetStatus.MONITORING
+        )
+
+        assertEquals(2, shadowOf(manager).allNotifications.size)
+        assertTrue(shadowOf(manager).getNotification(NotificationHelper.ALERT_TAG, 4101) != null)
+        assertTrue(shadowOf(manager).getNotification(4101) != null)
+    }
 }

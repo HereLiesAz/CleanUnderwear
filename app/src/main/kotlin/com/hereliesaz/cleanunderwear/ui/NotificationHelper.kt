@@ -33,6 +33,12 @@ class NotificationHelper @Inject constructor(@ApplicationContext private val con
         private const val CHANNEL_ID = "possible_matches"
         private const val OLD_CHANNEL_ID = "panopticon_alerts"
         private const val CHANNEL_NAME = "Possible matches and updates"
+        /**
+         * Alerts are posted under this tag, with the contact's id as the notification id. The
+         * tag keeps them apart from untagged notifications, such as the daily check's ongoing
+         * one, whose fixed id would otherwise replace (or be removed with) a contact's alert.
+         */
+        const val ALERT_TAG = "possible_match"
         const val EXTRA_TARGET_ID = "com.hereliesaz.cleanunderwear.TARGET_ID"
         const val PREFS = "clean_underwear_prefs"
         const val PREF_NOTIFY_DEATH = "notify_death"
@@ -103,7 +109,7 @@ class NotificationHelper @Inject constructor(@ApplicationContext private val con
             .setAutoCancel(true)
 
         try {
-            NotificationManagerCompat.from(context).notify(target.id, builder.build())
+            NotificationManagerCompat.from(context).notify(ALERT_TAG, target.id, builder.build())
         } catch (e: SecurityException) {
             // Notifications not allowed; the match is still in the app.
         }

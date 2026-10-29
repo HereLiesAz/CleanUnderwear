@@ -1,3 +1,4 @@
+# HISTORICAL: early prototype, not used by the app or CI. See scripts/README.md.
 
 import requests
 from bs4 import BeautifulSoup

@@ -1,3 +1,5 @@
+# HISTORICAL: trained the TFLite classifier that was later removed from the app (docs/MODEL_CARD.md).
+# Not used by the app or CI. See scripts/README.md.
 import os
 import tensorflow as tf
 import numpy as np

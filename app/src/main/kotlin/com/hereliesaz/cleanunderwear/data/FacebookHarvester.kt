@@ -39,6 +39,8 @@ class FacebookHarvester @Inject constructor() {
         // mbasic's login page exposes a literal #login_form or input[name=pass]
         // even when the URL after redirects is just "/" — checking the DOM is
         // more reliable than parsing the URL the WebView ended up on.
+        // (The browser screen now stops on this page before it is ever dumped, see
+        // BrowserMission.requiresSignIn; this stays as the backstop for a dump that slips through.)
         return doc.selectFirst("#login_form, form[action*=login], input[name=pass]") != null
     }
 

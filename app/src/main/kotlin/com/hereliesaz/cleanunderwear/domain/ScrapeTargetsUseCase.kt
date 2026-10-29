@@ -43,8 +43,13 @@ import javax.inject.Inject
  * never overwritten.
  *
  * A source that couldn't be read (network error, error status, bot wall) is
- * not evidence of absence: when no match turns up and any source failed, the
- * contact keeps its status and evidence and is re-checked sooner.
+ * not evidence of absence, but only a pending finding is held for it: when no
+ * match turns up and any source failed, a contact with a possible or weak match
+ * keeps its status and evidence and is re-checked sooner. A contact with nothing
+ * pending is settled as monitored all the same, with the unread sources noted, so
+ * a site that is always down can't hold it at "Not checked yet". A pending death
+ * or arrest, and a status restored from the contact's note, are never cleared by
+ * a miss, whether or not a source failed.
  *
  * Each result is written onto the row as it stands when the lookup finishes,
  * not the snapshot read when the run started, and is dropped if the user

@@ -27,8 +27,11 @@ import com.hereliesaz.cleanunderwear.domain.SuspectReport
 import com.hereliesaz.cleanunderwear.domain.SuspectReview
 import com.hereliesaz.cleanunderwear.domain.TriageTargetsUseCase
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import com.hereliesaz.cleanunderwear.worker.ScrapingWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import androidx.paging.Pager
@@ -268,12 +271,14 @@ class MainViewModel @Inject constructor(
 
     /**
      * Shows [state] as the running operation. Cancel stops the calling coroutine, or runs [cancel]
-     * when the work lives elsewhere. A new operation starts in front of the user.
+     * when the work lives elsewhere. A new operation starts in front of the user, unless
+     * [inBackground]: then only the bar shows it, for work the app starts by itself (the contact
+     * read at launch) that mustn't cover what the user opened the app for.
      */
-    private suspend fun begin(state: OperationState, cancel: (() -> Unit)? = null) {
+    private suspend fun begin(state: OperationState, cancel: (() -> Unit)? = null, inBackground: Boolean = false) {
         val job = kotlinx.coroutines.currentCoroutineContext()[kotlinx.coroutines.Job]
         cancelRunning = cancel ?: { job?.cancel() }
-        if (!_operationState.value.isRunning) _operationInBackground.value = false
+        if (!_operationState.value.isRunning) _operationInBackground.value = inBackground && state.continues != Continues.NO
         _operationState.value = state.copy(isRunning = true)
     }
 
@@ -310,6 +315,25 @@ class MainViewModel @Inject constructor(
 
     private val _operationState = MutableStateFlow(OperationState())
     val operationState: StateFlow<OperationState> = _operationState
+
+    /**
+     * [PipelineCoordinator.runExclusive], saying so when it has to wait. Jobs queue rather than
+     * drop, and the one in front may be the browser waiting on the user (a CAPTCHA left
+     * unanswered), which used to leave a later Delete everything or contact read sitting behind it
+     * with nothing on screen. [what] names the job that waits ("Importing contacts"); the waits on
+     * the user are time-limited too ([awaitWithin]), so the queue always moves on in the end.
+     */
+    private suspend fun <T> exclusive(label: String, what: String, block: suspend () -> T): T {
+        noteIfQueued(what)
+        return pipelineCoordinator.runExclusive(label, block)
+    }
+
+    /** Tells the user [what] is about to wait behind the job now holding the pipeline, if one is. */
+    private fun noteIfQueued(what: String) {
+        if (pipelineCoordinator.isBusy) {
+            post(queuedNotice(what, _operationState.value.takeIf { it.isRunning }?.description))
+        }
+    }
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val targets: Flow<PagingData<TargetLite>> = combine(
@@ -452,7 +476,7 @@ class MainViewModel @Inject constructor(
             .sortedBy { if (it.kind == com.hereliesaz.cleanunderwear.domain.SuspicionKind.BAD_MERGE) 0 else 1 }
         if (todo.isEmpty()) return
         viewModelScope.launch(failSafe) {
-            pipelineCoordinator.runExclusive("review-all") {
+            exclusive("review-all", "Applying the recommendations") {
                 val done = linkedMapOf<com.hereliesaz.cleanunderwear.domain.Recommendation, Int>()
                 val separated = mutableSetOf<Int>()
                 var setAside = 0
@@ -562,20 +586,20 @@ class MainViewModel @Inject constructor(
      */
     fun findAlternates(targetId: Int, stalePhone: String?) {
         viewModelScope.launch(failSafe) {
-            pipelineCoordinator.runExclusive("find-alternates") {
+            exclusive("find-alternates", "The lookup for a replacement number") {
                 resolveCancellationRequested = false
                 try {
-                    val target = repository.getTargetById(targetId) ?: return@runExclusive
+                    val target = repository.getTargetById(targetId) ?: return@exclusive
                     val missions = alternateFinder.missions(target)
                     if (missions.isEmpty()) {
                         _alternates.value = AlternateInfo(
                             target.id, target.displayName, stalePhone, null, false,
                             phone = null, address = null, basis = "nothing to search on"
                         )
-                        return@runExclusive
+                        return@exclusive
                     }
                     begin(OperationState(
-                        description = "Looking up ${target.displayName}...",
+                        description = "Looking up ${target.displayName}…",
                         progress = -1f
                     ))
                     val extracted = mutableListOf<Pair<BrowserMission, String>>()
@@ -584,7 +608,7 @@ class MainViewModel @Inject constructor(
                         extracted.removeAll { it.first == mission }
                         extracted.add(mission to html)
                     }
-                    if (outcome == BatchOutcome.UserCancelled || resolveCancellationRequested) return@runExclusive
+                    if (outcome == BatchOutcome.UserCancelled || resolveCancellationRequested) return@exclusive
 
                     val info = withContext(Dispatchers.Default) {
                         val cards = extracted.mapNotNull { (mission, html) ->
@@ -756,6 +780,17 @@ class MainViewModel @Inject constructor(
     fun setNotifyDeath(on: Boolean) { prefs.edit { putBoolean(NotificationHelper.PREF_NOTIFY_DEATH, on) }; _notifyDeath.value = on }
     fun setNotifyCustody(on: Boolean) { prefs.edit { putBoolean(NotificationHelper.PREF_NOTIFY_CUSTODY, on) }; _notifyCustody.value = on }
 
+    /** Whether the app writes its status line into contacts' notes (Settings); on until turned off. */
+    private val _noteWriteBack = MutableStateFlow(
+        prefs.getBoolean(com.hereliesaz.cleanunderwear.util.SystemContactSyncer.PREF_NOTE_WRITE_BACK_ENABLED, true)
+    )
+    val noteWriteBack: StateFlow<Boolean> = _noteWriteBack
+
+    fun setNoteWriteBack(on: Boolean) {
+        prefs.edit { putBoolean(com.hereliesaz.cleanunderwear.util.SystemContactSyncer.PREF_NOTE_WRITE_BACK_ENABLED, on) }
+        _noteWriteBack.value = on
+    }
+
     /** The hour of day the daily check aims for; the OS may run it later (battery, network). */
     private val _checkHour = MutableStateFlow(prefs.getInt("check_hour", 9))
     val checkHour: StateFlow<Int> = _checkHour
@@ -784,7 +819,7 @@ class MainViewModel @Inject constructor(
      */
     fun deleteEverything() {
         viewModelScope.launch(failSafe) {
-            pipelineCoordinator.runExclusive("delete-everything") {
+            exclusive("delete-everything", "Delete everything") {
                 // Half a deletion is worse than none; it's quick, so it runs to the end.
                 begin(OperationState(description = "Deleting…", progress = -1f, cancellable = false))
                 val notes = withContext(Dispatchers.IO) { contactSyncer.removeAllBlocks() }
@@ -856,7 +891,21 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun sweepContacts() {
+    /**
+     * Reads the phone's contacts (and the other enabled sources) into the list.
+     *
+     * [atLaunch] is the read the app starts by itself when it opens: it shows as the bar at the
+     * bottom ([operationInBackground]) instead of the full-screen busy dialog, which otherwise
+     * covered whatever the user opened the app for (a notification's contact most of all). A tap
+     * on Import contacts is the user asking, and keeps the full screen. The launch call is not
+     * told apart by its caller (MainActivity and the rail both call this with no argument), so it
+     * is the first call within [LAUNCH_SWEEP_WINDOW_MS] of this ViewModel's creation: nobody can
+     * reach the rail's menu that fast.
+     */
+    fun sweepContacts(
+        atLaunch: Boolean = isLaunchSweep(viewModelCreatedAt, android.os.SystemClock.elapsedRealtime(), sweepRequestedBefore)
+    ) {
+        sweepRequestedBefore = true
         // Every account, always: the list's filter chips change what is shown, never what is
         // read (hiding Google contacts from view used to skip them on the next import).
         // A sweep already queued or running covers this request too.
@@ -866,8 +915,11 @@ class MainViewModel @Inject constructor(
             try {
                 // Serialised with the daily check and every other job that writes the registry,
                 // and run off the main thread: harvest, name checks and dedup are heavy.
-                pipelineCoordinator.runExclusive("contact-sweep") { try {
-                    begin(OperationState(description = "Reading contacts...", progress = 0.1f, continues = Continues.IN_APP))
+                exclusive("contact-sweep", "Reading your contacts") { try {
+                    begin(
+                        OperationState(description = "Reading contacts…", progress = 0.1f, continues = Continues.IN_APP),
+                        inBackground = atLaunch
+                    )
                     val before = repository.getTargetsPaged(limit = Int.MAX_VALUE, offset = 0).size
                     withContext(Dispatchers.Default) {
                         // What has turned up so far, under the loader.
@@ -886,14 +938,14 @@ class MainViewModel @Inject constructor(
                         }
 
                         // 2. Consolidate and deduplicate the full registry
-                        _operationState.value = _operationState.value.copy(description = "Merging duplicates...", progress = 0.4f)
+                        _operationState.value = _operationState.value.copy(description = "Merging duplicates…", progress = 0.4f)
                         val merged = deduplicateTargetsUseCase { sub, _ ->
                             _operationState.value = _operationState.value.copy(progress = 0.4f + (sub * 0.3f))
                         }
                         note(if (merged == 0) "No duplicates" else "Merged $merged duplicate${if (merged == 1) "" else "s"}")
 
                         // 3. Triage for monitorability
-                        _operationState.value = _operationState.value.copy(description = "Preparing contacts for daily checks...", progress = 0.7f)
+                        _operationState.value = _operationState.value.copy(description = "Preparing contacts for daily checks…", progress = 0.7f)
                         val triaged = triageTargetsUseCase { sub, _ ->
                             _operationState.value = _operationState.value.copy(progress = 0.7f + (sub * 0.3f))
                         }
@@ -923,29 +975,16 @@ class MainViewModel @Inject constructor(
 
     @Volatile private var sweepPending = false
 
-    fun harvestFacebook() {
-        viewModelScope.launch(failSafe) {
-            pipelineCoordinator.runExclusive("facebook-harvest") {
-                try {
-                    begin(OperationState(
-                        description = "Awaiting visible Facebook session...",
-                        progress = -1f
-                    ))
-                    val html = launchMissionAndAwait(BrowserMission.HarvestFacebookFriends)
-                    if (html.isNullOrBlank()) return@runExclusive
-                    _operationState.value = _operationState.value.copy(
-                        description = "Parsing Facebook friend list..."
-                    )
-                    val friends = fbHarvester.parseFriendsHtml(html)
-                    harvestContactsUseCase.processManualTargets(friends)
-                    post("Read ${friends.size} Facebook friend${if (friends.size == 1) "" else "s"}.")
-                } finally {
-                    com.hereliesaz.cleanunderwear.util.WebSessions.forget(com.hereliesaz.cleanunderwear.util.WebSessions.FACEBOOK)
-                    _operationState.value = OperationState(isRunning = false)
-                }
-            }
-        }
-    }
+    /** When this ViewModel was made, to tell the contact read at launch from one the user asked for. */
+    private val viewModelCreatedAt = android.os.SystemClock.elapsedRealtime()
+
+    /** Whether [sweepContacts] has been called yet; only the first call can be the launch one. */
+    @Volatile private var sweepRequestedBefore = false
+
+    fun harvestFacebook() = harvestInBrowser(
+        "facebook-harvest", BrowserMission.HarvestFacebookFriends, "Facebook friends",
+        com.hereliesaz.cleanunderwear.util.WebSessions.FACEBOOK
+    ) { fbHarvester.parseFriendsHtml(it) }
 
     /** How many contacts "Fill in details" would look up, for the confirmation before it starts. */
     suspend fun resolveCandidateCount(): Int = resolveCandidates().size
@@ -1008,6 +1047,7 @@ class MainViewModel @Inject constructor(
         resolvePending = true
         viewModelScope.launch(failSafe) {
             try {
+            noteIfQueued("The lookups")
             pipelineCoordinator.runExclusive("user-enrichment") {
                 resolveCancellationRequested = false
                 try {
@@ -1021,7 +1061,7 @@ class MainViewModel @Inject constructor(
 
                 val total = unverified.size
                 begin(OperationState(
-                    description = "Looking up 1 of $total on CyberBackgroundChecks...",
+                    description = "Looking up 1 of $total on CyberBackgroundChecks…",
                     progress = 0f
                 ))
                 // Contacts with people to choose from. Nobody is asked mid-run: every contact is
@@ -1159,11 +1199,21 @@ class MainViewModel @Inject constructor(
      * result (auto-extracted) or cancels (user tapped back / Done). Single-
      * mission flows still use this; the batch enricher uses
      * [launchMissionsAndAwait].
+     *
+     * The wait is on a person, and it holds the pipeline lock, so it has a limit
+     * ([USER_WAIT_IMPORT_MS]): a sign-in or CAPTCHA left unanswered ends the page and the job,
+     * with a message, rather than keeping the daily check and Delete everything queued behind it.
      */
     private suspend fun launchMissionAndAwait(mission: BrowserMission): String? {
         val deferred = CompletableDeferred<String?>()
         launchMission(mission) { html -> deferred.complete(html) }
-        return deferred.await()
+        return awaitWithin(deferred, USER_WAIT_IMPORT_MS) { giveUpWaiting(USER_WAIT_IMPORT_MS); null }
+    }
+
+    /** The user left the browser waiting for [limitMs]: close it, so the job holding the pipeline ends. */
+    private fun giveUpWaiting(limitMs: Long) {
+        cancelMissionBatch()
+        post("The browser sat waiting for you for ${limitMs / 60_000} minutes, so that was stopped. Start it again when you're ready.")
     }
 
     private enum class BatchOutcome { Completed, UserCancelled }
@@ -1172,7 +1222,8 @@ class MainViewModel @Inject constructor(
      * Launches a queue of missions in the visible BrowserScreen and suspends
      * until the queue completes or the user cancels. [onEachExtracted] is
      * invoked per page that produced HTML; the suspend value indicates
-     * whether the queue ran to completion.
+     * whether the queue ran to completion. Like [launchMissionAndAwait], the wait is limited
+     * ([USER_WAIT_LOOKUP_MS]) and counts as the user having stopped.
      */
     private suspend fun launchMissionsAndAwait(
         missions: List<BrowserMission>,
@@ -1187,7 +1238,7 @@ class MainViewModel @Inject constructor(
             isBlocked = cbcEnricher::looksLikeBlock,
             retainBrowserForResolve = true,
         )
-        return deferred.await()
+        return awaitWithin(deferred, USER_WAIT_LOOKUP_MS) { giveUpWaiting(USER_WAIT_LOOKUP_MS); BatchOutcome.UserCancelled }
     }
 
     fun harvestWhatsApp() = harvestInBrowser("whatsapp-harvest", BrowserMission.HarvestWhatsApp, "WhatsApp chats", com.hereliesaz.cleanunderwear.util.WebSessions.WHATSAPP) {
@@ -1203,22 +1254,27 @@ class MainViewModel @Inject constructor(
     }
 
     /**
-     * Opens [mission] in the visible browser, where the user signs in (or scans a QR code) if the
-     * service needs it, and imports what [parse] reads from the page it hands back.
+     * Opens [mission] in the visible browser, where the user signs in (or links WhatsApp) if the
+     * service needs it, and imports what [parse] reads from the page it hands back. The browser
+     * leaves the sign-in page to the user, un-scrimmed, and reads only once they are in
+     * (BrowserMission.requiresSignIn), so the page is never dumped while they are still signing in.
      */
     private fun harvestInBrowser(key: String, mission: BrowserMission, what: String, hosts: List<String>, parse: (String) -> List<Target>) {
         viewModelScope.launch(failSafe) {
-            pipelineCoordinator.runExclusive(key) {
+            exclusive(key, "Importing $what") {
                 try {
                     begin(OperationState(description = "Importing $what. Sign in if asked.", progress = -1f))
                     val html = launchMissionAndAwait(mission)
-                    if (html.isNullOrBlank()) return@runExclusive
-                    val found = parse(html)
+                    if (html.isNullOrBlank()) return@exclusive
+                    _operationState.value = _operationState.value.copy(description = "Reading what was found in $what…")
+                    // Parsing a followers or contacts page is heavy; not on the main thread.
+                    val found = withContext(Dispatchers.Default) { parse(html) }
                     com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log("Import: $what yielded ${found.size} contact(s).")
                     harvestContactsUseCase.processManualTargets(found)
                     post(if (found.isEmpty()) "Nothing was read from $what. If you weren't signed in, try again." else "Read ${found.size} from $what.")
                 } finally {
-                    // The sign-in was for this import only.
+                    // The sign-in was for this import only. By now the page has been read and the
+                    // browser closed, so this never wipes a sign-in the import is still using.
                     com.hereliesaz.cleanunderwear.util.WebSessions.forget(hosts)
                     _operationState.value = OperationState(isRunning = false)
                 }
@@ -1333,3 +1389,40 @@ private const val RECENT_RESULTS = 5
 
 /** Automatic update checks run at most this often; the manual check in Settings ignores it. */
 private const val AUTO_UPDATE_CHECK_INTERVAL_MS = 12L * 60 * 60 * 1000
+
+/**
+ * How long a contact's lookups may sit waiting on the user in the browser (a CAPTCHA, a stray tap
+ * on Back) before the run gives up. The wait holds the pipeline lock, so without a limit an
+ * abandoned browser keeps the daily check and Delete everything queued behind it for good.
+ */
+internal const val USER_WAIT_LOOKUP_MS = 15L * 60 * 1000
+
+/** The same limit for an import, where the user may be signing in, linking WhatsApp, or answering 2FA. */
+internal const val USER_WAIT_IMPORT_MS = 20L * 60 * 1000
+
+/** A contacts read requested within this long of the ViewModel's creation, and the first, is the launch one. */
+internal const val LAUNCH_SWEEP_WINDOW_MS = 10_000L
+
+/**
+ * Awaits [deferred] for at most [limitMs]; past that, runs [onTimeout] and returns what it gives.
+ * The deferred itself is left alone (a late answer is ignored by whoever completes it).
+ */
+internal suspend fun <T> awaitWithin(deferred: Deferred<T>, limitMs: Long, onTimeout: () -> T): T =
+    try {
+        withTimeout(limitMs) { deferred.await() }
+    } catch (e: TimeoutCancellationException) {
+        onTimeout()
+    }
+
+/**
+ * Whether a contacts read requested at [now] (both in elapsed-realtime milliseconds) is the one
+ * the app starts by itself at launch: the first request ([alreadyRequested] false), arriving
+ * within [LAUNCH_SWEEP_WINDOW_MS] of [createdAt]. See MainViewModel.sweepContacts.
+ */
+internal fun isLaunchSweep(createdAt: Long, now: Long, alreadyRequested: Boolean): Boolean =
+    !alreadyRequested && now - createdAt in 0..LAUNCH_SWEEP_WINDOW_MS
+
+/** What to tell the user when [what] has to wait for [running] (the busy job's description, if known). */
+internal fun queuedNotice(what: String, running: String?): String =
+    if (running.isNullOrBlank()) "$what will start once the job now running is done."
+    else "$what will start once this is done: $running"

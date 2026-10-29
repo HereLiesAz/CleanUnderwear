@@ -1,3 +1,4 @@
+// HISTORICAL: not used by the app. AndroidInterface.processHtml no longer exists. See scripts/README.md.
 
 (function() {
     let lastHeight = document.body.scrollHeight;

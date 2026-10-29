@@ -10,18 +10,38 @@ import javax.inject.Singleton
  * Reads the WhatsApp Web chat sidebar for distinct conversation partners.
  *
  * Runs in the visible browser ([com.hereliesaz.cleanunderwear.domain.BrowserMission.HarvestWhatsApp]):
- * web.whatsapp.com shows its QR code there for the user to scan with their phone, and [SCRIPT]
- * waits for the chat list to render after linking before handing the page back.
+ * web.whatsapp.com shows its QR code there (the user links with "Link with phone number" under
+ * it, or scans it from a second device: a phone cannot scan a code on its own screen), and
+ * the browser screen leaves the page to them until the chat list is there ([PageProbe.hasChatList]).
+ * [SCRIPT] then reads the list, scrolling it a screen at a time before handing the page back.
  */
 @Singleton
 class WhatsAppHarvester @Inject constructor() {
     companion object {
         const val URL = "https://web.whatsapp.com/"
 
+        /**
+         * How long [SCRIPT] waits for the chat list to be on the page before it gives up and
+         * hands back what is there (the browser screen only runs it once the list is there, so
+         * this is a safety net, not the time the user has to link).
+         */
+        const val LIST_WAIT_MS = 30_000L
+
+        /** How long [SCRIPT] scrolls the list at most, handing back the rows seen by then. */
+        const val SCROLL_BUDGET_MS = 180_000L
+
+        /**
+         * The longest [SCRIPT] runs. The mission's watchdog
+         * ([com.hereliesaz.cleanunderwear.domain.BrowserMission.HarvestWhatsApp]) is longer, so the
+         * script always answers before the screen calls it stuck.
+         */
+        const val MAX_RUN_MS = LIST_WAIT_MS + SCROLL_BUDGET_MS
+
         val SCRIPT = """
         (function() {
             const start = Date.now();
-            const giveUpAfterMs = 240000;
+            const waitForListMs = ${LIST_WAIT_MS};
+            const scrollBudgetMs = ${SCROLL_BUDGET_MS};
 
             function listGrid() {
                 return document.querySelector('div[aria-label="Chat list"][role="grid"]')
@@ -29,10 +49,10 @@ class WhatsAppHarvester @Inject constructor() {
             }
 
             function poll() {
+                // The chat list on the page is what "linked" means: the link page has none.
                 const grid = listGrid();
-                const linked = !document.querySelector('canvas');
-                if (!linked || !grid) {
-                    if (Date.now() - start > giveUpAfterMs) {
+                if (!grid) {
+                    if (Date.now() - start > waitForListMs) {
                         window.HTMLOUT.dump(document.documentElement.outerHTML);
                         return;
                     }
@@ -42,6 +62,7 @@ class WhatsAppHarvester @Inject constructor() {
                 // The list is virtualised: only the rows in view exist. Walk it a screen at a
                 // time, keeping every row seen (by title), and hand back all of them at the end.
                 // A group chat's row is marked, so it isn't read as a person.
+                const scrollStart = Date.now();
                 const seen = new Map();
                 function collect() {
                     grid.querySelectorAll('div[role="listitem"]').forEach(function(row) {
@@ -56,7 +77,7 @@ class WhatsAppHarvester @Inject constructor() {
                 let lastTop = -1;
                 function step() {
                     collect();
-                    if (grid.scrollTop === lastTop || Date.now() - start > giveUpAfterMs) {
+                    if (grid.scrollTop === lastTop || Date.now() - scrollStart > scrollBudgetMs) {
                         window.HTMLOUT.dump('<div>' + Array.from(seen.values()).join('') + '</div>');
                         return;
                     }

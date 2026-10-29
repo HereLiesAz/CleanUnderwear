@@ -1,6 +1,6 @@
 package com.hereliesaz.cleanunderwear.ui
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -23,7 +23,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import com.hereliesaz.cleanunderwear.R
 import com.hereliesaz.cleanunderwear.domain.LookupChoice
 import com.hereliesaz.cleanunderwear.domain.LookupOption
 
@@ -42,14 +45,18 @@ fun ChoicesScreen(viewModel: MainViewModel, onNavigateBack: () -> Unit) {
     val current = ordered.firstOrNull()
 
     Scaffold(
-        topBar = { AppTopBar(title = "Who is it?", onBack = onNavigateBack) },
-        containerColor = MaterialTheme.colorScheme.background
+        topBar = { AppTopBar(title = stringResource(R.string.choices_title), onBack = onNavigateBack) },
+        containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = screenInsets()
     ) { padding ->
         if (current == null) {
-            Column(Modifier.padding(padding).fillMaxSize().padding(Spacing.md), verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                Text("Nothing left to choose.", style = MaterialTheme.typography.titleMedium)
-                AppCaption("When Fill in details finds people for a contact, they wait here for you to say which is them.")
-                AppAction("Done", onNavigateBack)
+            Column(
+                Modifier.padding(padding).contentWidth().fillMaxSize().padding(Spacing.md),
+                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+            ) {
+                Text(stringResource(R.string.choices_nothing_left), style = MaterialTheme.typography.titleMedium)
+                AppCaption(stringResource(R.string.choices_nothing_left_caption))
+                AppAction(stringResource(R.string.done), onNavigateBack)
             }
             return@Scaffold
         }
@@ -75,28 +82,36 @@ private fun ChoiceFor(
 ) {
     val target by viewModel.observeTarget(choice.targetId).collectAsState(initial = null)
     var picked by rememberSaveable { mutableStateOf<Int?>(null) }
+    var confirmNone by rememberSaveable { mutableStateOf(false) }
     val name = target?.displayName ?: choice.contactName
+    val bottomBar = LocalBottomBarHeight.current
 
     LazyColumn(
-        modifier = Modifier.padding(padding).fillMaxSize(),
-        contentPadding = PaddingValues(Spacing.md),
+        modifier = Modifier.padding(padding).contentWidth().fillMaxSize(),
+        contentPadding = PaddingValues(start = Spacing.md, top = Spacing.md, end = Spacing.md, bottom = Spacing.md + bottomBar),
         verticalArrangement = Arrangement.spacedBy(Spacing.md)
     ) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                AppCaption("$remaining contact${if (remaining == 1) "" else "s"} to go")
-                Text("Which of these is $name?", style = MaterialTheme.typography.titleLarge)
+                AppCaption(pluralStringResource(R.plurals.choices_to_go, remaining, remaining))
+                Text(stringResource(R.string.choices_which_is, name), style = MaterialTheme.typography.titleLarge)
                 // What the app has for them, to compare against.
                 target?.let { t ->
                     val known = listOfNotNull(
                         t.phoneNumber,
                         t.email,
                         t.residenceInfo?.takeIf { it.isNotBlank() },
-                        t.dateOfBirth?.let { if (it.startsWith("~")) "born about ${it.removePrefix("~")}" else "born $it" }
+                        t.dateOfBirth?.let {
+                            if (it.startsWith("~")) stringResource(R.string.choices_born_about_lower, it.removePrefix("~"))
+                            else stringResource(R.string.choices_born_lower, it)
+                        }
                     )
-                    AppCaption(if (known.isEmpty()) "You have only their name." else "You have: " + known.joinToString(" · "))
+                    AppCaption(
+                        if (known.isEmpty()) stringResource(R.string.choices_only_name)
+                        else stringResource(R.string.choices_you_have, known.joinToString(" · "))
+                    )
                 }
-                AppCaption("Picking one fills in what $name is missing from it; nothing you already have is changed.")
+                AppCaption(stringResource(R.string.choices_picking_fills, name))
             }
         }
         itemsIndexed(choice.options) { index, option ->
@@ -105,14 +120,27 @@ private fun ChoiceFor(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                 AppAction(
-                    picked?.let { "That's $name" } ?: "Pick one above",
+                    picked?.let { stringResource(R.string.choices_thats, name) } ?: stringResource(R.string.choices_pick_one),
                     { picked?.let { viewModel.chooseLookup(choice.targetId, choice.options[it]) } },
                     Modifier.fillMaxWidth(),
                     enabled = picked != null
                 )
-                AppTextAction("None of these is $name", { viewModel.chooseLookup(choice.targetId, null) })
-                if (remaining > 1) AppTextAction("Decide later", onLater)
+                // Discards everyone found for this contact, so it asks first.
+                AppTextAction(stringResource(R.string.choices_none, name), { confirmNone = true })
+                if (remaining > 1) AppTextAction(stringResource(R.string.choices_decide_later), onLater)
             }
+        }
+    }
+
+    if (confirmNone) {
+        val found = choice.options.size
+        AppDialog(
+            title = stringResource(R.string.choices_none_title, name),
+            confirm = stringResource(R.string.choices_none_confirm),
+            onConfirm = { confirmNone = false; viewModel.chooseLookup(choice.targetId, null) },
+            onDismiss = { confirmNone = false }
+        ) {
+            Text(pluralStringResource(R.plurals.choices_none_body, found, found, name))
         }
     }
 }
@@ -120,19 +148,30 @@ private fun ChoiceFor(
 @Composable
 private fun OptionCard(option: LookupOption, selected: Boolean, onSelect: () -> Unit) {
     AppCard(
-        modifier = Modifier.clickable(onClick = onSelect, role = Role.RadioButton),
+        // selectable, not clickable: TalkBack reads the card as a radio button and whether it is chosen.
+        modifier = Modifier.selectable(selected = selected, onClick = onSelect, role = Role.RadioButton),
         emphasis = selected
     ) {
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
             RadioButton(selected = selected, onClick = null)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-                Text(option.name ?: "No name given", style = MaterialTheme.typography.titleMedium)
-                option.dob?.let { Text(if (it.startsWith("~")) "Born about ${it.removePrefix("~")}" else "Born $it", style = MaterialTheme.typography.bodyMedium) }
+                Text(option.name ?: stringResource(R.string.choices_no_name), style = MaterialTheme.typography.titleMedium)
+                option.dob?.let {
+                    Text(
+                        if (it.startsWith("~")) stringResource(R.string.choices_born_about, it.removePrefix("~"))
+                        else stringResource(R.string.choices_born, it),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
                 option.address?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                 option.phone?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
-                if (option.fits.isNotEmpty()) AppCaption("Fits: " + option.fits.joinToString(", ") { it.replaceFirstChar { c -> c.lowercase() } })
-                if (option.differs.isNotEmpty()) AppCaption("Doesn't fit: " + option.differs.joinToString(", ") { it.replaceFirstChar { c -> c.lowercase() } })
-                AppCaption("Found by searching their ${option.foundBy.joinToString(" and ")}")
+                if (option.fits.isNotEmpty()) {
+                    AppCaption(stringResource(R.string.choices_fits, option.fits.joinToString(", ") { it.replaceFirstChar { c -> c.lowercase() } }))
+                }
+                if (option.differs.isNotEmpty()) {
+                    AppCaption(stringResource(R.string.choices_differs, option.differs.joinToString(", ") { it.replaceFirstChar { c -> c.lowercase() } }))
+                }
+                AppCaption(stringResource(R.string.choices_found_by, option.foundBy.joinToString(" and ")))
             }
         }
     }

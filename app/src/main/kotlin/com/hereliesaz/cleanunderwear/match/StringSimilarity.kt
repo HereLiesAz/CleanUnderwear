@@ -93,16 +93,28 @@ object StringSimilarity {
      * [s] with accents removed, one character for one ("José" → "Jose"), so offsets into the
      * folded text are offsets into the original. Rosters are mostly unaccented capitals while
      * phone books keep the accents; both sides are folded before comparing.
+     *
+     * Only a character that is a base letter plus combining marks is folded. Anything else is
+     * left alone: "ß" and "æ" have no decomposition, and a Hangul syllable decomposes into
+     * conjoining Jamo (not marks), so taking the first piece would turn "김" into a lone Jamo.
      */
     fun foldDiacritics(s: String): String {
         if (s.all { it.code < 128 }) return s
         val out = StringBuilder(s.length)
         for (c in s) {
-            val base = if (c.code < 128) c else java.text.Normalizer.normalize(c.toString(), java.text.Normalizer.Form.NFD)[0]
-            out.append(base)
+            out.append(if (c.code < 128) c else baseOf(c))
         }
         return out.toString()
     }
+
+    private fun baseOf(c: Char): Char {
+        val nfd = java.text.Normalizer.normalize(c.toString(), java.text.Normalizer.Form.NFD)
+        if (nfd.length < 2 || isCombiningMark(nfd[0])) return c
+        for (i in 1 until nfd.length) if (!isCombiningMark(nfd[i])) return c
+        return nfd[0]
+    }
+
+    private fun isCombiningMark(c: Char) = Character.getType(c) == Character.NON_SPACING_MARK.toInt()
 
     /** Lowercased letter/hyphen/apostrophe token, for name comparison. */
     fun normalizeNameToken(raw: String?): String? =

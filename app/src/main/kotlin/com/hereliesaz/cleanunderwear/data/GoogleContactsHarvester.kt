@@ -10,8 +10,9 @@ import javax.inject.Singleton
  * Reads the user's contact list from contacts.google.com.
  *
  * Runs in the visible browser ([com.hereliesaz.cleanunderwear.domain.BrowserMission.HarvestGoogleContacts]),
- * so the user signs in there when Google redirects to its sign-in page. [SCRIPT] is re-run after
- * every page load and only reads once it is back on contacts.google.com.
+ * so the user signs in there when Google redirects to its sign-in page: the browser screen leaves
+ * any page off contacts.google.com to them (un-scrimmed) and runs [SCRIPT] once they are back on
+ * it. [SCRIPT] is re-run after every page load and only reads on contacts.google.com.
  */
 @Singleton
 class GoogleContactsHarvester @Inject constructor() {

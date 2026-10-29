@@ -191,12 +191,11 @@ class ContactHarvester @Inject constructor(
         loggedNonCatalogUrls: MutableSet<String>,
     ) {
         val statusMatch = "\\[Registry Status: (.*?)\\]".toRegex().find(note)
-        // A confirmed death or custody is restored only from a block this app signed, with a
-        // record link from the catalog; any other note that merely says so (typed by hand, or
-        // from an older version) comes back as a possible match the user confirms again.
-        val trusted = com.hereliesaz.cleanunderwear.util.ContactNote.isSigned(note)
+        // A confirmed death or custody is never restored as confirmed: the signature line is
+        // plain text anyone can type or sync in with a shared contact, not authentication. It
+        // comes back as a possible match the user confirms again ([ContactNote.restore]).
         statusMatch?.let {
-            data.status = when (it.groupValues[1]) {
+            val read = when (it.groupValues[1]) {
                 "Monitoring" -> TargetStatus.MONITORING
                 "Unverified" -> TargetStatus.UNVERIFIED
                 "Incarcerated" -> TargetStatus.INCARCERATED
@@ -204,6 +203,9 @@ class ContactHarvester @Inject constructor(
                 "Archived" -> TargetStatus.IGNORED
                 else -> TargetStatus.UNKNOWN
             }
+            val restored = com.hereliesaz.cleanunderwear.util.ContactNote.restore(read)
+            data.status = restored.status
+            if (restored.claimed != null) data.restoredFrom = restored.claimed
         }
 
         val sinceMatch = "Status Since: (.*?)(\n|$)".toRegex().find(note)
@@ -235,13 +237,6 @@ class ContactHarvester @Inject constructor(
                 DiagnosticLogger.log("Ignoring non-catalog Obit URL on contact note: $url")
             }
         }
-
-        val confirmed = data.status == TargetStatus.DECEASED || data.status == TargetStatus.INCARCERATED
-        val evidence = if (data.status == TargetStatus.DECEASED) data.obituaryUrl else data.lockupUrl
-        if (confirmed && !(trusted && evidence != null)) {
-            data.restoredFrom = data.status
-            data.status = TargetStatus.POSSIBLE_MATCH
-        }
     }
 
     private fun parseNoteDate(raw: String): Long? = try {
@@ -262,7 +257,7 @@ class ContactHarvester @Inject constructor(
         var statusSince: Long = 0L,
         var lockupUrl: String? = null,
         var obituaryUrl: String? = null,
-        /** A confirmed status read from an unsigned note, restored as a possible match instead. */
+        /** A confirmed status read from a note, restored as a possible match instead. */
         var restoredFrom: TargetStatus? = null
     )
 }
