@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -20,11 +21,13 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
+import com.hereliesaz.cleanunderwear.R
 import com.hereliesaz.cleanunderwear.ui.MainViewModel.Continues
 import com.hereliesaz.cleanunderwear.ui.MainViewModel.OperationState
 
@@ -54,13 +57,13 @@ fun OperationOverlay(
     ) {
         BlurBehind()
         MaterialTheme(colorScheme = SurveillanceDarkColorScheme, typography = MaterialTheme.typography) {
-            Box(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
+            Box(modifier = Modifier.fillMaxSize().systemBarsPadding().displayCutoutPadding()) {
                 Column(
                     modifier = Modifier.align(Alignment.Center).fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(Spacing.md)
                 ) {
-                    LoadingCaption(state.description.ifBlank { "Working…" })
+                    LoadingCaption(state.description.ifBlank { stringResource(R.string.op_working) })
                     if (state.progress in 0f..1f) {
                         LinearProgressIndicator(
                             progress = { state.progress },
@@ -78,17 +81,17 @@ fun OperationOverlay(
                 ) {
                     continuesNote(state.continues)?.let {
                         Text(
-                            it,
+                            stringResource(it),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
                         )
-                        AppTextAction("Keep using the app", onKeepUsingApp)
+                        AppTextAction(stringResource(R.string.op_keep_using), onKeepUsingApp)
                     }
                     if (state.cancellable) {
-                        AppAction("Cancel", onCancel)
+                        AppAction(stringResource(R.string.cancel), onCancel)
                     } else {
-                        AppCaption("This can't be stopped partway. It only takes a moment.")
+                        AppCaption(stringResource(R.string.op_cant_stop))
                     }
                 }
             }
@@ -103,7 +106,7 @@ fun OperationOverlay(
 @Composable
 fun OperationBar(state: OperationState, onShow: () -> Unit, onCancel: () -> Unit, modifier: Modifier = Modifier) {
     Surface(
-        modifier = modifier.fillMaxWidth().clickable(onClickLabel = "Show progress", onClick = onShow),
+        modifier = modifier.fillMaxWidth().clickable(onClickLabel = stringResource(R.string.op_show_progress), onClick = onShow),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         contentColor = MaterialTheme.colorScheme.onSurface
     ) {
@@ -129,7 +132,7 @@ fun OperationBar(state: OperationState, onShow: () -> Unit, onCancel: () -> Unit
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        state.description.ifBlank { "Working…" },
+                        state.description.ifBlank { stringResource(R.string.op_working) },
                         style = MaterialTheme.typography.bodyMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -138,11 +141,12 @@ fun OperationBar(state: OperationState, onShow: () -> Unit, onCancel: () -> Unit
                         Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     AppCaption(
-                        if (state.continues == Continues.ANYWHERE) "Running. You can leave the app; it keeps going."
-                        else "Running while you use the app."
+                        stringResource(
+                            if (state.continues == Continues.ANYWHERE) R.string.op_running_anywhere else R.string.op_running_in_app
+                        )
                     )
                 }
-                if (state.cancellable) AppTextAction("Cancel", onCancel)
+                if (state.cancellable) AppTextAction(stringResource(R.string.cancel), onCancel)
             }
         }
     }
@@ -173,10 +177,11 @@ fun FindingsSoFar(lines: List<String>, modifier: Modifier = Modifier) {
     }
 }
 
-private fun continuesNote(continues: Continues): String? = when (continues) {
+@androidx.annotation.StringRes
+private fun continuesNote(continues: Continues): Int? = when (continues) {
     Continues.NO -> null
-    Continues.IN_APP -> "This keeps going while you use the rest of the app."
-    Continues.ANYWHERE -> "This keeps going while you use the rest of the app, and after you leave it."
+    Continues.IN_APP -> R.string.op_continues_in_app
+    Continues.ANYWHERE -> R.string.op_continues_anywhere
 }
 
 /**

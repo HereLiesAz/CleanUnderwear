@@ -361,4 +361,80 @@
     <string name="review_alt_number">Possible current number: %1$s</string>
     <string name="review_alt_address">Possible address: %1$s</string>
     <string name="review_alt_nothing">Nothing found that could be confirmed as %1$s.</string>
+
+    <!-- The app shell: navigation rail and its help (ui/CleanUnderwearApp.kt) -->
+    <string name="ok">OK</string>
+    <string name="help_registry">Everyone the app checks, with what the last check found.</string>
+    <string name="help_review">Contacts that may be two people combined, or have an out-of-date number.</string>
+    <string name="help_choices">People that Fill in details found, waiting for you to say which is your contact.</string>
+    <string name="help_harvest">Read the people saved on your phone into the app.</string>
+    <string name="help_ingest">Add someone who isn\'t in your phone\'s contacts.</string>
+    <string name="help_update">Run the daily check now instead of waiting for it.</string>
+    <string name="help_resolve">Look up missing names, numbers and ages on a people-search site, contact by contact. Asks first.</string>
+    <string name="help_actions">Things to do with your contacts: import, add, check, fill in.</string>
+    <string name="help_sort">The order of the contact list. The current one is ticked.</string>
+    <string name="help_sort_name">A to Z by name.</string>
+    <string name="help_sort_status">What needs you first: possible matches, then weak ones, then confirmed, then the rest.</string>
+    <string name="help_sort_date">Most recently checked first.</string>
+    <string name="help_archives">Show or hide contacts you archived.</string>
+    <string name="help_settings">Alerts, check time, imports, your data.</string>
+    <string name="help_log">Show what the app is doing, step by step.</string>
+    <string name="rail_contacts">Contacts</string>
+    <string name="rail_contacts_info">Everyone the app checks.</string>
+    <string name="rail_review">Review</string>
+    <string name="rail_review_info">Possible wrong combinations and old numbers.</string>
+    <string name="rail_choices_info">Say which person found is your contact.</string>
+    <string name="rail_actions">Actions</string>
+    <string name="rail_import">Import contacts</string>
+    <string name="rail_add_someone">Add someone</string>
+    <string name="rail_check_now">Check now</string>
+    <string name="rail_fill_in">Fill in details</string>
+    <string name="rail_sort">Sort</string>
+    <string name="rail_sort_ticked">✓ %1$s</string>
+    <string name="rail_sort_name">By name</string>
+    <string name="rail_sort_status">By status</string>
+    <string name="rail_sort_date">By last check</string>
+    <string name="rail_hide_archived">Hide archived</string>
+    <string name="rail_show_archived">Show archived</string>
+    <string name="rail_archived_info">Show or hide archived contacts.</string>
+    <string name="rail_hide_log">Hide log</string>
+    <string name="rail_show_log">Show log</string>
+    <string name="fill_nothing_title">Nothing to fill in</string>
+    <string name="fill_nothing_body">Every contact already has a full name and an age.</string>
+    <plurals name="fill_title">
+        <item quantity="one">Fill in details for %d contact?</item>
+        <item quantity="other">Fill in details for %d contacts?</item>
+    </plurals>
+    <string name="fill_start">Start</string>
+    <string name="fill_body">Each contact missing a full name or an age is looked up on CyberBackgroundChecks, a people-search site, in the app\'s browser, using the name, number or email you have for them. It can take a minute or more per contact, and you may be asked to solve CAPTCHAs. Everyone is looked up first; then you choose, contact by contact, which person found is yours. You can stop at any time and choose from what was found so far.</string>
+    <string name="gone_title">Contact</string>
+    <string name="gone_heading">This contact is gone.</string>
+    <string name="gone_caption">It was removed from the app\'s list, so there is nothing to show here.</string>
+    <string name="gone_back">Back to contacts</string>
+
+    <!-- Busy screen and its bar (ui/OperationOverlay.kt) -->
+    <string name="op_working">Working…</string>
+    <string name="op_keep_using">Keep using the app</string>
+    <string name="op_cant_stop">This can\'t be stopped partway. It only takes a moment.</string>
+    <string name="op_show_progress">Show progress</string>
+    <string name="op_running_anywhere">Running. You can leave the app; it keeps going.</string>
+    <string name="op_running_in_app">Running while you use the app.</string>
+    <string name="op_continues_in_app">This keeps going while you use the rest of the app.</string>
+    <string name="op_continues_anywhere">This keeps going while you use the rest of the app, and after you leave it.</string>
+
+    <!-- First run (ui/OnboardingScreen.kt) -->
+    <string name="onboarding_contacts_title">Your contacts</string>
+    <string name="onboarding_contacts_body">The app reads the people saved on your phone, and can import friends from other accounts if you ask it to.</string>
+    <string name="onboarding_daily_title">A daily check</string>
+    <string name="onboarding_daily_body">Once a day, when your phone is online and its battery isn\'t low, each contact\'s name is looked up in public jail, prison, court and obituary records, and in the news. You\'re told if something turns up.</string>
+    <string name="onboarding_wrong_title">Matches can be wrong</string>
+    <string name="onboarding_wrong_body">Many people share a name. A record that resembles someone you know is often someone else. The app shows you why it thinks a record fits, and no death or arrest is recorded about a contact until you confirm it.</string>
+    <string name="onboarding_sad_title">This can bring sad news</string>
+    <string name="onboarding_sad_body">You may learn that someone has died or been arrested. Alerts about either can be turned off in Settings; matches still wait for you in the app.</string>
+    <string name="onboarding_data_title">Your data</string>
+    <string name="onboarding_data_body">Your contact list stays on your phone. To check someone, their name is sent to the records and news sites being searched; looking up missing details sends their name, number or email to a people-search site. Each checked contact\'s note gets a short line from the app: that they\'re checked daily, or a status you confirmed. Notes sync with your contacts account; a possible match is never written there. A setting turns the notes off.</string>
+    <string name="onboarding_page_of">%1$d of %2$d</string>
+    <string name="onboarding_permissions_note">Next, Android asks to let the app read and update your contacts, and to send you alerts.</string>
+    <string name="onboarding_continue">Continue</string>
+    <string name="onboarding_next">Next</string>
 </resources>

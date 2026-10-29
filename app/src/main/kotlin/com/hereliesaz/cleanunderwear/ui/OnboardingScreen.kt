@@ -14,38 +14,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import com.hereliesaz.cleanunderwear.R
 import kotlinx.coroutines.launch
 
-private data class Page(val title: String, val body: String)
+private data class Page(@androidx.annotation.StringRes val title: Int, @androidx.annotation.StringRes val body: Int)
 
 private val PAGES = listOf(
-    Page(
-        "Your contacts",
-        "The app reads the people saved on your phone, and can import friends from other accounts if you ask it to."
-    ),
-    Page(
-        "A daily check",
-        "Once a day, when your phone is online and its battery isn't low, each contact's name is looked up in public " +
-            "jail, prison, court and obituary records, and in the news. You're told if something turns up."
-    ),
-    Page(
-        "Matches can be wrong",
-        "Many people share a name. A record that resembles someone you know is often someone else. The app shows you " +
-            "why it thinks a record fits, and no death or arrest is recorded about a contact until you confirm it."
-    ),
-    Page(
-        "This can bring sad news",
-        "You may learn that someone has died or been arrested. Alerts about either can be turned off in Settings; " +
-            "matches still wait for you in the app."
-    ),
-    Page(
-        "Your data",
-        "Your contact list stays on your phone. To check someone, their name is sent to the records and news sites " +
-            "being searched; looking up missing details sends their name, number or email to a people-search site. " +
-            "Each checked contact's note gets a short line from the app: that they're checked daily, or a status " +
-            "you confirmed. Notes sync with your contacts account; a possible match is never written there."
-    )
+    Page(R.string.onboarding_contacts_title, R.string.onboarding_contacts_body),
+    Page(R.string.onboarding_daily_title, R.string.onboarding_daily_body),
+    Page(R.string.onboarding_wrong_title, R.string.onboarding_wrong_body),
+    Page(R.string.onboarding_sad_title, R.string.onboarding_sad_body),
+    Page(R.string.onboarding_data_title, R.string.onboarding_data_body)
 )
 
 /**
@@ -60,7 +41,7 @@ fun OnboardingScreen(onComplete: () -> Unit) {
     val permissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { onComplete() }
     val last = pagerState.currentPage == PAGES.lastIndex
 
-    Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
+    Column(modifier = Modifier.fillMaxSize().systemBarsPadding().displayCutoutPadding().contentWidth()) {
         HorizontalPager(state = pagerState, modifier = Modifier.weight(1f)) { page ->
             // Scrolls, so a page still reads whole at a large font size.
             Column(
@@ -71,10 +52,10 @@ fun OnboardingScreen(onComplete: () -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Text(PAGES[page].title, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+                Text(stringResource(PAGES[page].title), style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
                 Spacer(modifier = Modifier.height(Spacing.md))
                 Text(
-                    PAGES[page].body,
+                    stringResource(PAGES[page].body),
                     style = MaterialTheme.typography.bodyLarge,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -84,12 +65,12 @@ fun OnboardingScreen(onComplete: () -> Unit) {
 
         Column(modifier = Modifier.fillMaxWidth().padding(Spacing.lg), verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
             AppCaption(
-                "${pagerState.currentPage + 1} of ${PAGES.size}",
+                stringResource(R.string.onboarding_page_of, pagerState.currentPage + 1, PAGES.size),
                 Modifier.align(Alignment.CenterHorizontally)
             )
             if (last) {
-                AppCaption("Next, Android asks to let the app read and update your contacts, and to send you alerts.")
-                AppAction("Continue", {
+                AppCaption(stringResource(R.string.onboarding_permissions_note))
+                AppAction(stringResource(R.string.onboarding_continue), {
                     val wanted = buildList {
                         add(Manifest.permission.READ_CONTACTS)
                         add(Manifest.permission.WRITE_CONTACTS)
@@ -99,7 +80,7 @@ fun OnboardingScreen(onComplete: () -> Unit) {
                 })
             } else {
                 // No Skip: the pages on wrong matches and on sad news are the ones not to miss.
-                AppAction("Next", { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) } })
+                AppAction(stringResource(R.string.onboarding_next), { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) } })
             }
         }
     }
