@@ -1378,3 +1378,40 @@ private const val RECENT_RESULTS = 5
 
 /** Automatic update checks run at most this often; the manual check in Settings ignores it. */
 private const val AUTO_UPDATE_CHECK_INTERVAL_MS = 12L * 60 * 60 * 1000
+
+/**
+ * How long a contact's lookups may sit waiting on the user in the browser (a CAPTCHA, a stray tap
+ * on Back) before the run gives up. The wait holds the pipeline lock, so without a limit an
+ * abandoned browser keeps the daily check and Delete everything queued behind it for good.
+ */
+internal const val USER_WAIT_LOOKUP_MS = 15L * 60 * 1000
+
+/** The same limit for an import, where the user may be signing in, linking WhatsApp, or answering 2FA. */
+internal const val USER_WAIT_IMPORT_MS = 20L * 60 * 1000
+
+/** A contacts read requested within this long of the ViewModel's creation, and the first, is the launch one. */
+internal const val LAUNCH_SWEEP_WINDOW_MS = 10_000L
+
+/**
+ * Awaits [deferred] for at most [limitMs]; past that, runs [onTimeout] and returns what it gives.
+ * The deferred itself is left alone (a late answer is ignored by whoever completes it).
+ */
+internal suspend fun <T> awaitWithin(deferred: Deferred<T>, limitMs: Long, onTimeout: () -> T): T =
+    try {
+        withTimeout(limitMs) { deferred.await() }
+    } catch (e: TimeoutCancellationException) {
+        onTimeout()
+    }
+
+/**
+ * Whether a contacts read requested at [now] (both in elapsed-realtime milliseconds) is the one
+ * the app starts by itself at launch: the first request ([alreadyRequested] false), arriving
+ * within [LAUNCH_SWEEP_WINDOW_MS] of [createdAt]. See MainViewModel.sweepContacts.
+ */
+internal fun isLaunchSweep(createdAt: Long, now: Long, alreadyRequested: Boolean): Boolean =
+    !alreadyRequested && now - createdAt in 0..LAUNCH_SWEEP_WINDOW_MS
+
+/** What to tell the user when [what] has to wait for [running] (the busy job's description, if known). */
+internal fun queuedNotice(what: String, running: String?): String =
+    if (running.isNullOrBlank()) "$what will start once the job now running is done."
+    else "$what will start once this is done: $running"
