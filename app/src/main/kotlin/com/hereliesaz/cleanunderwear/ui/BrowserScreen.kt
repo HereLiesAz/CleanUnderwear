@@ -226,22 +226,50 @@ fun BrowserScreen(
     // whose results may arrive only after a CAPTCHA or a redirect; imports whose
     // scripts walk to the list) extract from the new page. The rest extract
     // exactly once (the automationRan guard).
-    LaunchedEffect(batchId, currentIndex, pageLoadCount, paused) {
+    //
+    // An import (requiresSignIn) first checks the page is not a sign-in page: if it is, the page
+    // is the user's (needsSignIn) and nothing is injected until it stops being one.
+    LaunchedEffect(batchId, currentIndex, pageLoadCount, paused, needsSignIn) {
         if (!mission.autoExtract || batchComplete) return@LaunchedEffect
-        if (paused || !pageReady) return@LaunchedEffect
+        if (paused || needsSignIn || !pageReady) return@LaunchedEffect
         if (!mission.rerunAfterNavigation && automationRan) return@LaunchedEffect
         // Wait for the page to settle rather than a fixed beat: a slow SPA would otherwise be
         // dumped empty and read as "nothing found".
         awaitRenderedContent(webView)
         if (!paused && !batchComplete && pageReady) {
-            val token = extractionGate.beginExtraction() ?: return@LaunchedEffect
+            if (mission.requiresSignIn) {
+                val page = probePage(webView)
+                if (page != null && mission.isSignInPage(page)) {
+                    DiagnosticLogger.log("BrowserScreen: mission ${currentIndex + 1} is on a sign-in page; waiting for the user")
+                    waitForSignIn()
+                    return@LaunchedEffect
+                }
+            }
+            val missionKey = "$batchId-$currentIndex"
+            val token = extractionGate.beginExtraction(missionKey) ?: return@LaunchedEffect
             val script = extractionGate.tagScript(
                 mission.extractionScript,
                 token,
-                "$batchId-$currentIndex"
+                missionKey
             )
             automationRan = true
             webView?.evaluateJavascript(script, null)
+        }
+    }
+
+    // While the user signs in: look at the page now and then, and take it back when it is the
+    // page to read. Polling, because the page often changes without a navigation (the QR page
+    // turns into the chat list in place) and then no page-finished event says so.
+    LaunchedEffect(batchId, currentIndex, needsSignIn) {
+        if (!needsSignIn) return@LaunchedEffect
+        while (!batchComplete) {
+            delay(SIGN_IN_POLL_MS)
+            val page = probePage(webView) ?: continue
+            if (!mission.isSignInPage(page)) {
+                DiagnosticLogger.log("BrowserScreen: mission ${currentIndex + 1} is past the sign-in page; carrying on")
+                needsSignIn = false
+                return@LaunchedEffect
+            }
         }
     }
 
@@ -249,9 +277,11 @@ fun BrowserScreen(
     // fails to finish loading or an extraction never calls back. At 30s,
     // unmask the browser and let the user retry, skip, or abort.
     // Browse-only missions are exempt: there's no extraction to time out.
-    LaunchedEffect(batchId, currentIndex, paused) {
+    // Time the user spends signing in is not counted (the clock restarts when the page is
+    // handed back), so a slow sign-in or QR link never trips it.
+    LaunchedEffect(batchId, currentIndex, paused, needsSignIn) {
         if (!mission.autoExtract || batchComplete) return@LaunchedEffect
-        if (paused) return@LaunchedEffect
+        if (paused || needsSignIn) return@LaunchedEffect
         delay(mission.watchdogMs)
         if (!paused && !batchComplete) {
             DiagnosticLogger.log(
@@ -280,32 +310,36 @@ fun BrowserScreen(
         onDispose {
             extractionGate.finish()
             CookieManager.getInstance().flush()
-            webView?.let {
-                try {
-                    it.stopLoading()
-                    // Detach before destroying, as Chromium expects.
-                    (it.parent as? android.view.ViewGroup)?.removeView(it)
-                    it.destroy()
-                } catch (e: Exception) {
-                    DiagnosticLogger.log("BrowserScreen: WebView destroy failed: ${e.message}")
-                }
+            val view = webView
+            // The Activity is being rebuilt for a rotation (or another configuration change) and the
+            // mission is still going: keep the page alive for the new screen instead of destroying
+            // it, so a half-finished sign-in or CAPTCHA survives. Anything else ends the page.
+            val rotating = hostContext.findActivity()?.isChangingConfigurations == true && !batchComplete
+            if (view != null && rotating) {
+                BrowserRetention.park(host, view)
+            } else {
+                BrowserRetention.destroy(view)
+                host.view = null
             }
             webView = null
         }
     }
 
-    // System Back: on a page waiting for the user (a sign-in, a CAPTCHA), one page back in the
-    // site, as in any browser; otherwise the same as the top bar's Stop, asked first so a stray
-    // gesture doesn't end a run of lookups. Without this, Back closed the app mid-run.
+    // System Back: on a browse-only page, or one waiting for the user (a sign-in, a CAPTCHA), one
+    // page back in the site, as in any browser; otherwise the same as the top bar's Stop, asked
+    // first so a stray gesture doesn't end a run of lookups. Without this, Back closed the app
+    // mid-run. A browse-only page never pauses, so it steps back whenever it can.
     var confirmStop by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     androidx.activity.compose.BackHandler {
         val view = webView
-        if (paused && view?.canGoBack() == true) view.goBack() else confirmStop = true
+        val userHasThePage = !mission.autoExtract || paused || needsSignIn
+        if (userHasThePage && view?.canGoBack() == true) view.goBack() else confirmStop = true
     }
     if (confirmStop) {
         AppDialog(
             title = when {
                 stopsBatch -> "Stop the lookups?"
+                mission.requiresSignIn -> "Stop the import?"
                 mission.autoExtract -> "Stop this lookup?"
                 else -> "Close the page?"
             },
@@ -345,37 +379,48 @@ fun BrowserScreen(
                     .weight(1f)
             ) {
             // See the darkening filter below: the page blurs behind it (Android 12+).
-            val darkened = mission.autoExtract && !paused
+            // Never over a sign-in page (needsSignIn): the user is signing in there.
+            val darkened = mission.autoExtract && !paused && !needsSignIn
             AndroidView(
                 modifier = Modifier.fillMaxSize().then(if (darkened) Modifier.blur(16.dp) else Modifier),
-                factory = { context ->
+                factory = { viewContext ->
                     val cookies = CookieManager.getInstance()
                     cookies.setAcceptCookie(true)
 
-                    val view = WebView(context)
-                    view.apply {
-                        cookies.setAcceptThirdPartyCookies(this, true)
-
-                        settings.apply {
-                            javaScriptEnabled = true
-                            domStorageEnabled = true
-                            // Default UA: this is a real, user-facing browser
-                            // session — do NOT spoof Chrome the way the covert
-                            // scraper does.
+                    val kept = host.view
+                    val view = if (kept != null) {
+                        // A rotation: the same page (BrowserRetention), now in the new window.
+                        (kept.context as? MutableContextWrapper)?.setBaseContext(viewContext)
+                        (kept.parent as? android.view.ViewGroup)?.removeView(kept)
+                        kept
+                    } else {
+                        // A wrapper whose base context can be swapped, so the page can outlive
+                        // the Activity it was made in (and not leak it while parked).
+                        WebView(MutableContextWrapper(viewContext)).also { fresh ->
+                            cookies.setAcceptThirdPartyCookies(fresh, true)
+                            fresh.settings.apply {
+                                javaScriptEnabled = true
+                                domStorageEnabled = true
+                                // Default UA: this is a real, user-facing browser
+                                // session — do NOT spoof Chrome the way the covert
+                                // scraper does.
+                            }
+                            // Under a random name, once per page (the bridge stays registered
+                            // through a rotation): see BrowserExtractionGate.
+                            fresh.addJavascriptInterface(host.bridge, host.bridgeName)
                         }
-
-                        addJavascriptInterface(
-                            HtmlDumpInterface { token, html ->
-                                // JavascriptInterface callbacks run off the UI
-                                // thread. Never mutate Compose state or parse
-                                // scraped HTML directly on that thread.
-                                view.post {
-                                    if (webView === view) onHtmlExtracted(token, html)
-                                }
-                            },
-                            "HTMLOUT"
-                        )
-
+                    }
+                    host.view = view
+                    // The bridge is the same object across a rotation; point it at this screen.
+                    host.bridge.sink = { token, missionKey, html ->
+                        // JavascriptInterface callbacks run off the UI
+                        // thread. Never mutate Compose state or parse
+                        // scraped HTML directly on that thread.
+                        view.post {
+                            if (webView === view) onHtmlExtracted(token, missionKey, html)
+                        }
+                    }
+                    view.apply {
                         webViewClient = object : WebViewClient() {
                             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                                 if (batchComplete) return
@@ -456,6 +501,8 @@ fun BrowserScreen(
                         // above owns URL loading, including the very first one.
                     }
                     webView = view
+                    // It was paused with the old window; this screen's lifecycle may already be resumed.
+                    if (kept != null) view.onResume()
                     view
                 }
             )
@@ -464,9 +511,12 @@ fun BrowserScreen(
                 // running its extraction, scrim the page and swallow every touch
                 // so the user cannot perturb the automation mid-flight. The
                 // scrim lifts the instant the mission pauses for required
-                // interaction (captcha / login) — see [paused] — handing the
-                // live page back to the user. Browse-only missions are never
-                // darkened. Cancel at the bottom stops the lookup (the whole run, for Resolve).
+                // interaction (captcha / login) — see [paused] — or the page is a
+                // sign-in page an import is waiting on — see [needsSignIn] —
+                // handing the live page back to the user. Browse-only missions
+                // are never darkened. "Let me use the page" lifts it on request
+                // (a step the checks can't see: a CAPTCHA, a "was this you?" prompt).
+                // Cancel at the bottom stops the lookup (the whole run, for Resolve).
                 if (darkened) {
                     val blurs = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
                     Box(
@@ -487,14 +537,25 @@ fun BrowserScreen(
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.spacedBy(Spacing.md)
                             ) {
-                                LoadingCaption(if (!pageReady) "Loading the page…" else "Reading the page. Please don't touch it.")
+                                LoadingCaption(
+                                    when {
+                                        !pageReady -> "Loading the page…"
+                                        mission.requiresSignIn && !automationRan -> "Checking that you're signed in…"
+                                        else -> "Reading the page. Please don't touch it."
+                                    }
+                                )
                                 FindingsSoFar(findings)
                             }
-                            AppAction(
-                                "Cancel",
-                                ::cancel,
-                                Modifier.align(Alignment.BottomCenter).padding(Spacing.lg)
-                            )
+                            Column(
+                                modifier = Modifier.align(Alignment.BottomCenter).padding(Spacing.lg),
+                                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+                            ) {
+                                AppAction(
+                                    "Let me use the page",
+                                    { if (mission.requiresSignIn) waitForSignIn() else paused = true }
+                                )
+                                AppAction("Cancel", ::cancel)
+                            }
                         }
                     }
                 }
@@ -557,11 +618,29 @@ fun BrowserScreen(
                     }
                 }
             }
+            // An import waiting on the user to sign in (or link WhatsApp): say so, plainly, under
+            // the live page. It carries on by itself; Stop is the only control it needs.
+            if (needsSignIn && !paused) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+                ) {
+                    Text(
+                        mission.signInPrompt,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    AppCaption("Nothing is read until you're in. Back steps back through the pages you visit.")
+                    AppAction("Stop", ::cancel)
+                }
+            }
             // During an auto-extract mission the darkening filter over the
             // WebView is the sole status surface ("Loading…" / "Reading…") and
-            // blocks interference; its only control is Cancel. Browse-only
-            // missions show no bottom button; the user dismisses via the
-            // up-arrow in the top bar when done reading.
+            // blocks interference; its controls are Let me use the page and
+            // Cancel. Browse-only missions show no bottom button; the user
+            // dismisses via the up-arrow in the top bar when done reading.
         }
     }
 }
