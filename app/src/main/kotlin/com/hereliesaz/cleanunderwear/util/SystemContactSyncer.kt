@@ -27,6 +27,8 @@ import javax.inject.Singleton
  * line ([ContactNote]). That block is rewritten when its content changes and nothing else in the
  * note is touched: whatever the user wrote stays, above it.
  *
+ * The person can turn all of this off ([PREF_NOTE_WRITE_BACK_ENABLED]); then no note is touched.
+ *
  * Only settled statuses are written: Monitoring, and what the user confirmed or chose
  * (Incarcerated, Deceased, Archived). A possible match is never written: notes sync to the
  * contact's account (Google, Samsung…), and an unconfirmed "may have died" doesn't belong there.
@@ -34,14 +36,39 @@ import javax.inject.Singleton
 @Singleton
 class SystemContactSyncer @Inject constructor(@ApplicationContext private val context: Context) {
 
-    private companion object {
-        const val NOTE_BATCH = 100
+    companion object {
+        private const val NOTE_BATCH = 100
+
+        /** SharedPreferences file the app's settings live in (the same one the UI reads). */
+        private const val PREFS = "clean_underwear_prefs"
+
+        /**
+         * Boolean preference, default true: whether the app writes its status block into contact
+         * notes at all. Notes sync to the contact's account (Google, Samsung…), where anyone with
+         * access to the account can read them, so a person who doesn't want "Monitoring" there
+         * turns it off. Read it with [noteWriteBackEnabled]; the UI sets it with
+         * `prefs.edit { putBoolean(PREF_NOTE_WRITE_BACK_ENABLED, on) }`.
+         */
+        const val PREF_NOTE_WRITE_BACK_ENABLED = "note_write_back_enabled"
+
+        /** Whether notes may be written; true until the person turns it off. */
+        fun noteWriteBackEnabled(context: Context): Boolean = try {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(PREF_NOTE_WRITE_BACK_ENABLED, true)
+        } catch (e: Exception) {
+            true
+        }
     }
 
     private val dateFormat: DateTimeFormatter =
         DateTimeFormatter.ofPattern("MM/dd/yyyy", Locale.US).withZone(ZoneId.systemDefault())
 
+    /**
+     * Writes [target]'s block into its note, unless the person turned note write-back off
+     * ([PREF_NOTE_WRITE_BACK_ENABLED]); then nothing is written, changed or removed. Every note
+     * write goes through here.
+     */
     fun syncToSystem(target: Target) {
+        if (!noteWriteBackEnabled(context)) return
         try {
             val block = ContactNote.block(target) { dateFormat.format(Instant.ofEpochMilli(it)) }
             // A stale number may now belong to a stranger's contact; never write this person's status there.
@@ -213,6 +240,23 @@ class SystemContactSyncer @Inject constructor(@ApplicationContext private val co
  */
 object ContactNote {
     const val SIGNATURE = "— CleanUnderwear"
+
+    /** A status read back from a note: what to use, and the confirmed claim it was downgraded from, if any. */
+    data class Restored(val status: TargetStatus, val claimed: TargetStatus? = null)
+
+    /**
+     * What a status read from a note becomes. The signature is plain text, not authentication:
+     * any contact note (typed, or arriving with a synced or shared contact) can carry a
+     * "Deceased" line, a catalog link and the signature. So a death or custody is never restored
+     * as confirmed, only as a possible match the user confirms again; the other statuses can't
+     * cause harm and come back as written.
+     */
+    fun restore(status: TargetStatus): Restored =
+        if (status == TargetStatus.DECEASED || status == TargetStatus.INCARCERATED) {
+            Restored(TargetStatus.POSSIBLE_MATCH, status)
+        } else {
+            Restored(status)
+        }
 
     /** [Target.matchRecordKey] of a possible match restored from a note: a claim waiting for the user, not a record. */
     const val RESTORED_KEY = "note:restored"

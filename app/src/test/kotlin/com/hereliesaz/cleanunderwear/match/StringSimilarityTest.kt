@@ -112,4 +112,28 @@ class StringSimilarityTest {
         assertEquals(null, StringSimilarity.nanpAreaCode("+44 20 7946 0958"))
         assertEquals(null, StringSimilarity.nanpAreaCode("612 345 678"))
     }
+
+    @Test
+    fun foldDiacritics_stripsLatinAccentsOneCharacterForOne() {
+        assertEquals("Jose", StringSimilarity.foldDiacritics("Jos\u00E9"))
+        assertEquals("Angstrom", StringSimilarity.foldDiacritics("\u00C5ngstr\u00F6m"))
+        assertEquals("Nunez", StringSimilarity.foldDiacritics("N\u00FA\u00F1ez"))
+        assertEquals("Jose".length, StringSimilarity.foldDiacritics("Jos\u00E9").length)
+    }
+
+    @Test
+    fun foldDiacritics_leavesCharactersWithoutAnAccentAlone() {
+        // No decomposition: sharp s, ae ligature, o-slash, the "fi" ligature.
+        assertEquals("Stra\u00DFe", StringSimilarity.foldDiacritics("Stra\u00DFe"))
+        assertEquals("\u00E6on \u00D8", StringSimilarity.foldDiacritics("\u00E6on \u00D8"))
+        assertEquals("\uFB01n", StringSimilarity.foldDiacritics("\uFB01n"))
+    }
+
+    @Test
+    fun foldDiacritics_leavesHangulSyllablesWhole() {
+        // They decompose into conjoining Jamo, which are letters, not accents.
+        val kim = "\uAE40\uBBFC\uC218"
+        assertEquals(kim, StringSimilarity.foldDiacritics(kim))
+        assertEquals("Jose $kim", StringSimilarity.foldDiacritics("Jos\u00E9 $kim"))
+    }
 }

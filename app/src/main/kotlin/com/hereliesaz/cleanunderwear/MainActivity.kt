@@ -37,7 +37,11 @@ class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // The app's own theme, not the phone's, decides the window and system-bar colours.
+        // The app's own theme, not the phone's, decides the window and system-bar colours from
+        // here on. What came before this line is the manifest's launch theme: the starting window
+        // and, on Android 12+, the system splash, both drawn before any code runs. They can't
+        // read this preference, so they follow the phone's night mode (values/themes.xml); when
+        // the app's choice differs from the phone's, that first frame is the other colour.
         val darkAtStart = getSharedPreferences("clean_underwear_prefs", MODE_PRIVATE).getBoolean("dark_theme", true)
         if (!darkAtStart) setTheme(R.style.Theme_CleanUnderwear_Light)
         applySystemBars(darkAtStart)
@@ -64,7 +68,7 @@ class MainActivity : ComponentActivity() {
                     }
                     CleanUnderwearApp(viewModel = viewModel)
 
-                    var crash by remember { mutableStateOf(if (onboarded) CrashReport.pending(this) else null) }
+                    var crash by remember(onboarded) { mutableStateOf(if (onboarded) CrashReport.pending(this) else null) }
                     crash?.let { report ->
                         AppDialog(
                             title = "The app closed unexpectedly",

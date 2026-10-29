@@ -1,5 +1,4 @@
 // FILE: build.gradle.kts
-import org.gradle.api.plugins.quality.CheckstyleExtension
 buildscript {
     // Pinned past versions with published vulnerabilities, for build tooling that pulls them
     // in transitively. Raise a pin when a newer fix lands; drop it once nothing resolves it.
@@ -50,17 +49,9 @@ plugins {
     alias(libs.plugins.jetbrains.kotlin.compose) apply false
     alias(libs.plugins.hilt) apply false
     alias(libs.plugins.ksp) apply false
-    id("io.gitlab.arturbosch.detekt") version "1.23.8"
 }
 
 allprojects {
-    apply(plugin = "io.gitlab.arturbosch.detekt")
-    detekt {
-        buildUponDefaultConfig = true
-        allRules = false
-        config.setFrom(files("$rootDir/config/detekt/detekt.yml"))
-    }
-
     @Suppress("UNCHECKED_CAST")
     val commonForcedDependencies = rootProject.extra["commonForcedDependencies"] as List<String>
     @Suppress("UNCHECKED_CAST")

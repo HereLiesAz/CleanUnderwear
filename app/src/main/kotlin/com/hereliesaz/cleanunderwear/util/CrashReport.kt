@@ -43,13 +43,33 @@ object CrashReport {
         File(context.filesDir, FILE).delete()
     }
 
-    /** GitHub's new-issue page with [report] filled in, for the user to read and post. */
-    fun issueUrl(report: String): Uri = Uri.parse(NEW_ISSUE).buildUpon()
-        .appendQueryParameter("title", "Crash: " + report.lineSequence().firstOrNull { it.startsWith("Exception: ") }
-            ?.removePrefix("Exception: ").orEmpty())
-        .appendQueryParameter("labels", "crash")
-        .appendQueryParameter("body", "```\n" + report.take(6000) + "\n```")
-        .build()
+    /**
+     * Longest link [issueUrl] makes, in characters once encoded. GitHub refuses a request line
+     * past roughly 8 KB, and a stack trace encodes to up to three times its length (spaces and
+     * newlines become %20 and %0A), so the report is cut to fit, not to a length before encoding.
+     */
+    internal const val MAX_URL_LENGTH = 7000
+
+    /**
+     * GitHub's new-issue page with [report] filled in, for the user to read and post. A report
+     * too long for the link is cut at the end, and says so.
+     */
+    fun issueUrl(report: String): Uri {
+        val title = "Crash: " + report.lineSequence().firstOrNull { it.startsWith("Exception: ") }
+            ?.removePrefix("Exception: ").orEmpty().take(200)
+        var keep = minOf(report.length, 6000)
+        while (true) {
+            val cut = keep < report.length
+            val body = "```\n" + report.take(keep) + "\n```" + if (cut) "\n\n(Report shortened to fit this link.)" else ""
+            val uri = Uri.parse(NEW_ISSUE).buildUpon()
+                .appendQueryParameter("title", title)
+                .appendQueryParameter("labels", "crash")
+                .appendQueryParameter("body", body)
+                .build()
+            if (keep == 0 || uri.toString().length <= MAX_URL_LENGTH) return uri
+            keep = keep * 3 / 4
+        }
+    }
 
     /** Types and frames only: a cause chain of class names and stack lines, no messages. */
     internal fun scrub(throwable: Throwable, version: String): String = buildString {

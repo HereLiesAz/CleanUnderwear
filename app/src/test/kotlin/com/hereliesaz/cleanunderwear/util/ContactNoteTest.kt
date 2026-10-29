@@ -54,4 +54,21 @@ class ContactNoteTest {
         assertTrue(merged.contains("Call after 6pm"))
         assertFalse(merged.contains("Monitoring"))
     }
+
+    @Test
+    fun aSignedDeathOrCustodyIsStillOnlyAClaimTheUserConfirms() {
+        // The signature is plain text: a signed, linked block read from a note is no more
+        // trustworthy than a hand-typed one.
+        val signed = ContactNote.block(t(TargetStatus.DECEASED), date)!!
+        assertTrue(ContactNote.isSigned(signed))
+        assertEquals(ContactNote.Restored(TargetStatus.POSSIBLE_MATCH, TargetStatus.DECEASED), ContactNote.restore(TargetStatus.DECEASED))
+        assertEquals(ContactNote.Restored(TargetStatus.POSSIBLE_MATCH, TargetStatus.INCARCERATED), ContactNote.restore(TargetStatus.INCARCERATED))
+    }
+
+    @Test
+    fun otherStatusesComeBackAsWritten() {
+        for (status in listOf(TargetStatus.MONITORING, TargetStatus.IGNORED, TargetStatus.UNVERIFIED, TargetStatus.UNKNOWN, TargetStatus.POSSIBLE_MATCH)) {
+            assertEquals(ContactNote.Restored(status, null), ContactNote.restore(status))
+        }
+    }
 }

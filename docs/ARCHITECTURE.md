@@ -30,4 +30,4 @@ Hilt: `AppModule` provides the OkHttp client, database and DAOs; everything else
 JVM unit tests under `app/src/test`: matching, parsing (two recorded obituary pages, and HTML and JSON samples in the tests), dedup, notes, the update checker, and Room (migrations, DAO, repository) on Robolectric. `./gradlew testDebugUnitTest`.
 
 ## Code quality
-Android lint runs in CI. Detekt is configured at `config/detekt/detekt.yml`.
+Android lint (`lintDebug`) and the unit tests run in CI. There is no Detekt: the last stable release (1.23.8) is built for Kotlin 2.0, this project is on Kotlin 2.4, and Detekt 2.x is still alpha, so a gate on it could not be trusted.

@@ -68,11 +68,6 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
-
-        ndk {
-            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64")
-        }
-
     }
 
     buildTypes {
@@ -96,9 +91,6 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
-        }
-        jniLibs {
-            useLegacyPackaging = true
         }
     }
     testOptions {
@@ -134,7 +126,6 @@ androidComponents {
 }
 
 dependencies {
-    implementation(libs.androidx.appcompat)
     implementation(libs.androidx.navigation.compose)
 
     testImplementation(libs.junit)
@@ -174,19 +165,18 @@ dependencies {
     // Hilt
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
-    implementation(libs.androidx.hilt.navigation.compose)
     implementation(libs.androidx.hilt.work)
     ksp(libs.androidx.hilt.compiler)
 
     // Networking
     implementation(libs.gson)
     implementation(libs.okhttp)
+    // Not debugImplementation: AppModule imports HttpLoggingInterceptor in main code (behind
+    // BuildConfig.DEBUG), so a release compile needs the class too. Never attached in release.
     implementation(libs.okhttp.logging)
 
     // In-app update check for Play installs (UpdateChecker)
     implementation(libs.play.app.update.ktx)
-
-    // On-Device AI
 
     // Thumb-Driven Navigation
     implementation(libs.aznavrail)

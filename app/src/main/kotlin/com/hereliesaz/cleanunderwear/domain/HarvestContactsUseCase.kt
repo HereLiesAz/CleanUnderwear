@@ -72,7 +72,10 @@ class HarvestContactsUseCase @Inject constructor(
             DiagnosticLogger.log("${gone.size} of ${fromPhone.size} contacts weren't in this read; not removing any (an account may be missing)")
             return 0
         }
-        repository.getTargetsByIds(gone.map { it.id }).forEach { repository.deleteTarget(it) }
+        // Chunked: SQLite on API 26-29 allows only 999 bound variables per statement.
+        gone.map { it.id }.chunked(ID_CHUNK).forEach { ids ->
+            repository.getTargetsByIds(ids).forEach { repository.deleteTarget(it) }
+        }
         DiagnosticLogger.log("Removed ${gone.size} contact(s) no longer in the phone's contacts")
         return gone.size
     }
@@ -81,6 +84,7 @@ class HarvestContactsUseCase @Inject constructor(
         /** The account buckets [ContactHarvester] files phone-book rows under; imports use other labels. */
         val PHONE_BUCKETS = setOf("Google", "Meta", "Apple", "Device")
         const val MAX_PRUNE_SHARE = 0.25
+        const val ID_CHUNK = 900
     }
 
     /**
@@ -94,10 +98,11 @@ class HarvestContactsUseCase @Inject constructor(
             .filter { it.phoneNumber.isNullOrBlank() && it.email.isNullOrBlank() }
             .map { nameOnlyKey(it.displayName, it.sourceAccount) }
             .toSet()
-        // A number the user replaced (adopted a newer one, marked it out of date) is still in the
-        // phone book under that person; reading it back must not bring it back as a new contact.
+        // A number the user replaced (adopted a newer one) or marked out of date (then it is still
+        // the row's own number, [phoneIsStale]) is still in the phone book under that person;
+        // reading it back must not bring it back as a new contact.
         val replaced = registry
-            .filter { it.stalePhone != null && !it.phoneIsStale }
+            .filter { it.stalePhone != null }
             .mapNotNull { row -> StringSimilarity.normalizePhone(row.stalePhone)?.let { it + "|" + row.displayName.trim().lowercase() } }
             .toSet()
         return rows.filterNot {
@@ -130,7 +135,7 @@ class HarvestContactsUseCase @Inject constructor(
                     sourceAccount = mergeSources(existing.sourceAccount, target.sourceAccount)
                 )
             } else {
-                // Validate if it's a real name using LiteRT
+                // Reject strings that can't be a person's name (a rule-based check; there is no model)
                 val isRealName = researchAgent.validatePersonName(target.displayName)
                 val finalTarget = if (!isRealName && target.displayName != "Unnamed Entity") {
                     rejectedNameCount++
@@ -143,7 +148,7 @@ class HarvestContactsUseCase @Inject constructor(
 
         if (rejectedNameCount > 0) {
             DiagnosticLogger.log(
-                "AI name filter: $rejectedNameCount candidate(s) reclassified as Unnamed Entity."
+                "Name filter: $rejectedNameCount candidate(s) reclassified as Unnamed Entity."
             )
         }
         return uniqueTargets.values.toList()

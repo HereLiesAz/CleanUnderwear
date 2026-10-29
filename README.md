@@ -21,9 +21,9 @@ Bring in the contacts you already have. Two surfaces:
 
 **Passive (system contacts).** A single sweep of the Android contacts provider folds in everything your device already syncs — Google, Apple/iCloud (where an iCloud sync provider is installed), WhatsApp, Facebook, and any local-only entries — bucketed by account type.
 
-**Active (web scrape).** Optional per-platform importers, started from Settings. Each opens the service in the app's visible browser, where the user signs in (or scans WhatsApp's QR code) if asked, then reads the names from the page:
+**Active (web scrape).** Optional per-platform importers, started from Settings. Each opens the service in the app's visible browser, where the user signs in if asked, then reads the names from the page:
 - **Facebook** — scrapes `mbasic.facebook.com/me/friends` (server-rendered, no React shell).
-- **WhatsApp** — scrapes `web.whatsapp.com` chat list. The QR code shows in the browser; scan it with the phone's WhatsApp.
+- **WhatsApp** — scrapes `web.whatsapp.com` chat list. Sign in in the browser with **Link with phone number** (WhatsApp shows a code to enter in the WhatsApp app on the phone), rather than scanning the QR code.
 - **Instagram** — scrapes the followers list at `instagram.com/<me>/followers/`. Sign in when asked.
 - **Google Contacts** — scrapes `contacts.google.com`. Sign in when asked.
 
@@ -65,8 +65,8 @@ The **Review** screen lists contacts the app suspects are wrong, and shows the c
 
 ### 4. Decentralized Persistence (Note Injection)
 The app uses your phone's native address book as its "external memory":
-- **Write-Back**: A settled status (Monitoring, or a Confirmed deceased / Confirmed in custody / Archived the user chose) is written into the system contact's Notes as one signed block, rewritten when it changes. The user's own note text is kept, above it. A possible match is never written: notes sync to the contact's account. The block goes only to the phone contact that has the number *and* the same name, and never through a number marked stale.
-- **Recovery**: On reinstall or a new phone syncing the same account, the harvester reads the block back (status, the date it was set, and the record link of a confirmed status). A confirmed status in a block the app didn't sign comes back as a possible match to review, not as fact.
+- **Write-Back**: A settled status (Monitoring, or a Confirmed deceased / Confirmed in custody / Archived the user chose) is written into the system contact's Notes as one block (ending in a `— CleanUnderwear` line that marks where it stops), rewritten when it changes. The user's own note text is kept, above it. A setting turns this off: while it is off, the app writes nothing to contact notes (the status stays in the app only). A possible match is never written: notes sync to the contact's account. The block goes only to the phone contact that has the number *and* the same name, and never through a number marked stale.
+- **Recovery**: On reinstall or a new phone syncing the same account, the harvester reads the block back (status, the date it was set, and the record link of a confirmed status). A confirmed death or custody always comes back as a possible match to review, never as fact: the note is plain text that anyone, or a shared contact, can write, and the signature line is not authentication. Monitoring and Archived come back as written.
 - **Removal**: Settings → Delete everything removes the block from every note, along with the app's own data.
 
 ### 5. Contact Profile
@@ -91,7 +91,7 @@ The app checks the channel it was installed from. A Play install asks Google Pla
 | Contact name, phone, email or address | CyberBackgroundChecks | When you run Fill in details (or look up one contact, or alternates for a stale number): contacts missing an age, and unverified contacts |
 | Contact name, phone, email or address, depending on the link | The site you open from a contact's profile | Only when you tap the link |
 | Your session on Facebook, WhatsApp, Instagram, Google Contacts | That service only | Only when you start an import from Settings |
-| A settled status, the date it was set, and for a confirmed status the record link, in the contact's Notes field | Whatever account that contact syncs with (e.g. Google Contacts) | When the status changes |
+| A settled status, the date it was set, and for a confirmed status the record link, in the contact's Notes field | Whatever account that contact syncs with (e.g. Google Contacts) | When the status changes, unless the note setting is turned off |
 | App and Android version, exception types and stack frames (no messages, no contact data) | GitHub Issues, as a pre-filled issue you read and post yourself | After a crash, only if you choose Send report |
 | Nothing but the request itself (no contact data) | Google Play (Play installs) or the GitHub releases API (all other installs) | Update check: at launch, at most every 12 hours, and from Settings |
 
@@ -117,7 +117,7 @@ Nothing else is uploaded. There is no analytics, advertising or tracking SDK. An
 1. **Clone & Build**: Standard Gradle build via `./gradlew assembleDebug`.
 2. **Tests**: `./gradlew testDebugUnitTest` (JVM; Room tests run on Robolectric).
 3. **Permissions**: `READ_CONTACTS`, `WRITE_CONTACTS` and `POST_NOTIFICATIONS`, asked for at the end of onboarding, after the app explains itself. The app runs (with an empty list) if they are refused.
-4. **Versioning**: `version.properties` holds the version. The release workflows bump it and pass the released name and code to Gradle; a local build reads the file as is.
+4. **Versioning**: `version.properties` holds `versionMajor`, `versionMinor`, `versionPatch` (the version name is `major.minor.patch`) and `versionBuild` (the version code). The release workflows bump the file and pass the released name and code to Gradle as `-PversionName` and `-PversionCodeOverride`, which win over it. A local build therefore gets `major.minor.patch` and a version code of `versionBuild` (1 unless edited); the `versionCode` and `versionName` lines in the file are written by the release tooling, and the build ignores them.
 
 ---
 

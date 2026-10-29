@@ -49,6 +49,8 @@ class ScrapingWorker @AssistedInject constructor(
 
     companion object {
         private const val RUNNING_CHANNEL = "checks_running"
+        // Untagged; contact alerts are posted under NotificationHelper.ALERT_TAG, so a contact
+        // whose id equals this one doesn't collide with it.
         private const val RUNNING_NOTIFICATION = 4101
 
         /** Output key: the run's summary, shown to the user when they started the check. */

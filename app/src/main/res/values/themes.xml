@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- The window matches the app's own theme from the first frame (MainActivity picks one of
-         these from the saved preference before drawing), so a cold start never flashes the
-         other colour before Compose draws. -->
+    <!-- The two app themes. MainActivity applies one from the saved preference before it draws:
+         Theme.CleanUnderwear (dark) is the default, Theme.CleanUnderwear.Light the other. -->
     <style name="Theme.CleanUnderwear" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">#FF0A0A0A</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
@@ -13,5 +12,14 @@
         <item name="android:windowBackground">#FFF7F7F7</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+
+    <!-- The manifest's launch theme: what the system draws (the starting window, and on Android
+         12+ the system splash, which takes its colour from the window background) before
+         MainActivity can run and read the app's own preference. The app's preference is not
+         readable from XML, so this follows the phone's night mode (values-night has the dark
+         one); MainActivity then switches to the preferred theme and window background. -->
+    <style name="Theme.CleanUnderwear.Launch" parent="Theme.CleanUnderwear">
+        <item name="android:windowBackground">#FFF7F7F7</item>
     </style>
 </resources>
