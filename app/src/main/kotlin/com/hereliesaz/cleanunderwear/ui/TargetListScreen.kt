@@ -118,8 +118,8 @@ fun TargetListScreen(
             }
         }
 
-        // No historyContext: it would keep what is searched (contacts' names) in the search
-        // box's history, outside the app's database where Delete everything would not reach it.
+        // No historyContext: AzTextBox would keep what is searched (contacts' names) in a history
+        // of its own, which the library stores where Delete everything cannot be shown to reach.
         AzTextBox(
             value = searchQuery,
             onValueChange = { viewModel.setSearchQuery(it) },

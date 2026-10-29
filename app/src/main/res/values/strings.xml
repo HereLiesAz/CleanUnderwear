@@ -19,10 +19,6 @@
     <string name="status_checked_daily">Checked daily</string>
     <string name="alerts_off">Alerts are off for this app, so you won\'t be told when something turns up. Matches still appear in the list.</string>
     <string name="turn_on_alerts">Turn on alerts</string>
-    <plurals name="contacts_count">
-        <item quantity="one">%d contact</item>
-        <item quantity="other">%d contacts</item>
-    </plurals>
     <string name="undo">Undo</string>
     <string name="archive">Archive</string>
     <string name="bring_back_to_checks">Bring back to daily checks</string>
