@@ -557,7 +557,13 @@ fun BrowserScreen(
                             ) {
                                 AppAction(
                                     "Let me use the page",
-                                    { if (mission.requiresSignIn) waitForSignIn() else paused = true }
+                                    {
+                                        if (mission.requiresSignIn) {
+                                            waitForSignIn()
+                                        } else {
+                                            paused = true
+                                        }
+                                    }
                                 )
                                 AppAction("Cancel", ::cancel)
                             }
