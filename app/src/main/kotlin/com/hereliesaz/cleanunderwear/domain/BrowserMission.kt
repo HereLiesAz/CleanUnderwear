@@ -36,7 +36,9 @@ sealed class BrowserMission {
     /**
      * JavaScript to inject when the user taps "Run automation". Receives the
      * page DOM and posts the HTML (or parsed JSON) back via
-     * `window.HTMLOUT.dump(...)` — see BrowserScreen's JavascriptInterface.
+     * `window.HTMLOUT.dump(...)`. That spelling is what a script writes; BrowserExtractionGate
+     * rewrites it before injection into a call on the real (randomly named) bridge, bound to
+     * this extraction — see BrowserScreen's JavascriptInterface.
      *
      * Default returns the entire document HTML; missions that want a tighter
      * payload can override.

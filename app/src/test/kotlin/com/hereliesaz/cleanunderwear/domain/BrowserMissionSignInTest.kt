@@ -4,7 +4,6 @@ import com.hereliesaz.cleanunderwear.data.WhatsAppHarvester
 import com.hereliesaz.cleanunderwear.ui.BrowserExtractionGate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -244,6 +243,7 @@ class BrowserMissionSignInTest {
         val script = com.hereliesaz.cleanunderwear.data.InstagramHarvester.SCRIPT
         assertTrue(script.contains("accounts\\/(login|emailsignup|suspended)"))
         assertTrue(script.contains("readHandle"))
-        assertNotNull(script)
+        // Anything else is sent back to the form, a bounded number of times.
+        assertTrue(script.contains("cuEditHops"))
     }
 }

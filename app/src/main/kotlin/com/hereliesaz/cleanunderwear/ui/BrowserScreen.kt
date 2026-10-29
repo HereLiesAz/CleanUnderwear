@@ -681,8 +681,9 @@ private class BrowserHost {
  * losing a half-finished sign-in or CAPTCHA. The screen [park]s its page as it goes (when the
  * Activity says it is being recreated, and the mission is still going) and the rebuilt screen
  * [take]s it back. The page is made over a [MutableContextWrapper] so that, while parked, it
- * holds the application and not the dying Activity. A parked page nothing takes (the mission
- * was ended in that instant) is destroyed by the next screen to ask.
+ * holds the application and not the dying Activity. A page the rebuilt screen doesn't need
+ * (the mission was ended in that instant) is simply taken by the next screen to ask, which
+ * loads its own mission's URL into it (the loaded-key check in the load effect).
  */
 private object BrowserRetention {
     private var parked: BrowserHost? = null

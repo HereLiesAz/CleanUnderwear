@@ -35,12 +35,15 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.hereliesaz.aznavrail.AzLoad
+import com.hereliesaz.cleanunderwear.R
 import com.hereliesaz.cleanunderwear.domain.AlternateInfo
 import com.hereliesaz.cleanunderwear.domain.Evidence
 import com.hereliesaz.cleanunderwear.domain.IdentityLine
@@ -88,12 +91,16 @@ fun ReviewScreen(
     }
 
     Scaffold(
-        topBar = { AppTopBar(title = "Review", onBack = onNavigateBack) },
-        containerColor = MaterialTheme.colorScheme.background
+        topBar = { AppTopBar(title = stringResource(R.string.review_title), onBack = onNavigateBack) },
+        containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = screenInsets()
     ) { padding ->
+        val bottomBar = LocalBottomBarHeight.current
         LazyColumn(
-            modifier = Modifier.padding(padding).fillMaxSize(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(Spacing.md),
+            modifier = Modifier.padding(padding).contentWidth().fillMaxSize(),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                start = Spacing.md, top = Spacing.md, end = Spacing.md, bottom = Spacing.md + bottomBar
+            ),
             verticalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {
             item {
@@ -112,7 +119,7 @@ fun ReviewScreen(
             if (state.loading && report == null) {
                 item {
                     Box(Modifier.fillMaxWidth().padding(Spacing.xl), contentAlignment = Alignment.Center) {
-                        LoadingCaption("Looking for contacts that may be wrong…")
+                        LoadingCaption(stringResource(R.string.review_looking_for_wrong))
                     }
                 }
             } else if (cases.isEmpty()) {
@@ -145,36 +152,30 @@ private fun Header(
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
         Text(
             when {
-                loading && total == 0 -> "Looking…"
-                total == 0 -> "Nothing to review"
-                else -> "$total to review"
+                loading && total == 0 -> stringResource(R.string.review_looking)
+                total == 0 -> stringResource(R.string.review_nothing)
+                else -> pluralStringResource(R.plurals.review_to_review, total, total)
             },
             style = MaterialTheme.typography.titleLarge
         )
         // A rescan after a decision keeps the last list on screen; say it's being refreshed.
-        if (loading && total > 0) LoadingCaption("Checking the list again…")
-        AppCaption(
-            "When the app finds two entries for one person it combines them. Here are the ones that may " +
-                "be two different people, or a number that's out of date. Tap one to see why, and why it might be fine."
-        )
+        if (loading && total > 0) LoadingCaption(stringResource(R.string.review_checking_again))
+        AppCaption(stringResource(R.string.review_intro))
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
             FilterChip(
                 selected = filter == SuspicionKind.BAD_MERGE,
                 onClick = { onFilter(SuspicionKind.BAD_MERGE) },
-                label = { Text("Combined wrongly ($merges)") }
+                label = { Text(stringResource(R.string.review_filter_merged, merges)) }
             )
             FilterChip(
                 selected = filter == SuspicionKind.STALE_NUMBER,
                 onClick = { onFilter(SuspicionKind.STALE_NUMBER) },
-                label = { Text("Old numbers ($stale)") }
+                label = { Text(stringResource(R.string.review_filter_old, stale)) }
             )
         }
         if (recommended > 0) {
-            AppAction("Apply recommendations ($recommended)", onApplyAll)
-            AppCaption(
-                "Does what each case below recommends" + (if (filter != null) ", in this group" else "") +
-                    ". You see the list first. Cases too close to call are left for you."
-            )
+            AppAction(stringResource(R.string.review_apply_recommendations, recommended), onApplyAll)
+            AppCaption(stringResource(if (filter != null) R.string.review_apply_caption_group else R.string.review_apply_caption))
         }
     }
 }
@@ -184,18 +185,19 @@ private fun Header(
 private fun ApplyAllDialog(cases: List<SuspectCase>, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     val byRec = cases.mapNotNull { it.recommendation }.groupingBy { it }.eachCount()
     val left = cases.count { it.recommendation == null }
+    val total = byRec.values.sum()
     AppDialog(
-        title = "Apply ${byRec.values.sum()} recommendation${if (byRec.values.sum() == 1) "" else "s"}?",
-        confirm = "Apply",
+        title = pluralStringResource(R.plurals.review_apply_title, total, total),
+        confirm = stringResource(R.string.review_apply),
         onConfirm = onConfirm,
         onDismiss = onDismiss
     ) {
         Recommendation.entries.forEach { rec ->
-            byRec[rec]?.let { n -> Text("${rec.label}: $n", style = MaterialTheme.typography.bodyMedium) }
-            byRec[rec]?.let { AppCaption(whatItDoes(rec, bulk = true)) }
+            byRec[rec]?.let { n -> Text(stringResource(R.string.review_rec_count, rec.label, n), style = MaterialTheme.typography.bodyMedium) }
+            byRec[rec]?.let { AppCaption(stringResource(whatItDoes(rec, bulk = true))) }
         }
-        if (left > 0) AppCaption("$left too close to call ${if (left == 1) "is" else "are"} left for you.")
-        AppCaption("Only this app's list changes; your phone's contacts aren't touched. You can stop partway.")
+        if (left > 0) AppCaption(pluralStringResource(R.plurals.review_left_for_you, left, left))
+        AppCaption(stringResource(R.string.review_apply_note))
     }
 }
 
@@ -204,27 +206,24 @@ private fun ApplyAllDialog(cases: List<SuspectCase>, onConfirm: () -> Unit, onDi
  * confirmation. They differ for one action: marking a number out of date on a card also
  * searches for a current one; in bulk it doesn't (that search needs the browser, contact by contact).
  */
-private fun whatItDoes(rec: Recommendation, bulk: Boolean = false): String = when (rec) {
-    Recommendation.SEPARATE -> "The combined entry comes back as its own contact, and the two won't be combined again."
-    Recommendation.KEEP_COMBINED -> "It stays one contact and isn't raised here again."
-    Recommendation.USE_REPLACEMENT -> "The contact's number becomes the newer one found on its other entry."
-    Recommendation.MARK_OUT_OF_DATE -> if (bulk) {
-        "The number stops being used to check or look the contact up. Searching for a current one is done from each card, afterwards."
-    } else {
-        "The number stops being used to check or look the contact up, and CyberBackgroundChecks is searched for a current one."
-    }
-    Recommendation.KEEP_NUMBER -> "The number stays in use and isn't raised here again."
+@androidx.annotation.StringRes
+private fun whatItDoes(rec: Recommendation, bulk: Boolean = false): Int = when (rec) {
+    Recommendation.SEPARATE -> R.string.review_does_separate
+    Recommendation.KEEP_COMBINED -> R.string.review_does_keep_combined
+    Recommendation.USE_REPLACEMENT -> R.string.review_does_use_replacement
+    Recommendation.MARK_OUT_OF_DATE -> if (bulk) R.string.review_does_mark_stale_bulk else R.string.review_does_mark_stale
+    Recommendation.KEEP_NUMBER -> R.string.review_does_keep_number
 }
 
 @Composable
 private fun EmptyState(filtered: Boolean) {
     Column(Modifier.fillMaxWidth().padding(vertical = Spacing.xl), verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-        Text(if (filtered) "Nothing in this group." else "Nothing looks wrong.", style = MaterialTheme.typography.titleMedium)
+        Text(
+            stringResource(if (filtered) R.string.review_empty_group else R.string.review_empty_all),
+            style = MaterialTheme.typography.titleMedium
+        )
         if (!filtered) {
-            AppCaption(
-                "Combined entries are recorded from now on. Ones combined by earlier versions weren't, so " +
-                    "they can't be reviewed or separated; old numbers are checked across everything."
-            )
+            AppCaption(stringResource(R.string.review_empty_caption))
         }
     }
 }
@@ -239,22 +238,29 @@ private fun SuspectCard(
     viewModel: MainViewModel
 ) {
     var pending by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<Pending?>(null) }
+    val expandedDescription = stringResource(if (expanded) R.string.review_expanded else R.string.review_collapsed)
     AppCard(emphasis = case.lean == Lean.LIKELY_PROBLEM) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .clickable(onClick = onToggle, role = Role.Button, onClickLabel = if (expanded) "Hide the reasons" else "Show the reasons")
-                .semantics { stateDescription = if (expanded) "Expanded" else "Collapsed" },
+                .clickable(
+                    onClick = onToggle,
+                    role = Role.Button,
+                    onClickLabel = stringResource(if (expanded) R.string.review_hide_reasons else R.string.review_show_reasons)
+                )
+                .semantics { stateDescription = expandedDescription },
             verticalArrangement = Arrangement.spacedBy(Spacing.sm)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(case.title, style = MaterialTheme.typography.titleMedium)
                     AppCaption(
-                        when (case.kind) {
-                            SuspicionKind.BAD_MERGE -> "May be two people combined"
-                            SuspicionKind.STALE_NUMBER -> "Number may be out of date"
-                        }
+                        stringResource(
+                            when (case.kind) {
+                                SuspicionKind.BAD_MERGE -> R.string.review_kind_merge
+                                SuspicionKind.STALE_NUMBER -> R.string.review_kind_stale
+                            }
+                        )
                     )
                 }
                 Icon(if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, contentDescription = null)
@@ -268,21 +274,26 @@ private fun SuspectCard(
         if (expanded) {
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             IdentityComparison(case.identities)
-            EvidenceList("Why it looks wrong", case.suspicion, Icons.Filled.Warning, "Nothing.")
-            EvidenceList("Why it might be fine", case.defense, Icons.Filled.Info, "Nothing speaks for it.")
+            EvidenceList(stringResource(R.string.review_why_wrong), case.suspicion, Icons.Filled.Warning, stringResource(R.string.review_nothing_wrong))
+            EvidenceList(stringResource(R.string.review_why_fine), case.defense, Icons.Filled.Info, stringResource(R.string.review_nothing_fine))
             // Every choice, the recommended one included; the recommendation only says which.
-            Text(if (case.recommendation == null) "Your choices" else "Or choose", style = MaterialTheme.typography.titleMedium)
+            Text(
+                stringResource(if (case.recommendation == null) R.string.review_your_choices else R.string.review_or_choose),
+                style = MaterialTheme.typography.titleMedium
+            )
             val rec = case.recommendation
             when (case.kind) {
                 SuspicionKind.BAD_MERGE -> {
-                    if (rec != Recommendation.SEPARATE) AppTextAction("Separate them", { pending = Pending.SPLIT })
-                    if (rec != Recommendation.KEEP_COMBINED) AppTextAction("They're the same person: keep them combined", { pending = Pending.KEEP })
+                    if (rec != Recommendation.SEPARATE) AppTextAction(stringResource(R.string.review_separate_them), { pending = Pending.SPLIT })
+                    if (rec != Recommendation.KEEP_COMBINED) AppTextAction(stringResource(R.string.review_same_person), { pending = Pending.KEEP })
                 }
                 SuspicionKind.STALE_NUMBER -> {
-                    if (rec != Recommendation.USE_REPLACEMENT) case.replacementPhone?.let { AppTextAction("Use $it instead", { pending = Pending.ADOPT }) }
-                    if (rec != Recommendation.MARK_OUT_OF_DATE) AppTextAction("Mark the number out of date", { pending = Pending.STALE })
-                    AppTextAction("Look for a current number", { pending = Pending.LOOK_UP })
-                    if (rec != Recommendation.KEEP_NUMBER) AppTextAction("The number is fine: keep it", { pending = Pending.FINE })
+                    if (rec != Recommendation.USE_REPLACEMENT) {
+                        case.replacementPhone?.let { AppTextAction(stringResource(R.string.review_use_instead, it), { pending = Pending.ADOPT }) }
+                    }
+                    if (rec != Recommendation.MARK_OUT_OF_DATE) AppTextAction(stringResource(R.string.review_mark_stale), { pending = Pending.STALE })
+                    AppTextAction(stringResource(R.string.review_look_for_current), { pending = Pending.LOOK_UP })
+                    if (rec != Recommendation.KEEP_NUMBER) AppTextAction(stringResource(R.string.review_number_fine), { pending = Pending.FINE })
                 }
             }
         }
@@ -291,23 +302,34 @@ private fun SuspectCard(
     val name = case.title
     val oldNumber = case.identities.firstOrNull()?.phone
     when (pending) {
-        Pending.SPLIT -> AppDialog("Separate these entries?", "Separate", { pending = null; viewModel.splitMerge(case) }, { pending = null }) {
-            Text("The entry that was combined into $name comes back as its own contact in this app, and the two won't be combined again. Your phone's contacts aren't changed.")
+        Pending.SPLIT -> AppDialog(stringResource(R.string.review_split_title), stringResource(R.string.review_split_confirm), { pending = null; viewModel.splitMerge(case) }, { pending = null }) {
+            Text(stringResource(R.string.review_split_body, name))
         }
-        Pending.KEEP -> AppDialog("Keep them combined?", "Keep combined", { pending = null; viewModel.keepMerge(case) }, { pending = null }) {
-            Text("$name stays one contact and won't be raised here again.")
+        Pending.KEEP -> AppDialog(stringResource(R.string.review_keep_title), stringResource(R.string.review_keep_confirm), { pending = null; viewModel.keepMerge(case) }, { pending = null }) {
+            Text(stringResource(R.string.review_keep_body, name))
         }
-        Pending.ADOPT -> AppDialog("Use ${case.replacementPhone}?", "Use it", { pending = null; viewModel.adoptReplacement(case) }, { pending = null }) {
-            Text("$name's number in this app becomes ${case.replacementPhone}. Your phone's contacts aren't changed.")
+        Pending.ADOPT -> AppDialog(stringResource(R.string.review_adopt_title, case.replacementPhone.orEmpty()), stringResource(R.string.review_adopt_confirm), { pending = null; viewModel.adoptReplacement(case) }, { pending = null }) {
+            Text(stringResource(R.string.review_adopt_body, name, case.replacementPhone.orEmpty()))
         }
-        Pending.STALE -> AppDialog("Mark ${oldNumber ?: "the number"} out of date?", "Mark out of date", { pending = null; viewModel.markStale(case) }, { pending = null }) {
-            Text("It won't be used to check or look up $name. The app then searches CyberBackgroundChecks for a current number, which sends $name's name there.")
+        Pending.STALE -> AppDialog(
+            if (oldNumber != null) stringResource(R.string.review_stale_title, oldNumber) else stringResource(R.string.review_stale_title_no_number),
+            stringResource(R.string.review_stale_confirm),
+            { pending = null; viewModel.markStale(case) },
+            { pending = null }
+        ) {
+            Text(stringResource(R.string.review_stale_body, name))
         }
-        Pending.LOOK_UP -> AppDialog("Look for a current number?", "Look it up", { pending = null; viewModel.findAlternates(case.targetId, oldNumber) }, { pending = null }) {
-            Text("CyberBackgroundChecks, a people-search site, is searched with $name's name and ${oldNumber ?: "number"}. You may be asked to solve a CAPTCHA.")
+        Pending.LOOK_UP -> AppDialog(stringResource(R.string.review_lookup_title), stringResource(R.string.review_lookup_confirm), { pending = null; viewModel.findAlternates(case.targetId, oldNumber) }, { pending = null }) {
+            Text(
+                if (oldNumber != null) stringResource(R.string.review_lookup_body, name, oldNumber)
+                else stringResource(R.string.review_lookup_body_no_number, name)
+            )
         }
-        Pending.FINE -> AppDialog("Keep the number?", "Keep it", { pending = null; viewModel.dismissSuspect(case) }, { pending = null }) {
-            Text("${oldNumber ?: "The number"} stays in use for $name and won't be raised here again.")
+        Pending.FINE -> AppDialog(stringResource(R.string.review_fine_title), stringResource(R.string.review_fine_confirm), { pending = null; viewModel.dismissSuspect(case) }, { pending = null }) {
+            Text(
+                if (oldNumber != null) stringResource(R.string.review_fine_body, oldNumber, name)
+                else stringResource(R.string.review_fine_body_no_number, name)
+            )
         }
         null -> Unit
     }
@@ -322,12 +344,12 @@ private fun RecommendationLine(case: SuspectCase) {
     val rec = case.recommendation
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         if (rec == null) {
-            Text("No recommendation", style = MaterialTheme.typography.titleMedium)
-            AppCaption("The reasons on each side weigh about the same. Open it to decide.")
+            Text(stringResource(R.string.review_no_recommendation), style = MaterialTheme.typography.titleMedium)
+            AppCaption(stringResource(R.string.review_balanced))
         } else {
-            Text("Recommended: ${rec.label}", style = MaterialTheme.typography.titleMedium)
-            case.mainReason?.let { AppCaption("Mainly because: ${it.text.replaceFirstChar { c -> c.lowercase() }}") }
-            AppCaption(whatItDoes(rec))
+            Text(stringResource(R.string.review_recommended, rec.label), style = MaterialTheme.typography.titleMedium)
+            case.mainReason?.let { AppCaption(stringResource(R.string.review_mainly_because, it.text.replaceFirstChar { c -> c.lowercase() })) }
+            AppCaption(stringResource(whatItDoes(rec)))
         }
     }
 }
@@ -343,12 +365,15 @@ private fun Recommendation.toPending(): Pending = when (this) {
 /** The weight of the reasons against (solid) and for (outlined), with the counts in words. */
 @Composable
 private fun BalanceBar(against: Int, inFavour: Int, suspicion: Double, defense: Double) {
+    val againstText = pluralStringResource(R.plurals.review_reasons_against, against, against)
+    val inFavourText = stringResource(R.string.review_in_favour, inFavour)
+    val description = stringResource(R.string.review_balance_description, againstText, inFavourText)
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
         Row(
             Modifier
                 .fillMaxWidth()
                 .height(6.dp)
-                .semantics { contentDescription = "$against reasons against, $inFavour in its favour" }
+                .semantics { contentDescription = description }
         ) {
             Box(Modifier.weight(suspicion.coerceAtLeast(0.1).toFloat()).fillMaxHeight().background(MaterialTheme.colorScheme.onSurface))
             Box(
@@ -357,8 +382,8 @@ private fun BalanceBar(against: Int, inFavour: Int, suspicion: Double, defense: 
             )
         }
         Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-            AppCaption("$against against")
-            AppCaption("$inFavour in its favour")
+            AppCaption(stringResource(R.string.review_against, against))
+            AppCaption(inFavourText)
         }
     }
 }
@@ -370,7 +395,7 @@ private fun IdentityComparison(identities: List<IdentityLine>) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(line.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(line.name ?: "—", style = MaterialTheme.typography.titleMedium)
-                Text(line.phone ?: "no number", style = MaterialTheme.typography.bodyMedium)
+                Text(line.phone ?: stringResource(R.string.review_no_number), style = MaterialTheme.typography.bodyMedium)
                 line.email?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 line.history?.let { AppCaption(it) }
             }
@@ -390,11 +415,13 @@ private fun EvidenceList(title: String, items: List<Evidence>, icon: androidx.co
             Column {
                 Text(e.text, style = MaterialTheme.typography.bodyMedium)
                 AppCaption(
-                    when {
-                        e.weight >= 2.5 -> "Counts strongly"
-                        e.weight >= 1.5 -> "Counts"
-                        else -> "Counts a little"
-                    }
+                    stringResource(
+                        when {
+                            e.weight >= 2.5 -> R.string.review_counts_strongly
+                            e.weight >= 1.5 -> R.string.review_counts
+                            else -> R.string.review_counts_little
+                        }
+                    )
                 )
             }
         }
@@ -404,25 +431,26 @@ private fun EvidenceList(title: String, items: List<Evidence>, icon: androidx.co
 @Composable
 private fun AlternatesDialog(info: AlternateInfo, onApply: () -> Unit, onDismiss: () -> Unit) {
     AppDialog(
-        title = "What the lookup found for ${info.name}",
-        confirm = if (info.hasReplacement) "Use these" else "Close",
+        title = stringResource(R.string.review_alt_title, info.name),
+        confirm = stringResource(if (info.hasReplacement) R.string.review_alt_use else R.string.close),
         onConfirm = if (info.hasReplacement) onApply else onDismiss,
         onDismiss = onDismiss,
-        dismiss = if (info.hasReplacement) "Cancel" else "Close"
+        // With nothing to apply the one button closes it; a second "Close" would do the same.
+        dismiss = if (info.hasReplacement) stringResource(R.string.cancel) else null
     ) {
         if (info.stalePhone != null && info.holderName != null) {
             Text(
                 if (info.holderDiffers) {
-                    "${info.stalePhone} now belongs to \"${info.holderName}\", someone else. The number was likely given to a new person."
+                    stringResource(R.string.review_alt_holder_differs, info.stalePhone, info.holderName)
                 } else {
-                    "${info.stalePhone} still belongs to \"${info.holderName}\", which fits. It may not be out of date after all."
+                    stringResource(R.string.review_alt_holder_fits, info.stalePhone, info.holderName)
                 },
                 style = MaterialTheme.typography.bodyMedium
             )
         }
-        info.phone?.let { Text("Possible current number: $it", style = MaterialTheme.typography.titleMedium) }
-        info.address?.let { Text("Possible address: $it", style = MaterialTheme.typography.titleMedium) }
-        if (!info.hasReplacement) Text("Nothing found that could be confirmed as ${info.name}.", style = MaterialTheme.typography.bodyMedium)
+        info.phone?.let { Text(stringResource(R.string.review_alt_number, it), style = MaterialTheme.typography.titleMedium) }
+        info.address?.let { Text(stringResource(R.string.review_alt_address, it), style = MaterialTheme.typography.titleMedium) }
+        if (!info.hasReplacement) Text(stringResource(R.string.review_alt_nothing, info.name), style = MaterialTheme.typography.bodyMedium)
         AppCaption(info.basis)
     }
 }
