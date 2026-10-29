@@ -17,7 +17,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.paging.LoadState
@@ -25,6 +31,7 @@ import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemKey
 import com.hereliesaz.aznavrail.AzLoad
 import com.hereliesaz.aznavrail.AzTextBox
+import com.hereliesaz.cleanunderwear.R
 import com.hereliesaz.cleanunderwear.data.TargetLite
 import com.hereliesaz.cleanunderwear.data.TargetStatus
 import com.hereliesaz.cleanunderwear.util.DiagnosticLogger
@@ -67,6 +74,7 @@ fun TargetListScreen(
     fun granted() = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_CONTACTS) ==
         android.content.pm.PackageManager.PERMISSION_GRANTED
     var contactsAllowed by remember { mutableStateOf(granted()) }
+    var explainSettings by rememberSaveable { mutableStateOf(false) }
     val contactsPermission = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
     ) { result ->
@@ -77,11 +85,9 @@ fun TargetListScreen(
                 !androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(it, android.Manifest.permission.READ_CONTACTS)
             } == true
         ) {
-            // Android answered without asking (refused for good before): system settings can still allow it.
-            context.startActivity(
-                android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                    .setData(android.net.Uri.fromParts("package", context.packageName, null))
-            )
+            // Android answered without asking (refused for good before): system settings can still
+            // allow it, but the user is told why they are being sent there before they are.
+            explainSettings = true
         }
     }
     // Re-read when coming back from system settings.

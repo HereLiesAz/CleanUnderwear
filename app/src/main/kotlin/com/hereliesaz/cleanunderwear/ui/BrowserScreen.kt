@@ -77,8 +77,13 @@ sealed class MissionOutcome {
  * ([isBlocked] returns true), the screen pauses and surfaces a
  * "Solve & continue / Skip / Abort" overlay so the user can recover.
  *
+ * An import that needs the user signed in (BrowserMission.requiresSignIn) is different: the
+ * page is checked first, and while it is a sign-in or link-your-phone page the scrim stays off
+ * and the page is the user's; the script runs once it is the page to read.
+ *
  * Cookies persist across missions and Resolve contacts because the WebView is
- * reused. [batchId] resets the extraction state without rebuilding the browser.
+ * reused. [batchId] resets the extraction state without rebuilding the browser, and a
+ * rotation keeps the page rather than reloading it ([BrowserRetention]).
  * Delayed JavaScript results carry unique tags so they cannot cross lookups.
  */
 @OptIn(ExperimentalMaterial3Api::class)
