@@ -10,10 +10,14 @@ import javax.inject.Singleton
  * Reads the user's Instagram followers.
  *
  * Runs in the visible browser ([com.hereliesaz.cleanunderwear.domain.BrowserMission.HarvestInstagram]),
- * so the user signs in there if they aren't already. [SCRIPT] is re-run after every page load:
- *   1) on the sign-in page it waits;
+ * so the user signs in there if they aren't already: the browser screen leaves the sign-in
+ * page to them, and only runs [SCRIPT] once the page is no longer a sign-in page. [SCRIPT] is
+ * re-run after every page load:
+ *   1) on a sign-in page it does nothing (the screen has normally handed it to the user already);
  *   2) on /accounts/edit/ it reads the user's handle from the form and goes to their followers;
- *   3) on the followers page it scrolls the list dialog until it stops growing, then hands it back.
+ *   3) on the followers page it scrolls the list dialog until it stops growing, then hands it back;
+ *   4) anywhere else (sign-in can land on the home page or a "save your login" step) it goes to
+ *      /accounts/edit/ again, a few times at most.
  */
 @Singleton
 class InstagramHarvester @Inject constructor() {
@@ -23,13 +27,28 @@ class InstagramHarvester @Inject constructor() {
         val SCRIPT = """
         (function() {
             var path = window.location.pathname;
+            if (/^\/(accounts\/(login|emailsignup|suspended)|challenge)/.test(path)
+                || document.querySelector('input[type="password"]')) return;
             if (path.indexOf('/accounts/edit') === 0) {
-                var field = document.querySelector('input[name="username"]');
-                var handle = field ? field.value : '';
-                if (handle) window.location.href = '/' + handle + '/followers/';
+                // The form is drawn after the page loads: wait for the handle to be in it.
+                var tries = 0;
+                (function readHandle() {
+                    var field = document.querySelector('input[name="username"]');
+                    var handle = field ? field.value : '';
+                    if (handle) { window.location.href = '/' + encodeURIComponent(handle) + '/followers/'; return; }
+                    if (++tries < 20) setTimeout(readHandle, 750);
+                })();
                 return;
             }
-            if (!/\/followers\/?$/.test(path)) return;
+            if (!/\/followers\/?$/.test(path)) {
+                var hops = 0;
+                try { hops = parseInt(window.sessionStorage.getItem('cuEditHops') || '0', 10); } catch (e) {}
+                if (hops < 3) {
+                    try { window.sessionStorage.setItem('cuEditHops', String(hops + 1)); } catch (e) {}
+                    window.location.href = '/accounts/edit/';
+                }
+                return;
+            }
             function findScroller() {
                 const dialog = document.querySelector('div[role="dialog"]');
                 if (!dialog) return null;

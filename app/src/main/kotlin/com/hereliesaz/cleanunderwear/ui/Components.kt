@@ -111,6 +111,14 @@ class AppSnackbars(private val host: SnackbarHostState, private val scope: Corou
 /** The app's [AppSnackbars]; null where no shell provides one (a preview, a test). */
 val LocalAppSnackbars = staticCompositionLocalOf<AppSnackbars?> { null }
 
+/**
+ * The insets a screen's Scaffold keeps its content out of: the system bars (Scaffold's own
+ * default) and a camera cut-out, which sits beside the content when the phone is on its side.
+ */
+@Composable
+fun screenInsets(): WindowInsets =
+    androidx.compose.material3.ScaffoldDefaults.contentWindowInsets.union(WindowInsets.displayCutout)
+
 /** A screen's top bar: its title and a back arrow labelled for what back does there. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
