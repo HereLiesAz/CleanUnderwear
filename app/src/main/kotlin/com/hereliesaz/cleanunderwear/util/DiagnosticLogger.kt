@@ -8,8 +8,13 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicLong
 
 object DiagnosticLogger {
+    // Entries are told apart by this, not by their text: the same line can be logged twice in
+    // one millisecond, and the activity log's rows are keyed by entry.
+    private val nextId = AtomicLong()
+
     private val _logs = MutableStateFlow<List<LogEntry>>(emptyList())
     val logs: StateFlow<List<LogEntry>> = _logs.asStateFlow()
 
@@ -22,7 +27,8 @@ object DiagnosticLogger {
     data class LogEntry(
         val timestamp: String,
         val message: String,
-        val level: LogLevel = LogEntry.LogLevel.DEBUG
+        val level: LogLevel = LogEntry.LogLevel.DEBUG,
+        val id: Long = nextId.incrementAndGet()
     ) {
         enum class LogLevel { INFO, DEBUG, WARN, ERROR }
     }
