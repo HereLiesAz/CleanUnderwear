@@ -22,6 +22,7 @@ import com.hereliesaz.cleanunderwear.domain.BrowserMission
 import com.hereliesaz.cleanunderwear.domain.DeduplicateTargetsUseCase
 import com.hereliesaz.cleanunderwear.domain.HarvestContactsUseCase
 import com.hereliesaz.cleanunderwear.domain.PipelineCoordinator
+import com.hereliesaz.cleanunderwear.util.ThemePreference
 import com.hereliesaz.cleanunderwear.domain.SuspectCase
 import com.hereliesaz.cleanunderwear.domain.SuspectReport
 import com.hereliesaz.cleanunderwear.domain.SuspectReview
@@ -127,7 +128,7 @@ class MainViewModel @Inject constructor(
     private val _pendingEnrichmentFilter = MutableStateFlow<Boolean?>(null)
     val pendingEnrichmentFilter: StateFlow<Boolean?> = _pendingEnrichmentFilter
 
-    private val _isDarkTheme = MutableStateFlow(prefs.getBoolean("dark_theme", true))
+    private val _isDarkTheme = MutableStateFlow(ThemePreference.isDark(prefs, application))
     val isDarkTheme: StateFlow<Boolean> = _isDarkTheme
     
     private val _showDiagnosticLog = MutableStateFlow(prefs.getBoolean("show_diagnostic_log", false))
@@ -762,12 +763,15 @@ class MainViewModel @Inject constructor(
     }
 
     fun completeOnboarding() {
+        // Pin the theme the new install has been showing (it followed the phone) before it is
+        // counted as an established one, which defaults to dark.
+        ThemePreference.persistChoiceAtOnboarding(prefs, _isDarkTheme.value)
         prefs.edit {putBoolean("onboarding_done", true)}
         _isOnboardingCompleted.value = true
     }
 
     fun setDarkTheme(enabled: Boolean) {
-        prefs.edit { putBoolean("dark_theme", enabled) }
+        prefs.edit { putBoolean(ThemePreference.KEY, enabled) }
         _isDarkTheme.value = enabled
     }
 
