@@ -13,6 +13,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -170,26 +171,6 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
             // the user's real session, not a covert WebView.
             val activeBatch by viewModel.activeMissionBatch.collectAsState()
             val batch = activeBatch
-            if (batch != null) {
-                // Keep the same BrowserScreen/WebView across Resolve contacts.
-                // The batch id resets mission state; tagged results reject late callbacks.
-                BrowserScreen(
-                        batchId = batch.id,
-                        missions = batch.missions,
-                        onMissionResult = { mission, outcome ->
-                            if (outcome is MissionOutcome.Extracted) {
-                                batch.onMissionExtracted(mission, outcome.html)
-                            }
-                        },
-                        onAllComplete = { viewModel.completeMissionBatch() },
-                        onCancel = { viewModel.cancelMissionBatch() },
-                        isBlocked = batch.isBlocked,
-                        context = operationState.description.takeIf { operationState.isRunning },
-                        stopsBatch = batch.retainBrowserForResolve,
-                        findings = if (operationState.isRunning) operationState.findings else emptyList(),
-                    )
-                return@onscreen
-            }
 
             val startDestination = if (isOnboardingCompleted) "targetList" else "onboarding"
 
@@ -291,9 +272,38 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                 }
             }
             }
+
+            // Mission overlay: the visible WebView screen takes over the whole content area
+            // (the lookups and imports must use the user's real session, not a covert WebView).
+            // It sits above the NavHost instead of replacing it, so the screens underneath keep
+            // their scroll and expanded-card state while a mission runs. The empty pointer
+            // handler makes this layer the only thing a touch can reach.
+            if (batch != null) {
+                Box(modifier = Modifier.fillMaxSize().pointerInput(Unit) {}) {
+                    // Keep the same BrowserScreen/WebView across Resolve contacts.
+                    // The batch id resets mission state; tagged results reject late callbacks.
+                    BrowserScreen(
+                        batchId = batch.id,
+                        missions = batch.missions,
+                        onMissionResult = { mission, outcome ->
+                            if (outcome is MissionOutcome.Extracted) {
+                                batch.onMissionExtracted(mission, outcome.html)
+                            }
+                        },
+                        onAllComplete = { viewModel.completeMissionBatch() },
+                        onCancel = { viewModel.cancelMissionBatch() },
+                        isBlocked = batch.isBlocked,
+                        context = operationState.description.takeIf { operationState.isRunning },
+                        stopsBatch = batch.retainBrowserForResolve,
+                        findings = if (operationState.isRunning) operationState.findings else emptyList(),
+                    )
+                }
+            }
+
             // A running operation covers the app (OperationOverlay), unless the user put one
             // that keeps going aside; then a bar at the bottom says it is still running.
-            if (operationState.isRunning) {
+            // Not over the browser, which shows the operation's context itself.
+            if (batch == null && operationState.isRunning) {
                 if (operationInBackground) {
                     OperationBar(
                         state = operationState,
@@ -313,13 +323,15 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                 }
             }
 
-            SnackbarHost(
-                snackbar,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(bottom = bottomBarHeight)
-            )
+            if (batch == null) {
+                SnackbarHost(
+                    snackbar,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                        .padding(bottom = bottomBarHeight)
+                )
+            }
             }
         }
     }
