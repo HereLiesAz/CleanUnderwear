@@ -3,6 +3,7 @@ package com.hereliesaz.cleanunderwear.ui
 import android.content.res.Configuration
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.text.style.TextAlign
@@ -12,7 +13,12 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -22,6 +28,7 @@ import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import com.hereliesaz.aznavrail.*
 import com.hereliesaz.aznavrail.model.*
+import com.hereliesaz.cleanunderwear.R
 import com.hereliesaz.cleanunderwear.data.Target
 
 @Composable
@@ -47,6 +54,9 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
     val backgroundColor = MaterialTheme.colorScheme.background
     var confirmLookUp by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<Int?>(null) }
     val scope = rememberCoroutineScope()
+    // The rail is configured in a DSL that is not composable, so its words are looked up here.
+    val resources = LocalContext.current.resources
+    fun str(@androidx.annotation.StringRes id: Int, vararg args: Any): String = resources.getString(id, *args)
 
     AzHostActivityLayout(
         navController = navController,
@@ -72,71 +82,71 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
         azAdvanced(
             helpEnabled = true,
             helpList = mapOf(
-                "registry" to "Everyone the app checks, with what the last check found.",
-                "review" to "Contacts that may be two people combined, or have an out-of-date number.",
-                "choices" to "People Fill in details found, waiting for you to say which is your contact.",
-                "harvest" to "Read the people saved on your phone into the app.",
-                "ingest" to "Add someone who isn't in your phone's contacts.",
-                "update" to "Run the daily check now instead of waiting for it.",
-                "resolve" to "Look up missing names, numbers and ages on a people-search site, contact by contact. Asks first.",
-                "intelligence_ops" to "Things to do with your contacts: import, add, check, fill in.",
-                "sort_host" to "The order of the contact list. The current one is ticked.",
-                "sort_name" to "A to Z by name.",
-                "sort_status" to "What needs you first: possible matches, then weak ones, then confirmed, then the rest.",
-                "sort_date" to "Most recently checked first.",
-                "archives" to "Show or hide contacts you archived.",
-                "settings" to "Alerts, check time, imports, your data.",
-                "diagnostic_log" to "Show what the app is doing, step by step."
+                "registry" to str(R.string.help_registry),
+                "review" to str(R.string.help_review),
+                "choices" to str(R.string.help_choices),
+                "harvest" to str(R.string.help_harvest),
+                "ingest" to str(R.string.help_ingest),
+                "update" to str(R.string.help_update),
+                "resolve" to str(R.string.help_resolve),
+                "intelligence_ops" to str(R.string.help_actions),
+                "sort_host" to str(R.string.help_sort),
+                "sort_name" to str(R.string.help_sort_name),
+                "sort_status" to str(R.string.help_sort_status),
+                "sort_date" to str(R.string.help_sort_date),
+                "archives" to str(R.string.help_archives),
+                "settings" to str(R.string.help_settings),
+                "diagnostic_log" to str(R.string.help_log)
             )
         )
 
         if (isOnboardingCompleted) {
             // Top-down: see the list, act on it, arrange it, then configure.
-            azRailItem(id = "registry", text = "Contacts", route = "targetList", info = "Everyone the app checks.")
-            azRailItem(id = "review", text = "Review", route = "review", info = "Possible wrong combinations and old numbers.")
+            azRailItem(id = "registry", text = str(R.string.rail_contacts), route = "targetList", info = str(R.string.rail_contacts_info))
+            azRailItem(id = "review", text = str(R.string.rail_review), route = "review", info = str(R.string.rail_review_info))
             if (choices.isNotEmpty()) {
-                azRailItem(id = "choices", text = "Who is it? (${choices.size})", route = "choices", info = "Say which person found is your contact.")
+                azRailItem(id = "choices", text = str(R.string.choices_rail_item, choices.size), route = "choices", info = str(R.string.rail_choices_info))
             }
 
-            azRailHostItem(id = "intelligence_ops", text = "Actions")
-            azRailSubItem(id = "harvest", hostId = "intelligence_ops", text = "Import contacts", shape = AzButtonShape.NONE,
+            azRailHostItem(id = "intelligence_ops", text = str(R.string.rail_actions))
+            azRailSubItem(id = "harvest", hostId = "intelligence_ops", text = str(R.string.rail_import), shape = AzButtonShape.NONE,
                 onClick = { viewModel.sweepContacts() })
-            azRailSubItem(id = "ingest", hostId = "intelligence_ops", text = "Add someone", shape = AzButtonShape.NONE,
+            azRailSubItem(id = "ingest", hostId = "intelligence_ops", text = str(R.string.rail_add_someone), shape = AzButtonShape.NONE,
                 onClick = { viewModel.setShowManualEntryDialog(true) })
-            azRailSubItem(id = "update", hostId = "intelligence_ops", text = "Check now", shape = AzButtonShape.NONE,
+            azRailSubItem(id = "update", hostId = "intelligence_ops", text = str(R.string.rail_check_now), shape = AzButtonShape.NONE,
                 onClick = { viewModel.triggerManualInterrogation() })
-            azRailSubItem(id = "resolve", hostId = "intelligence_ops", text = "Fill in details", shape = AzButtonShape.NONE,
+            azRailSubItem(id = "resolve", hostId = "intelligence_ops", text = str(R.string.rail_fill_in), shape = AzButtonShape.NONE,
                 onClick = { scope.launch { confirmLookUp = viewModel.resolveCandidateCount() } })
 
             // The active sort is ticked, so the list's order is never a guess.
-            fun sortLabel(order: MainViewModel.SortOrder, text: String) = if (sortOrder == order) "✓ $text" else text
-            azRailHostItem(id = "sort_host", text = "Sort")
-            azRailSubItem(id = "sort_name", hostId = "sort_host", text = sortLabel(MainViewModel.SortOrder.NAME, "By name"), shape = AzButtonShape.NONE,
+            fun sortLabel(order: MainViewModel.SortOrder, text: String) = if (sortOrder == order) str(R.string.rail_sort_ticked, text) else text
+            azRailHostItem(id = "sort_host", text = str(R.string.rail_sort))
+            azRailSubItem(id = "sort_name", hostId = "sort_host", text = sortLabel(MainViewModel.SortOrder.NAME, str(R.string.rail_sort_name)), shape = AzButtonShape.NONE,
                 onClick = { viewModel.setSortOrder(MainViewModel.SortOrder.NAME) })
-            azRailSubItem(id = "sort_status", hostId = "sort_host", text = sortLabel(MainViewModel.SortOrder.STATUS, "By status"), shape = AzButtonShape.NONE,
+            azRailSubItem(id = "sort_status", hostId = "sort_host", text = sortLabel(MainViewModel.SortOrder.STATUS, str(R.string.rail_sort_status)), shape = AzButtonShape.NONE,
                 onClick = { viewModel.setSortOrder(MainViewModel.SortOrder.STATUS) })
-            azRailSubItem(id = "sort_date", hostId = "sort_host", text = sortLabel(MainViewModel.SortOrder.DATE, "By last check"), shape = AzButtonShape.NONE,
+            azRailSubItem(id = "sort_date", hostId = "sort_host", text = sortLabel(MainViewModel.SortOrder.DATE, str(R.string.rail_sort_date)), shape = AzButtonShape.NONE,
                 onClick = { viewModel.setSortOrder(MainViewModel.SortOrder.DATE) })
 
             azRailToggle(
                 id = "archives",
                 isChecked = showIgnored,
-                toggleOnText = "Hide archived",
-                toggleOffText = "Show archived",
-                info = "Show or hide archived contacts."
+                toggleOnText = str(R.string.rail_hide_archived),
+                toggleOffText = str(R.string.rail_show_archived),
+                info = str(R.string.rail_archived_info)
             ) {
                 viewModel.toggleShowIgnored()
             }
 
             azDivider()
 
-            azRailItem(id = "settings", text = "Settings", route = "settings")
+            azRailItem(id = "settings", text = str(R.string.settings_title), route = "settings")
 
             azMenuToggle(
                 id = "diagnostic_log",
                 isChecked = showDiagnosticLog,
-                toggleOnText = "Hide log",
-                toggleOffText = "Show log",
+                toggleOnText = str(R.string.rail_hide_log),
+                toggleOffText = str(R.string.rail_show_log),
                 onClick = { viewModel.setShowDiagnosticLog(!showDiagnosticLog) }
             )
         }
@@ -199,7 +209,21 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                 viewModel.consumeOpenTarget()
             }
 
+            // One-line results ("Imported 42 contacts", "No new matches"), above the bar if it shows.
+            val snackbar = remember { SnackbarHostState() }
+            LaunchedEffect(Unit) { viewModel.messages.collect { snackbar.showSnackbar(it) } }
+            // Screens raise their own messages with an action (Undo) through this; it runs in the
+            // app's scope, so the message outlives the screen that raised it.
+            val appSnackbars = remember(snackbar, scope) { AppSnackbars(snackbar, scope) }
+            // The bar of an operation put aside covers the bottom of the screen: its measured
+            // height, not a guess, keeps the snackbar and the lists clear of it.
+            val barShown = operationState.isRunning && operationInBackground
+            val density = LocalDensity.current
+            var barHeight by remember { mutableStateOf(0.dp) }
+            val bottomBarHeight = if (barShown) barHeight else 0.dp
+
             Box(modifier = Modifier.fillMaxSize()) {
+            CompositionLocalProvider(LocalAppSnackbars provides appSnackbars, LocalBottomBarHeight provides bottomBarHeight) {
             NavHost(navController = navController, startDestination = startDestination) {
                 composable("onboarding") {
                     OnboardingScreen(onComplete = {
@@ -213,7 +237,8 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                     TargetListScreen(
                         viewModel = viewModel,
                         onTargetClick = { targetId ->
-                            navController.navigate("targetDetail/$targetId")
+                            // Single top: a double tap must not stack two of the same screen.
+                            navController.navigate("targetDetail/$targetId") { launchSingleTop = true }
                         }
                     )
                 }
@@ -240,14 +265,18 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                     arguments = listOf(navArgument("targetId") { type = NavType.IntType })
                 ) { backStackEntry ->
                     val targetId = backStackEntry.arguments?.getInt("targetId") ?: return@composable
-                    val target by viewModel
-                        .observeTarget(targetId)
-                        .collectAsState(initial = null)
+                    // Loading and gone are told apart (both used to be a blank screen with no way
+                    // back): the observed row is null while it loads and again if it is deleted.
+                    val loaded by produceState<TargetLoad>(initialValue = TargetLoad.Loading, targetId) {
+                        viewModel.observeTarget(targetId).collect { value = if (it == null) TargetLoad.Missing else TargetLoad.Found(it) }
+                    }
 
-                    val current = target
-                    if (current != null) {
+                    val state = loaded
+                    if (state !is TargetLoad.Found) {
+                        TargetUnavailable(loading = state is TargetLoad.Loading, onBack = { navController.popBackStack() })
+                    } else {
                         TargetDetailScreen(
-                            target = current,
+                            target = state.target,
                             sourceCatalog = viewModel.sourceCatalog,
                             onUpdateTarget = { shown, change -> viewModel.updateTarget(shown, change) },
                             onLaunchMission = { mission, onResult ->
@@ -261,6 +290,7 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                     }
                 }
             }
+            }
             // A running operation covers the app (OperationOverlay), unless the user put one
             // that keeps going aside; then a bar at the bottom says it is still running.
             if (operationState.isRunning) {
@@ -269,7 +299,10 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                         state = operationState,
                         onShow = viewModel::showOperation,
                         onCancel = viewModel::cancelOperation,
-                        modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .navigationBarsPadding()
+                            .onSizeChanged { barHeight = with(density) { it.height.toDp() } }
                     )
                 } else {
                     OperationOverlay(
@@ -280,15 +313,12 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                 }
             }
 
-            // One-line results ("Imported 42 contacts", "No new matches"), above the bar if it shows.
-            val snackbar = remember { SnackbarHostState() }
-            LaunchedEffect(Unit) { viewModel.messages.collect { snackbar.showSnackbar(it) } }
             SnackbarHost(
                 snackbar,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
-                    .padding(bottom = if (operationState.isRunning && operationInBackground) 64.dp else 0.dp)
+                    .padding(bottom = bottomBarHeight)
             )
             }
         }
@@ -296,27 +326,54 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
 
     confirmLookUp?.let { count ->
         if (count == 0) {
+            // Nothing to confirm, so one button; a second would only do the same.
             AppDialog(
-                title = "Nothing to fill in",
-                confirm = "OK",
+                title = stringResource(R.string.fill_nothing_title),
+                confirm = stringResource(R.string.ok),
                 onConfirm = { confirmLookUp = null },
                 onDismiss = { confirmLookUp = null },
-                dismiss = "Close"
-            ) { Text("Every contact already has a full name and an age.") }
+                dismiss = null
+            ) { Text(stringResource(R.string.fill_nothing_body)) }
         } else {
             AppDialog(
-                title = "Fill in details for $count contact${if (count == 1) "" else "s"}?",
-                confirm = "Start",
+                title = pluralStringResource(R.plurals.fill_title, count, count),
+                confirm = stringResource(R.string.fill_start),
                 onConfirm = { confirmLookUp = null; viewModel.resolveUnverifiedBatch() },
                 onDismiss = { confirmLookUp = null }
             ) {
-                Text(
-                    "Each contact missing a full name or an age is looked up on CyberBackgroundChecks, a people-search " +
-                        "site, in the app's browser, using the name, number or email you have for them. It can take " +
-                        "a minute or more per contact, and you may be asked to solve CAPTCHAs. Everyone is looked up " +
-                        "first; then you choose, contact by contact, which person found is yours. You can stop at any " +
-                        "time and choose from what was found so far."
-                )
+                Text(stringResource(R.string.fill_body))
+            }
+        }
+    }
+}
+
+/** What the detail route knows of its contact: still reading it, found it, or it is gone. */
+private sealed interface TargetLoad {
+    data object Loading : TargetLoad
+    data object Missing : TargetLoad
+    data class Found(val target: Target) : TargetLoad
+}
+
+/**
+ * The detail route when there is no contact to show: still loading, or deleted (by Delete
+ * everything, or a contact read that dropped it). The shell stays, with a way back.
+ */
+@Composable
+private fun TargetUnavailable(loading: Boolean, onBack: () -> Unit) {
+    Scaffold(
+        topBar = { AppTopBar(title = stringResource(R.string.gone_title), onBack = onBack) },
+        containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = screenInsets()
+    ) { padding ->
+        Box(Modifier.padding(padding).fillMaxSize().padding(Spacing.xl), contentAlignment = Alignment.Center) {
+            if (loading) {
+                LoadingCaption(null)
+            } else {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                    Text(stringResource(R.string.gone_heading), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+                    AppCaption(stringResource(R.string.gone_caption))
+                    AppAction(stringResource(R.string.gone_back), onBack)
+                }
             }
         }
     }
