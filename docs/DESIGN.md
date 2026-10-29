@@ -6,7 +6,7 @@ Monochrome, quiet, legible. The app delivers news nobody wants; the interface sh
 - **Colour**: a grey ramp with one accent: white-ish (`Bone`) on near-black in dark mode, near-black (`Ink`) on white in light mode. The one hue is **Alert** red, kept for what needs the user (a possible match) and for errors. Status is told apart by label, icon and fill, never by colour alone. No dynamic colour.
 - **Type** (`AppTypography`): titleLarge for screen titles, titleMedium for card titles, labelLarge for section headers, labelMedium for field labels, bodyLarge/bodyMedium for content, bodySmall for captions.
 - **Spacing** (`Spacing`): xs 4, sm 8, md 16, lg 24, xl 32 dp. Screens and cards pad `md`; items in a column sit `md` apart.
-- The window background is dark from launch (`res/values/themes.xml`), so there is no white flash. The app draws edge to edge.
+- The launch theme `Theme.CleanUnderwear.Launch` follows the phone's night mode for the first window and the Android 12+ system splash (`res/values/` is light, `#F7F7F7`; `res/values-night/` is dark, `#0A0A0A`), so there is no flash of the wrong colour. `MainActivity` then applies the app's own light/dark preference. The app draws edge to edge.
 
 ## Components (`ui/Components.kt`)
 Use these rather than building a screen's own:
@@ -29,7 +29,7 @@ Plain words for the person, not the system: "Checked daily", "Possible obituary"
 AzNavRail **11.57**. The active destination uses `primary`; focus and highlight use `onSurfaceVariant`, so the rail stays inside the monochrome palette.
 
 ## Launcher icon
-The manifest uses `@drawable/ic_launcher_foreground` directly for both `icon` and `roundIcon`. Adaptive icons need an opaque backdrop (transparent backgrounds render opaque on some launchers), so the foreground-only vector is used instead of the layered `mipmap/ic_launcher` assets. The black-and-white artwork is unchanged.
+The manifest uses `@mipmap/ic_launcher` and `@mipmap/ic_launcher_round`: adaptive icons with a white `@color/ic_launcher_background` plate, the black vector foreground, and a monochrome layer for themed icons. The black-and-white artwork is unchanged.
 
 ## Accessibility
 - Touch targets at least 48 dp.
