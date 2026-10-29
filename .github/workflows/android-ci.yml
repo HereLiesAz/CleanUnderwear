@@ -1,163 +1,25 @@
+# centralized-by: HereLiesAz/workflows
+# central-source-path: .github/workflows/android-ci.yml
+# central-source-sha256: 0e4c6b15551e220e9c5df59656d8b528b12658c914855d6acb6184e0b8340b9d
+# This file intentionally contains no repository secrets.
+# central-run-tracker: HereLiesAz/workflows
 name: Android CI
-
-# Runs unit tests on every push/PR, then lints and builds the debug APK and the minified
-# release APK (unsigned; the central release workflows sign and ship). The
-# release build is checked for R8 keeping the Gson-reflected models, because a
-# stripped model compiles fine and fails silently at runtime.
-#
-# Pushes to main also publish the debug APK as the rolling
-# "latest-debug-vMAJOR.MINOR" prerelease. Other branches build but publish
-# nothing. That APK is debug-signed and debuggable (anyone with adb can read the
-# app's private data with run-as), so the release title and notes say so; it is
-# for testers, not for everyday use.
-
 on:
   push:
-    branches: [ "**" ]
+    branches: ["**"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
   workflow_dispatch:
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-permissions:
-  contents: read
-
+permissions: {}
 jobs:
-  unit-tests:
+  central:
+    name: Hand-off
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 2
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          cache-read-only: false
-          dependency-graph: generate-submit-and-upload
-
-      - name: Run unit tests
-        run: |
-          chmod +x gradlew
-          ./gradlew test --continue --build-cache --no-daemon --stacktrace
-
-      - name: Upload test reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: unit-test-reports
-          path: '**/build/reports/tests/'
-
-  build-and-release:
-    needs: unit-tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - name: Point to central result
         env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-        with:
-          cache-read-only: false
-          dependency-graph: disabled
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
-      - name: Build with Gradle
-        id: gradle-build
-        run: |
-          set +e
-          ./gradlew assembleDebug assembleRelease lintDebug --build-cache --no-daemon > build.log 2>&1
-          EXIT_CODE=$?
-          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
-          cat build.log
-          exit $EXIT_CODE
-
-      - name: Check R8 kept reflective models
-        run: |
-          # Gson reads these by field name; if R8 renames or strips them the
-          # release build loads an empty source catalog with no error.
-          SEEDS=app/build/outputs/mapping/release/seeds.txt
-          for member in \
-            'SourceCatalog$SourcesFile: java.util.Map area_codes' \
-            'SourceCatalog$SourcesFile: java.util.Map counties' \
-            'SourceCatalog$RawSource: java.lang.String url_template' \
-            'data.Target: java.lang.String displayName'; do
-            grep -qF "$member" "$SEEDS" || { echo "::error::R8 did not keep $member"; exit 1; }
-          done
-
-      - name: Prepare Release Variables
-        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
-        id: release_vars
-        run: |
-          MAJOR=$(grep '^versionMajor=' version.properties | cut -d'=' -f2 | tr -d '\r ')
-          MINOR=$(grep '^versionMinor=' version.properties | cut -d'=' -f2 | tr -d '\r ')
-          PATCH=$(grep '^versionPatch=' version.properties | cut -d'=' -f2 | tr -d '\r ')
-          # Debug builds carry the 3-part versionName; the short SHA tells builds apart.
-          VERSION_NAME="$MAJOR.$MINOR.$PATCH-${GITHUB_SHA::7}"
-          TAG_NAME="latest-debug-v${MAJOR}.${MINOR}"
-          if [ -f "settings.gradle.kts" ]; then
-            APP_NAME=$(grep 'rootProject.name' settings.gradle.kts | sed -E "s/.*=.*[\"'](.*)[\"']/\1/")
-          elif [ -f "settings.gradle" ]; then
-            APP_NAME=$(grep 'rootProject.name' settings.gradle | sed -E "s/.*=.*[\"'](.*)[\"']/\1/")
-          else
-            APP_NAME="App"
-          fi
-          APK_ORIGINAL=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
-          if [ -z "$APK_ORIGINAL" ]; then
-            echo "Error: No APK found to release!"
-            exit 1
-          fi
-          TARGET_NAME="${APP_NAME}-${VERSION_NAME}-debug.apk"
-          mv "$APK_ORIGINAL" "$TARGET_NAME"
-          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
-          echo "APK_FILE=$TARGET_NAME" >> $GITHUB_ENV
-
-      - name: Publish Release
-        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -fa $TAG_NAME -m "Latest Debug Build"
-          git push origin $TAG_NAME --force
-          if gh release view $TAG_NAME > /dev/null 2>&1; then
-            echo "Updating existing release..."
-            gh release delete-asset "$TAG_NAME" build-tools.zip -y || true
-            gh release edit $TAG_NAME --prerelease \
-              --title "Latest DEBUG Build ($TAG_NAME): debuggable, for testers" \
-              --notes "DEBUG BUILD, for testers: debug-signed and debuggable (adb run-as can read the app's private data), not the Play release. Auto-built from commit $GITHUB_SHA." \
-              --target $GITHUB_SHA
-            gh release upload $TAG_NAME "$APK_FILE" --clobber
-          else
-            echo "Creating new release..."
-            gh release create $TAG_NAME "$APK_FILE" --prerelease \
-              --title "Latest DEBUG Build ($TAG_NAME): debuggable, for testers" \
-              --notes "DEBUG BUILD, for testers: debug-signed and debuggable (adb run-as can read the app's private data), not the Play release. Auto-built from commit $GITHUB_SHA." \
-              --target $GITHUB_SHA
-          fi
+          STATUS_CONTEXT: .github/workflows/android-ci.yml
+          TARGET_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        shell: bash
+        run: "set -euo pipefail\n# The build runs in HereLiesAz/workflows. Its result is reported on this commit as the\n# commit status named below: pending when the central run starts, then success or\n# failure. This job only points there and ends, so it never holds a runner while the\n# central run waits for one. (Trackers that followed the central run job-by-job held a\n# runner each for the whole build; under the account's concurrent-job limit they\n# starved the very runs they were waiting on: 2026-10-01, illumera waited 3h to start.)\n# No status at all means the gateway intentionally skipped this event.\n{\n  echo \"### Runs in HereLiesAz/workflows\"\n  echo\n  echo \"Result: commit status \\`$STATUS_CONTEXT\\` on \\`$TARGET_SHA\\`.\"\n  echo \"Central runs: $GITHUB_SERVER_URL/HereLiesAz/workflows/actions\"\n} >> \"$GITHUB_STEP_SUMMARY\"\necho \"Result is reported as commit status '$STATUS_CONTEXT' on $TARGET_SHA.\"\n"
