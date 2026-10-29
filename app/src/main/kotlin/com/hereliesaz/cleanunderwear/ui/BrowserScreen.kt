@@ -645,10 +645,105 @@ fun BrowserScreen(
     }
 }
 
-private class HtmlDumpInterface(private val onResult: (String?, String?) -> Unit) {
+/**
+ * The JavaScript bridge, registered once per page under [BrowserHost.bridgeName] (never a fixed
+ * name; see [BrowserExtractionGate]). [sink] is whichever screen is showing the page now, so
+ * the same bridge keeps working through a rotation.
+ */
+private class HtmlDumpInterface {
+    @Volatile
+    var sink: ((String?, String?, String?) -> Unit)? = null
+
     @JavascriptInterface
-    fun dumpTagged(token: String?, html: String?) {
-        onResult(token, html)
+    fun dumpTagged(token: String?, missionKey: String?, html: String?) {
+        sink?.invoke(token, missionKey, html)
+    }
+}
+
+/** A browser page and what is wired to it, the part of the screen that outlives a rotation. */
+private class BrowserHost {
+    val bridge = HtmlDumpInterface()
+    val bridgeName: String = BrowserExtractionGate.newBridgeName()
+    var view: WebView? = null
+
+    /** The mission ("batch-index") whose URL [view] was last told to load. */
+    var loadedKey: String? = null
+}
+
+/**
+ * Keeps the browser page across a rotation. The Activity has no `configChanges` entry, so a
+ * rotation destroys and rebuilds it, and a page rebuilt from scratch reloaded the mission's URL,
+ * losing a half-finished sign-in or CAPTCHA. The screen [park]s its page as it goes (when the
+ * Activity says it is being recreated, and the mission is still going) and the rebuilt screen
+ * [take]s it back. The page is made over a [MutableContextWrapper] so that, while parked, it
+ * holds the application and not the dying Activity. A parked page nothing takes (the mission
+ * was ended in that instant) is destroyed by the next screen to ask.
+ */
+private object BrowserRetention {
+    private var parked: BrowserHost? = null
+
+    fun take(): BrowserHost? {
+        val host = parked
+        parked = null
+        return host
+    }
+
+    fun park(host: BrowserHost, view: WebView) {
+        try {
+            host.bridge.sink = null
+            // Detach from the old window; leave the page loading, scripts running.
+            (view.parent as? android.view.ViewGroup)?.removeView(view)
+            (view.context as? MutableContextWrapper)?.setBaseContext(view.context.applicationContext)
+            host.view = view
+            parked = host
+        } catch (e: Exception) {
+            DiagnosticLogger.log("BrowserScreen: couldn't keep the page through the rotation: ${e.message}")
+            destroy(view)
+            host.view = null
+        }
+    }
+
+    fun destroy(view: WebView?) {
+        view ?: return
+        try {
+            view.stopLoading()
+            // Detach before destroying, as Chromium expects.
+            (view.parent as? android.view.ViewGroup)?.removeView(view)
+            view.destroy()
+        } catch (e: Exception) {
+            DiagnosticLogger.log("BrowserScreen: WebView destroy failed: ${e.message}")
+        }
+    }
+}
+
+/** The Activity under [this], through any wrappers; null if there is none. */
+private fun Context.findActivity(): Activity? {
+    var current: Context? = this
+    while (current is ContextWrapper) {
+        if (current is Activity) return current
+        current = current.baseContext
+    }
+    return null
+}
+
+/** How often the page is looked at while the user signs in. */
+private const val SIGN_IN_POLL_MS = 1_500L
+
+/** How many times a dumped sign-in page is handed back to the user before the screen just pauses. */
+private const val MAX_SIGN_IN_BOUNCES = 3
+
+/**
+ * Looks at the page in front of the user: its address, whether it has a password field, a QR
+ * code or a chat list on it (see [PageProbe]). Null when the page doesn't answer in time.
+ */
+private suspend fun probePage(webView: android.webkit.WebView?): PageProbe? {
+    val view = webView ?: return null
+    return withTimeoutOrNull(3_000L) {
+        kotlinx.coroutines.suspendCancellableCoroutine<PageProbe?> { cont ->
+            view.evaluateJavascript(PageProbe.SCRIPT) { raw ->
+                if (cont.isActive) cont.resumeWith(Result.success(PageProbe.parse(raw)))
+            }
+        }
     }
 }
 
