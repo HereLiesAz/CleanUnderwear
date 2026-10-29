@@ -63,8 +63,9 @@ sealed class BrowserMission {
 
     /**
      * How long the screen waits for [extractionScript] to hand back a page before unmasking and
-     * offering retry / skip / abort. Imports that wait for the user to sign in (or scan a QR
-     * code) get minutes, not seconds.
+     * offering retry / skip / abort. Imports read long lists (a scrolled chat list, a followers
+     * dialog) and get minutes, not seconds. The time the user spends signing in is not counted
+     * ([requiresSignIn]); the clock starts when the page is the one to read.
      */
     open val watchdogMs: Long = 30_000L
 
