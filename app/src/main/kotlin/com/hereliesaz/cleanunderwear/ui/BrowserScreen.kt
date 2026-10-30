@@ -47,10 +47,12 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.hereliesaz.aznavrail.AzButton
 import com.hereliesaz.aznavrail.model.AzButtonShape
+import com.hereliesaz.cleanunderwear.R
 import com.hereliesaz.cleanunderwear.domain.BrowserMission
 import com.hereliesaz.cleanunderwear.domain.PageProbe
 import com.hereliesaz.cleanunderwear.util.DiagnosticLogger
@@ -342,18 +344,20 @@ fun BrowserScreen(
     }
     if (confirmStop) {
         AppDialog(
-            title = when {
-                stopsBatch -> "Stop the lookups?"
-                mission.requiresSignIn -> "Stop the import?"
-                mission.autoExtract -> "Stop this lookup?"
-                else -> "Close the page?"
-            },
-            confirm = if (mission.autoExtract || stopsBatch) "Stop" else "Close",
+            title = stringResource(
+                when {
+                    stopsBatch -> R.string.browser_stop_lookups_title
+                    mission.requiresSignIn -> R.string.browser_stop_import_title
+                    mission.autoExtract -> R.string.browser_stop_lookup_title
+                    else -> R.string.browser_close_page_title
+                }
+            ),
+            confirm = stringResource(if (mission.autoExtract || stopsBatch) R.string.browser_stop else R.string.close),
             onConfirm = { confirmStop = false; cancel() },
             onDismiss = { confirmStop = false },
-            dismiss = "Keep going"
+            dismiss = stringResource(R.string.browser_keep_going)
         ) {
-            if (stopsBatch) Text("Every lookup left is skipped. What was found so far is kept.")
+            if (stopsBatch) Text(stringResource(R.string.browser_stop_lookups_body))
         }
     }
 
@@ -361,13 +365,19 @@ fun BrowserScreen(
         topBar = {
             AppTopBar(
                 title = context?.takeIf { it.isNotBlank() }
-                    ?: if (missions.size > 1) "${mission.label} (${currentIndex + 1} of ${missions.size})" else mission.label,
+                    ?: if (missions.size > 1) {
+                        stringResource(R.string.browser_title_of, mission.displayLabel(), currentIndex + 1, missions.size)
+                    } else {
+                        mission.displayLabel()
+                    },
                 onBack = ::cancel,
-                backLabel = when {
-                    stopsBatch -> "Stop all lookups"
-                    mission.autoExtract -> "Stop"
-                    else -> "Close"
-                }
+                backLabel = stringResource(
+                    when {
+                        stopsBatch -> R.string.browser_stop_all_lookups
+                        mission.autoExtract -> R.string.browser_stop
+                        else -> R.string.close
+                    }
+                )
             )
         },
         containerColor = MaterialTheme.colorScheme.background
@@ -543,11 +553,13 @@ fun BrowserScreen(
                                 verticalArrangement = Arrangement.spacedBy(Spacing.md)
                             ) {
                                 LoadingCaption(
-                                    when {
-                                        !pageReady -> "Loading the page…"
-                                        mission.requiresSignIn && !automationRan -> "Checking that you're signed in…"
-                                        else -> "Reading the page. Please don't touch it."
-                                    }
+                                    stringResource(
+                                        when {
+                                            !pageReady -> R.string.browser_loading
+                                            mission.requiresSignIn && !automationRan -> R.string.browser_checking_signed_in
+                                            else -> R.string.browser_reading
+                                        }
+                                    )
                                 )
                                 FindingsSoFar(findings)
                             }
@@ -556,7 +568,7 @@ fun BrowserScreen(
                                 verticalArrangement = Arrangement.spacedBy(Spacing.sm)
                             ) {
                                 AppAction(
-                                    "Let me use the page",
+                                    stringResource(R.string.browser_let_me_use),
                                     {
                                         if (mission.requiresSignIn) {
                                             waitForSignIn()
@@ -565,7 +577,7 @@ fun BrowserScreen(
                                         }
                                     }
                                 )
-                                AppAction("Cancel", ::cancel)
+                                AppAction(stringResource(R.string.cancel), ::cancel)
                             }
                         }
                     }
@@ -580,21 +592,19 @@ fun BrowserScreen(
                     verticalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
                     Text(
-                        "This page needs you, or didn't load. If it shows a CAPTCHA or a sign-in, complete it and " +
-                            "the lookup carries on by itself.",
+                        stringResource(R.string.browser_paused),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     AppCaption(
-                        "Try again reloads this page. Skip moves on without it." +
-                            if (stopsBatch) " Stop ends every lookup left; what was found so far is kept." else " Stop closes it."
+                        stringResource(if (stopsBatch) R.string.browser_paused_caption_batch else R.string.browser_paused_caption)
                     )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
                     ) {
                         AzButton(
-                            text = "Try again",
+                            text = stringResource(R.string.try_again),
                             onClick = {
                                 extractionGate.invalidate()
                                 automationRan = false
@@ -611,7 +621,7 @@ fun BrowserScreen(
                             shape = AzButtonShape.RECTANGLE
                         )
                         AzButton(
-                            text = "Skip",
+                            text = stringResource(R.string.browser_skip),
                             onClick = {
                                 paused = false
                                 onMissionResult(mission, MissionOutcome.Blocked)
@@ -621,7 +631,7 @@ fun BrowserScreen(
                             shape = AzButtonShape.RECTANGLE
                         )
                         AzButton(
-                            text = "Stop",
+                            text = stringResource(R.string.browser_stop),
                             onClick = ::cancel,
                             modifier = Modifier.weight(1f),
                             shape = AzButtonShape.RECTANGLE
@@ -639,12 +649,12 @@ fun BrowserScreen(
                     verticalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
                     Text(
-                        mission.signInPrompt,
+                        mission.displaySignInPrompt(),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    AppCaption("Nothing is read until you're in. Back steps back through the pages you visit.")
-                    AppAction("Stop", ::cancel)
+                    AppCaption(stringResource(R.string.browser_signin_caption))
+                    AppAction(stringResource(R.string.browser_stop), ::cancel)
                 }
             }
             // During an auto-extract mission the darkening filter over the
@@ -654,6 +664,34 @@ fun BrowserScreen(
             // dismisses via the up-arrow in the top bar when done reading.
         }
     }
+}
+
+/**
+ * The words for a mission's name in the app bar. The mission carries its name in English (the
+ * activity log uses it); what the user reads comes from the resources. A mission that is given its
+ * own name at the call site (a search link from a contact's screen) is shown as given.
+ */
+@Composable
+private fun BrowserMission.displayLabel(): String = when (this) {
+    is BrowserMission.CbcByPhone -> stringResource(R.string.mission_lookup_phone)
+    is BrowserMission.CbcByEmail -> stringResource(R.string.mission_lookup_email)
+    is BrowserMission.CbcByAddress -> stringResource(R.string.mission_lookup_address)
+    is BrowserMission.CbcByName -> stringResource(R.string.mission_lookup_name)
+    BrowserMission.HarvestWhatsApp -> stringResource(R.string.settings_import_whatsapp)
+    BrowserMission.HarvestInstagram -> stringResource(R.string.settings_import_instagram)
+    BrowserMission.HarvestGoogleContacts -> stringResource(R.string.settings_import_google)
+    BrowserMission.HarvestFacebookFriends -> stringResource(R.string.settings_import_facebook)
+    else -> label
+}
+
+/** The words telling the user how to sign in while an import waits; see [displayLabel]. */
+@Composable
+private fun BrowserMission.displaySignInPrompt(): String = when (this) {
+    BrowserMission.HarvestWhatsApp -> stringResource(R.string.mission_signin_whatsapp)
+    BrowserMission.HarvestInstagram -> stringResource(R.string.mission_signin_instagram)
+    BrowserMission.HarvestGoogleContacts -> stringResource(R.string.mission_signin_google)
+    BrowserMission.HarvestFacebookFriends -> stringResource(R.string.mission_signin_facebook)
+    else -> signInPrompt
 }
 
 /**

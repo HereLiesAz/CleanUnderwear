@@ -7,6 +7,8 @@ import android.net.Uri
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import com.hereliesaz.cleanunderwear.R
 import com.hereliesaz.cleanunderwear.update.UpdateChannel
 import com.hereliesaz.cleanunderwear.update.UpdateResult
 
@@ -20,20 +22,19 @@ fun UpdateDialog(
 ) {
     val context = LocalContext.current
     AppDialog(
-        title = "Update available",
-        confirm = if (update.channel == UpdateChannel.PLAY) "Open Google Play" else "Open the release",
+        title = stringResource(R.string.update_title),
+        confirm = stringResource(if (update.channel == UpdateChannel.PLAY) R.string.settings_open_play else R.string.update_open_release),
         onConfirm = {
             openUpdate(context, update, playWebUrl)
             onDismiss()
         },
         onDismiss = onDismiss,
-        dismiss = "Later"
+        dismiss = stringResource(R.string.update_later)
     ) {
         Text(
             when (update.channel) {
-                UpdateChannel.PLAY -> "Version ${update.version} is on Google Play. You have $installed."
-                UpdateChannel.GITHUB -> "Version ${update.version} is out. You have $installed. On the release page, " +
-                    "download the file ending in .apk and open it to install; Android may ask you to allow installs from your browser."
+                UpdateChannel.PLAY -> stringResource(R.string.update_body_play, update.version, installed)
+                UpdateChannel.GITHUB -> stringResource(R.string.update_body_github, update.version, installed)
             }
         )
     }

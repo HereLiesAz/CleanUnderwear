@@ -23,6 +23,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.paging.LoadState
@@ -118,8 +121,8 @@ fun TargetListScreen(
             }
         }
 
-        // No historyContext: AzTextBox would keep what is searched (contacts' names) in a history
-        // of its own, which the library stores where Delete everything cannot be shown to reach.
+        // AzTextBox keeps submitted text as autocomplete history; the application turns that off
+        // (CleanUnderwearApplication), because what is searched is contacts' names.
         AzTextBox(
             value = searchQuery,
             onValueChange = { viewModel.setSearchQuery(it) },
@@ -518,9 +521,9 @@ fun ManualEntryDialog(
         onDismiss = onDismiss
     ) {
         AppCaption(stringResource(R.string.add_caption))
-        AzTextBox(value = name, onValueChange = { name = it; problem = null }, hint = stringResource(R.string.add_full_name), modifier = Modifier.fillMaxWidth(), onSubmit = { submit() })
-        AzTextBox(value = phone, onValueChange = { phone = it; problem = null }, hint = stringResource(R.string.add_phone), modifier = Modifier.fillMaxWidth(), onSubmit = { submit() })
-        AzTextBox(value = email, onValueChange = { email = it; problem = null }, hint = stringResource(R.string.add_email), modifier = Modifier.fillMaxWidth(), onSubmit = { submit() })
+        AzTextBox(value = name, onValueChange = { name = it; problem = null }, hint = stringResource(R.string.add_full_name), keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words), modifier = Modifier.fillMaxWidth(), onSubmit = { submit() })
+        AzTextBox(value = phone, onValueChange = { phone = it; problem = null }, hint = stringResource(R.string.add_phone), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), modifier = Modifier.fillMaxWidth(), onSubmit = { submit() })
+        AzTextBox(value = email, onValueChange = { email = it; problem = null }, hint = stringResource(R.string.add_email), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email), modifier = Modifier.fillMaxWidth(), onSubmit = { submit() })
         problem?.let { found ->
             Text(
                 stringResource(

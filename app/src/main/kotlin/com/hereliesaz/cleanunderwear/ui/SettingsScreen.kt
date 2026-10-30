@@ -130,13 +130,13 @@ fun SettingsScreen(
             AppSection(stringResource(R.string.settings_section_updates))
             SettingLabel(
                 stringResource(R.string.settings_version, viewModel.installedVersion),
-                stringResource(R.string.settings_updates_from, viewModel.updateChannel.label)
+                stringResource(R.string.settings_updates_from, stringResource(viewModel.updateChannel.labelRes))
             )
             val result = updateState.lastResult
             AppCaption(
                 when {
                     updateState.checking -> stringResource(R.string.settings_checking)
-                    result is UpdateResult.Available -> stringResource(R.string.settings_update_available, result.version, result.channel.label)
+                    result is UpdateResult.Available -> stringResource(R.string.settings_update_available, result.version, stringResource(result.channel.labelRes))
                     result is UpdateResult.UpToDate -> stringResource(R.string.settings_up_to_date)
                     result is UpdateResult.Failed -> stringResource(R.string.settings_check_failed, result.reason)
                     else -> stringResource(R.string.settings_not_checked)

@@ -39,7 +39,7 @@ class SuspectReview @Inject constructor(
 
     suspend fun find(onProgress: (Float, String) -> Unit = { _, _ -> }): SuspectReport {
         val now = System.currentTimeMillis()
-        onProgress(0.05f, "Reading call and text history...")
+        onProgress(0.05f, "Reading call and text history…")
         val index = history.load()
         val historyAvailable = index != null
         val coverage = index?.oldestMillis?.let { now - it }
@@ -57,7 +57,7 @@ class SuspectReview @Inject constructor(
                 StringSimilarity.normalizePhone(t.phoneNumber)?.let { byNumber.getOrPut(it) { mutableListOf() } += t }
             }
             offset += CHUNK
-            onProgress(0.3f, "Scanning registry ($offset)...")
+            onProgress(0.3f, "Scanning registry ($offset)…")
         }
 
         val decided = ledger.getDecidedKeys().toHashSet()
@@ -65,7 +65,7 @@ class SuspectReview @Inject constructor(
         val replacements = HashMap<Int, ReplacementCandidate>()
 
         // Bad merges, from the ledger.
-        onProgress(0.5f, "Weighing merges...")
+        onProgress(0.5f, "Weighing merges…")
         for (m in ledger.getActiveSummaries()) {
             val survivor = byId[m.survivorId] ?: continue
             val survivorHistory = index?.statsFor(survivor.phoneNumber)
@@ -117,7 +117,7 @@ class SuspectReview @Inject constructor(
         }
 
         // Stale numbers, from every contact with one.
-        onProgress(0.75f, "Checking numbers...")
+        onProgress(0.75f, "Checking numbers…")
         for (t in byId.values) {
             val phone = t.phoneNumber ?: continue
             val number = StringSimilarity.normalizePhone(phone) ?: continue

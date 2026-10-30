@@ -7,7 +7,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** The pure parts of MainViewModel's browser waits, queue notices and launch-time contact read. */
+/** The pure parts of MainViewModel's browser waits and launch-time contact read. */
 class MainViewModelHelpersTest {
 
     // --- waits on the user are limited ---
@@ -44,21 +44,7 @@ class MainViewModelHelpersTest {
         assertTrue(USER_WAIT_IMPORT_MS >= USER_WAIT_LOOKUP_MS)
     }
 
-    // --- a job that has to queue says so ---
-
-    @Test
-    fun queuedNoticeNamesWhatIsWaitingAndWhatItWaitsFor() {
-        assertEquals(
-            "Delete everything will start once this is done: Looking up Dana Reyes (3 of 12)",
-            queuedNotice("Delete everything", "Looking up Dana Reyes (3 of 12)")
-        )
-    }
-
-    @Test
-    fun queuedNoticeWithoutADescriptionStillSaysSomething() {
-        assertEquals("Importing contacts will start once the job now running is done.", queuedNotice("Importing contacts", null))
-        assertEquals("Importing contacts will start once the job now running is done.", queuedNotice("Importing contacts", "  "))
-    }
+    // (The notice a queued job gives is words from the resources: see QueuedNoticeTest.)
 
     // --- the contact read at launch stays out of the way ---
 

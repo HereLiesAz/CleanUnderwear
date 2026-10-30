@@ -3,11 +3,13 @@ package com.hereliesaz.cleanunderwear.update
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import androidx.annotation.StringRes
 import com.google.android.play.core.appupdate.AppUpdateManagerFactory
 import com.google.android.play.core.install.model.UpdateAvailability
 import com.google.android.play.core.ktx.requestAppUpdateInfo
 import com.google.gson.JsonParser
 import com.hereliesaz.cleanunderwear.BuildConfig
+import com.hereliesaz.cleanunderwear.R
 import com.hereliesaz.cleanunderwear.util.DiagnosticLogger
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -18,9 +20,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /** Where this install came from, and so where its updates must come from. */
-enum class UpdateChannel(val label: String) {
-    PLAY("Google Play"),
-    GITHUB("GitHub")
+enum class UpdateChannel(@StringRes val labelRes: Int) {
+    PLAY(R.string.update_channel_play),
+    GITHUB(R.string.update_channel_github)
 }
 
 /** The outcome of one update check. */
@@ -76,7 +78,7 @@ class UpdateChecker @Inject constructor(
             }
         } catch (e: Exception) {
             DiagnosticLogger.log("Play update check failed: ${e.javaClass.simpleName}: ${e.message}")
-            UpdateResult.Failed(channel, "Google Play couldn't be reached")
+            UpdateResult.Failed(channel, context.getString(R.string.update_failed_play))
         }
     }
 
@@ -89,10 +91,10 @@ class UpdateChecker @Inject constructor(
                 .build()
             http.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
-                    return@withContext UpdateResult.Failed(channel, "GitHub answered ${response.code}")
+                    return@withContext UpdateResult.Failed(channel, context.getString(R.string.update_failed_github_code, response.code))
                 }
                 val release = GitHubRelease.parse(response.body.string())
-                    ?: return@withContext UpdateResult.Failed(channel, "GitHub's reply couldn't be read")
+                    ?: return@withContext UpdateResult.Failed(channel, context.getString(R.string.update_failed_github_reply))
                 if (VersionCompare.isNewer(release.version, currentVersion)) {
                     UpdateResult.Available(channel, release.version, release.url)
                 } else {
@@ -101,7 +103,7 @@ class UpdateChecker @Inject constructor(
             }
         } catch (e: Exception) {
             DiagnosticLogger.log("GitHub update check failed: ${e.javaClass.simpleName}: ${e.message}")
-            UpdateResult.Failed(channel, "GitHub couldn't be reached")
+            UpdateResult.Failed(channel, context.getString(R.string.update_failed_github_unreachable))
         }
     }
 
