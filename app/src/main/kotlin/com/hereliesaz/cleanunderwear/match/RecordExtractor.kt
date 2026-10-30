@@ -80,7 +80,7 @@ object RecordExtractor {
                 eventYear = deathYear,
                 recordKey = personKey(sourceId, firstName, middleOf(hit.groupValues.getOrNull(2)), lastName, birthYear ?: age(after), place?.city),
                 evidenceUrl = evidenceUrl,
-                snippet = "..." + original.substring(start, end).replace(Regex("\\s+"), " ").trim() + "..."
+                snippet = "…" + original.substring(start, end).replace(Regex("\\s+"), " ").trim() + "…"
             )
         }
         return out
