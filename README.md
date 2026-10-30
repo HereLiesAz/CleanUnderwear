@@ -118,6 +118,7 @@ Nothing else is uploaded. There is no analytics, advertising or tracking SDK. An
 2. **Tests**: `./gradlew testDebugUnitTest` (JVM; Room tests run on Robolectric).
 3. **Permissions**: `READ_CONTACTS`, `WRITE_CONTACTS` and `POST_NOTIFICATIONS`, asked for at the end of onboarding, after the app explains itself. The app runs (with an empty list) if they are refused.
 4. **Versioning**: `version.properties` holds `versionMajor`, `versionMinor`, `versionPatch` (the version name is `major.minor.patch`) and `versionBuild` (the version code). The release workflows bump the file and pass the released name and code to Gradle as `-PversionName` and `-PversionCodeOverride`, which win over it. A local build therefore gets `major.minor.patch` and a version code of `versionBuild` (1 unless edited); the `versionCode` and `versionName` lines in the file are written by the release tooling, and the build ignores them.
+5. **Play release**: the app declares `FOREGROUND_SERVICE_DATA_SYNC` for its daily check, so Play Console → App content → Foreground service permissions must carry a declaration for it. Without that declaration Play rejects the final commit of the release edit (HTTP 403, "You must let us know whether your app uses any Foreground Service permissions"), even though the bundle uploads.
 
 ---
 
