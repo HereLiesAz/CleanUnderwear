@@ -4,6 +4,7 @@ import com.hereliesaz.cleanunderwear.data.Target
 import com.hereliesaz.cleanunderwear.data.isStalePhone
 import com.hereliesaz.cleanunderwear.domain.BrowserMission
 import com.hereliesaz.cleanunderwear.domain.LookupOption
+import com.hereliesaz.cleanunderwear.domain.PooledPerson
 import com.hereliesaz.cleanunderwear.match.StringSimilarity
 import com.hereliesaz.cleanunderwear.util.DiagnosticLogger
 import org.jsoup.Jsoup
@@ -43,7 +44,7 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
             ?.let { add(BrowserMission.CbcByPhone(it)) }
 
         target.email
-            ?.takeIf { it.isNotBlank() && it.contains("@") }
+            ?.takeIf(::isSearchableEmail)
             ?.let { add(BrowserMission.CbcByEmail(it)) }
 
         target.residenceInfo
@@ -68,7 +69,7 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
             ?.takeIf { it.length >= 10 }
         if (phone != null) return BrowserMission.CbcByPhone(phone)
 
-        val email = target.email?.takeIf { it.isNotBlank() && it.contains("@") }
+        val email = target.email?.takeIf(::isSearchableEmail)
         if (email != null) return BrowserMission.CbcByEmail(email)
 
         val address = target.residenceInfo?.takeIf { it.isNotBlank() }
@@ -110,9 +111,8 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
             ?: if (root !== doc.body()) root.selectFirst("h1, h2, h3") else null)
             ?.text()?.trim()?.takeIf { it.isNotBlank() }
 
-        val address = root
-            .selectFirst(ADDRESS_SELECTORS)
-            ?.text()?.trim()?.takeIf { it.isNotBlank() }
+        val address = (root.selectFirst("a.address") ?: root.selectFirst(ADDRESS_SELECTORS))
+            ?.text()?.let(::cleanAddress)?.takeIf { it.isNotBlank() }
 
         val phone = root
             .selectFirst(PHONE_SELECTORS)
@@ -121,9 +121,10 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
             ?.takeIf { it.length >= 10 }
 
         // DOB / age — a dedicated field if present, else "Age N" / "DOB ..." text.
+        // The age slot reads "Deceased" for someone the site lists as dead: that is no age.
         val dob = root
             .selectFirst(DOB_SELECTORS)
-            ?.text()?.trim()?.takeIf { it.isNotBlank() }
+            ?.text()?.trim()?.takeIf { it.isNotBlank() && !it.equals("deceased", ignoreCase = true) }
             ?: DOB_TEXT.find(root.text())?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
 
         // Structured data (schema.org Person, as JSON-LD or microdata) doesn't drift with the
@@ -161,28 +162,191 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
         val doc = Jsoup.parse(html)
         // A card inside another card (a relatives strip) belongs to that card's person.
         val cards = doc.select(CARD_SELECTORS).filter { card -> card.parents().none { it.`is`(CARD_SELECTORS) } }
-        if (cards.isNotEmpty()) return cards.mapNotNull(::readCard).distinctBy(::personKey).take(MAX_PEOPLE)
+        if (cards.isNotEmpty()) return cards.mapNotNull(::readCard).distinctBy(::personKey).take(MAX_POOL)
         val structured = structuredPeople(doc).mapNotNull { p ->
             val name = p.name?.let(::naturalOrder) ?: return@mapNotNull null
             p.copy(name = name, middleName = middleFrom(name), dob = p.dob?.let(::pinAge))
         }
-        if (structured.size > 1) return structured.distinctBy(::personKey).take(MAX_PEOPLE)
+        if (structured.size > 1) return structured.distinctBy(::personKey).take(MAX_POOL)
         return listOfNotNull(parseFindings(html)?.takeIf { it.name != null })
     }
 
     private fun readCard(card: Element): Findings? {
         val name = (card.selectFirst(NAME_SELECTORS) ?: card.selectFirst("h1, h2, h3, h4"))
             ?.text()?.trim()?.takeIf { it.isNotBlank() }?.let(::naturalOrder) ?: return null
-        val dob = card.selectFirst(DOB_SELECTORS)?.text()?.trim()?.takeIf { it.isNotBlank() }
+        // The age slot reads "Deceased" for someone the site lists as dead: that is no age, and
+        // it is what the user most needs to see about this person.
+        val ageText = card.selectFirst(DOB_SELECTORS)?.text()?.trim()?.takeIf { it.isNotBlank() }
+        val deceased = ageText.equals("deceased", ignoreCase = true)
+        val dob = (if (deceased) null else ageText)
             ?: DOB_TEXT.find(card.text())?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
         return Findings(
             name = name,
-            address = card.selectFirst(ADDRESS_SELECTORS)?.text()?.trim()?.takeIf { it.isNotBlank() },
+            address = (card.selectFirst("a.address") ?: card.selectFirst(ADDRESS_SELECTORS))
+                ?.text()?.let(::cleanAddress)?.takeIf { it.isNotBlank() },
             phone = card.selectFirst(PHONE_SELECTORS)?.text()?.filter { it.isDigit() || it == '+' }?.takeIf { it.length >= 10 },
             middleName = middleFrom(name),
-            dob = dob?.let(::pinAge)
+            dob = dob?.let(::pinAge),
+            deceased = deceased,
+            // The person's own link, never a relative's (their links are `/detail/` too).
+            detailUrl = card.selectFirst("a.name-link[href], a.btn[href*=\"/detail/\"]")?.attr("href")?.let(::safeDetailUrl)
         )
     }
+
+    /**
+     * Reads one person's own page: all the phones, emails and addresses it lists, relatives, and
+     * the age. The page is one long card of sections: the current address and the address history
+     * are `a.address-current` (the full address, ZIP+4 included, over two `span.d-block` lines;
+     * the `a.address` links further down are short teasers without a ZIP), phones are `a.phone`
+     * (each shown twice), relatives `a.relative`, and the email section is a `.section-label`
+     * reading "Email Addresses" over its entries, or "None found". Ad widgets and page chrome are
+     * taken out first. Null when the page gave none of it. [describeDetail] says which parts were
+     * found, for the log.
+     */
+    fun parseDetail(html: String): PersonDetails? {
+        if (html.isBlank()) return null
+        val doc = Jsoup.parse(html)
+        doc.select("script, style, noscript, nav, footer, aside, .wam-pro-max-widget").remove()
+        val body = doc.body() ?: return null
+
+        val phones = body.select("a.phone, .phone, [itemprop=telephone], a[href^=tel]")
+            .map { it.text().filter { c -> c.isDigit() } }
+            .filter { it.length in 10..11 }
+            .distinct().take(MAX_DETAIL_ITEMS)
+        // Emails: mail links, and whatever the "Email Addresses" section lists (it says "None found"
+        // when there are none). A masked address ("j***@x.com") is not matched.
+        val fromLinks = body.select("a[href^=mailto]").map { it.attr("href").removePrefix("mailto:") }
+        val fromSection = body.select(".section-label")
+            .filter { it.text().contains("email", ignoreCase = true) }
+            .flatMap { label -> EMAIL_IN_TEXT.findAll(label.parent()?.text().orEmpty()).map { it.value }.toList() }
+        val emails = (fromLinks + fromSection)
+            .mapNotNull { EMAIL_IN_TEXT.find(it)?.value?.lowercase() }
+            .distinct().take(MAX_DETAIL_ITEMS)
+        // Addresses: the page's own, in order (the current one first). Written the way a result
+        // card writes one, "street, city, ST zip".
+        val full = body.select("a.address-current").map { a ->
+            val lines = a.select("span.d-block").map { it.text().trim() }.filter { it.isNotBlank() }
+            cleanAddress(if (lines.size >= 2) lines.joinToString(", ") else a.text())
+        }
+        val addresses = full.ifEmpty { body.select("a.address").map { cleanAddress(it.text()) } }
+            .filter { it.isNotBlank() }
+            .distinct().take(MAX_DETAIL_ITEMS)
+        val relatives = body.select("a.relative")
+            .map { it.text().trim() }
+            .filter { it.isNotBlank() }
+            .distinct().take(MAX_DETAIL_ITEMS)
+        val ageText = body.selectFirst(DOB_SELECTORS)?.text()?.trim()?.takeIf { it.isNotBlank() }
+        val deceased = ageText.equals("deceased", ignoreCase = true)
+        val dob = (if (deceased) null else ageText)
+            ?: DOB_TEXT.find(body.text())?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
+        val details = PersonDetails(phones, emails, addresses, relatives, dob?.let(::pinAge), deceased)
+        return details.takeIf { phones.isNotEmpty() || emails.isNotEmpty() || addresses.isNotEmpty() || relatives.isNotEmpty() || it.dob != null || deceased }
+    }
+
+    /** For the log: which parts a person's page gave, never their values. */
+    fun describeDetail(html: String, details: PersonDetails?): String =
+        if (details != null) {
+            "phones=${details.phones.size} emails=${details.emails.size} addresses=${details.addresses.size} " +
+                "relatives=${details.relatives.size} age/dob=${if (details.dob != null || details.deceased) "✓" else "—"}"
+        } else {
+            val doc = Jsoup.parse(html)
+            "nothing read; classes on the page: " + doc.select("[class]").flatMap { it.classNames() }
+                .filter { CLASS_HINT.containsMatchIn(it) }.distinct().take(25).joinToString(" ")
+        }
+
+    /**
+     * The next page of a results list, from the pager under it ("« ‹ › »  Displaying page 1 of 6"),
+     * as an address the browser may open; null on the last page, on a list of one page, and when
+     * the pager's markup isn't recognised ([describePager] says which, for the log). [pageUrl] is
+     * the address of the page being read, which a relative link is made against.
+     */
+    fun nextListPage(html: String, pageUrl: String? = null): String? {
+        val doc = Jsoup.parse(html)
+        doc.selectFirst("a[rel=next][href], link[rel=next][href]")?.attr("href")
+            ?.let { safeResultsUrl(it, pageUrl) }?.let { return it }
+        val pager = findPager(doc) ?: return null
+        if (pager.page >= pager.pages) return null
+        val anchors = pager.anchors
+        val labelled = anchors.firstOrNull { a ->
+            val label = (a.attr("aria-label") + " " + a.attr("title") + " " + a.text()).trim()
+            label.contains("next", ignoreCase = true) || a.text().trim() == "\u203A" || a.text().trim() == ">" ||
+                a.selectFirst(NEXT_ICON) != null
+        }
+        // Four controls (first, previous, next, last), or two on page 1 (next, last): by position.
+        val next = labelled ?: when {
+            anchors.size == 4 -> anchors[2]
+            anchors.size == 2 && pager.page == 1 -> anchors[0]
+            else -> null
+        }
+        return next?.attr("href")?.let { safeResultsUrl(it, pageUrl) }
+    }
+
+    /** For the log: what the pager looked like, never the page's content. */
+    fun describePager(html: String, pageUrl: String? = null): String {
+        val doc = Jsoup.parse(html)
+        val pager = findPager(doc) ?: return "no pager found"
+        val next = nextListPage(html, pageUrl)
+        return "pager: page ${pager.page} of ${pager.pages}, ${pager.anchors.size} links, next=${if (next != null) "✓" else "—"}"
+    }
+
+    private class Pager(val page: Int, val pages: Int, val anchors: List<Element>)
+
+    /** The element that says "Displaying page X of Y" and the links around it. */
+    private fun findPager(doc: org.jsoup.nodes.Document): Pager? {
+        val label = doc.getElementsMatchingOwnText(PAGE_OF.toPattern()).firstOrNull() ?: return null
+        val m = PAGE_OF.find(label.ownText()) ?: return null
+        var scope: Element? = label
+        while (scope != null && scope.select("a[href]").isEmpty()) scope = scope.parent()
+        val anchors = scope?.select("a[href]").orEmpty()
+        return Pager(m.groupValues[1].toInt(), m.groupValues[2].toInt(), anchors)
+    }
+
+    /**
+     * A link from a pager, as an address the browser may open: this site's own search-result
+     * pages (people, phone, email, address) over https, never a person's page or another site. A
+     * query is kept (the page number is usually in it) if it is made of plain characters.
+     */
+    internal fun safeResultsUrl(href: String, pageUrl: String? = null): String? {
+        val trimmed = href.trim()
+        if (trimmed.isEmpty() || trimmed.startsWith("#") || trimmed.startsWith("javascript:", ignoreCase = true)) return null
+        val absolute = when {
+            trimmed.startsWith("?") && pageUrl != null -> pageUrl.substringBefore('?').substringBefore('#') + trimmed
+            trimmed.startsWith("/") && !trimmed.startsWith("//") -> "https://www.cyberbackgroundchecks.com$trimmed"
+            else -> trimmed
+        }
+        return try {
+            val uri = java.net.URI(absolute)
+            if (uri.scheme != "https" || !uri.host.equals("www.cyberbackgroundchecks.com", ignoreCase = true)) return null
+            val path = uri.rawPath ?: return null
+            if (RESULT_PATHS.none { path.startsWith(it) }) return null
+            val query = uri.rawQuery
+            if (query != null && (query.length > 200 || !SAFE_QUERY.matches(query))) return null
+            "https://www.cyberbackgroundchecks.com$path" + (if (query != null) "?$query" else "")
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * A link from a result card to a person's page, as an address the browser may open: only this
+     * site's own `/detail/` pages, over https, with no query or fragment. A card's link is page
+     * content, so anything else (an ad, another site) is not followed.
+     */
+    internal fun safeDetailUrl(href: String): String? {
+        val absolute = if (href.startsWith("/")) "https://www.cyberbackgroundchecks.com$href" else href
+        return try {
+            val uri = java.net.URI(absolute.trim())
+            if (uri.scheme != "https" || !uri.host.equals("www.cyberbackgroundchecks.com", ignoreCase = true)) return null
+            val path = uri.rawPath ?: return null
+            if (!path.startsWith("/detail/") || path.length <= "/detail/".length) return null
+            "https://www.cyberbackgroundchecks.com$path"
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** An address without the county note the site puts after it ("[Harrison County]"). */
+    private fun cleanAddress(text: String): String = text.replace(Regex("\\s*\\[[^\\]]*]\\s*$"), "").trim()
 
     /**
      * The same person listed twice (on one page, or by two searches) has one key: first and last
@@ -198,17 +362,83 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
     ).joinToString("|") { it.orEmpty() }
 
     /**
+     * One person the searches found: what the list showed of them ([findings]) and which searches
+     * turned them up ([by], "phone" / "email" / "address" / "name").
+     */
+    data class Candidate(val findings: Findings, val by: List<String>)
+
+    /** A candidate with the option it makes and how well it fits; see [rank]. */
+    data class Ranked(val candidate: Candidate, val option: LookupOption, val score: Int)
+
+    /**
+     * Everyone [found] across a contact's searches as candidates, one per person however many
+     * searches turned them up.
+     */
+    fun candidates(found: List<Pair<BrowserMission, Findings>>): List<Candidate> =
+        found.groupBy { personKey(it.second) }.values.map { group ->
+            val first = group.first().second
+            Candidate(
+                first.copy(
+                    detailUrl = group.firstNotNullOfOrNull { it.second.detailUrl },
+                    deceased = group.any { it.second.deceased }
+                ),
+                group.map { modeLabel(it.first) }.distinct()
+            )
+        }
+
+    /**
+     * What identifies a person for good: their own page's address when the list gave it, else the
+     * name / birth year / address key. Held for everyone shown or kept, so no one is offered twice.
+     */
+    fun keyOf(f: Findings): String = f.detailUrl ?: personKey(f)
+
+    /**
+     * The people on a further page of a results list ([people], from the search [by]) that have not
+     * been offered or held yet: the rule that no one is shown twice. Their keys are added to [seen].
+     */
+    fun unseen(people: List<Findings>, by: String, seen: MutableSet<String>): List<Candidate> =
+        people.map { Candidate(it, listOf(by)) }.filter { seen.add(keyOf(it.findings)) }
+
+    /** A candidate as it is held in the pool. */
+    fun pooled(c: Candidate): PooledPerson = c.findings.let {
+        PooledPerson(it.name, it.middleName, it.dob, it.address, it.phone, it.deceased, it.detailUrl, c.by)
+    }
+
+    /** A held person as a candidate again. */
+    fun candidate(p: PooledPerson): Candidate =
+        Candidate(Findings(p.name, p.address, p.phone, p.middleName, p.dob, p.deceased, p.detailUrl), p.foundBy)
+
+    /**
      * What the user picks from after a run of lookups: every person [found] for [target] across
      * its searches, one entry per person however many searches turned them up, best fit first,
      * each with what fits the contact and what doesn't. Nothing is decided here; the user decides.
      */
-    fun options(target: Target, found: List<Pair<BrowserMission, Findings>>): List<LookupOption> {
+    fun options(
+        target: Target,
+        found: List<Pair<BrowserMission, Findings>>,
+        details: Map<String, PersonDetails> = emptyMap(),
+    ): List<LookupOption> = rank(target, candidates(found), details).map { it.option }.take(MAX_PEOPLE)
+
+    /**
+     * Every candidate against [target], best fit first, uncapped: the caller takes a batch to put
+     * to the user and holds the rest. [details] (keyed by page address) are what each person's own
+     * page added, for those whose page was read.
+     */
+    fun rank(
+        target: Target,
+        candidates: List<Candidate>,
+        details: Map<String, PersonDetails> = emptyMap(),
+    ): List<Ranked> {
         val realName = NameValidator.isVerifiable(target.displayName)
         val tokens = if (realName) NameValidator.tokenize(target.displayName) else emptyList()
         val knownBirth = target.dateOfBirth?.let { Regex("(19|20)\\d{2}").find(it)?.value }
-        return found.groupBy { personKey(it.second) }.values.map { group ->
-            val f = group.first().second
-            val by = group.map { modeLabel(it.first) }.distinct()
+        return candidates.map { c ->
+            val f = c.findings
+            val url = f.detailUrl
+            // What the person's own page added, when it was read: every phone, email and address
+            // on file takes part in the match, not just the one the list showed.
+            val d = url?.let(details::get)
+            val by = c.by
             val fits = mutableListOf<String>()
             val differs = mutableListOf<String>()
             var score = 0
@@ -216,13 +446,18 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
                 if (nameConsistent(tokens, f.name)) { fits += "Same name"; score += 2 }
                 else { differs += "A different name"; score -= 3 }
             }
-            val phone = StringSimilarity.normalizePhone(f.phone)
+            val phones = listOfNotNull(f.phone) + d?.phones.orEmpty()
+            val knownPhone = StringSimilarity.normalizePhone(target.usablePhone)
             when {
-                phone != null && phone == StringSimilarity.normalizePhone(target.usablePhone) -> { fits += "Same phone number"; score += 3 }
-                StringSimilarity.nanpAreaCode(f.phone)?.let { it == target.areaCode } == true -> { fits += "Same area code"; score += 1 }
+                knownPhone != null && phones.any { StringSimilarity.normalizePhone(it) == knownPhone } -> { fits += "Same phone number"; score += 3 }
+                target.areaCode != null && phones.any { StringSimilarity.nanpAreaCode(it) == target.areaCode } -> { fits += "Same area code"; score += 1 }
             }
-            if (target.residenceInfo != null && corroboratesPlace(target, f)) { fits += "Same city or ZIP"; score += 1 }
-            val birth = f.dob?.let { Regex("(19|20)\\d{2}").find(it)?.value }
+            val knownEmail = target.email?.trim()?.lowercase()
+            if (knownEmail != null && d?.emails.orEmpty().any { it == knownEmail }) { fits += "Same email address"; score += 3 }
+            val addresses = listOfNotNull(f.address) + d?.addresses.orEmpty()
+            if (target.residenceInfo != null && corroboratesPlace(target, addresses)) { fits += "Same city or ZIP"; score += 1 }
+            val dobText = d?.dob ?: f.dob
+            val birth = dobText?.let { Regex("(19|20)\\d{2}").find(it)?.value }
             if (knownBirth != null && birth != null) {
                 val gap = kotlin.math.abs(knownBirth.toInt() - birth.toInt())
                 if (gap <= 1) { fits += "Same age"; score += 2 } else { differs += "A different age"; score -= 2 }
@@ -231,21 +466,38 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
                 fits += "Came up for their ${by.filter { it == "phone" || it == "email" }.joinToString(" and ")}"
                 score += 2
             }
-            LookupOption(f.name, f.middleName, f.dob, f.address, f.phone, by, fits, differs) to score
-        }.sortedByDescending { it.second }.map { it.first }.take(MAX_PEOPLE)
+            Ranked(
+                c,
+                LookupOption(
+                    name = f.name, middleName = f.middleName, dob = dobText, address = f.address, phone = f.phone,
+                    foundBy = by, fits = fits, differs = differs,
+                    deceased = f.deceased || d?.deceased == true,
+                    detailUrl = url,
+                    phones = d?.phones, emails = d?.emails,
+                    otherAddresses = d?.addresses?.filter { it != f.address },
+                    relatives = d?.relatives
+                ),
+                score
+            )
+        }.sortedByDescending { it.score }
     }
 
     /**
      * The contact with the details of the person the user picked: gaps filled, nothing the
      * contact already has overwritten (as [merge]), and a note of where the details came from.
      */
-    fun adopt(target: Target, option: LookupOption): Target = merge(
-        target,
-        Findings(option.name, option.address, option.phone, option.middleName, option.dob)
-    ).copy(enrichmentProvenance = "${option.foundBy.joinToString("+")} · $CHOSEN_PREFIX ${option.name ?: "a result"}")
-
-    /** The note left when the user said none of the people found is this contact. */
-    fun noneOfThem(count: Int): String = "$NONE_PREFIX $count result${if (count == 1) "" else "s"}"
+    fun adopt(target: Target, option: LookupOption): Target {
+        val merged = merge(
+            target,
+            Findings(option.name, option.address, option.phone ?: option.phones?.firstOrNull(), option.middleName, option.dob)
+        )
+        return merged.copy(
+            // An email only fills a gap, and only a whole one (a page may show it masked).
+            email = merged.email ?: option.emails.orEmpty().firstOrNull { '*' !in it && isSearchableEmail(it) },
+            enrichmentProvenance = "${option.foundBy.joinToString("+")} · $CHOSEN_PREFIX ${option.name ?: "a result"}" +
+                if (option.deceased) " · listed as deceased" else ""
+        )
+    }
 
     /**
      * One line for the diagnostic log: what [parseFindings] got from a page, or, when it got
@@ -497,7 +749,8 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
         else -> 0
     }
 
-    private fun modeLabel(m: BrowserMission): String = when (m) {
+    /** Which search a mission is, for the choices ("phone", "email", "address", "name"). */
+    fun modeLabel(m: BrowserMission): String = when (m) {
         is BrowserMission.CbcByPhone -> "phone"
         is BrowserMission.CbcByEmail -> "email"
         is BrowserMission.CbcByAddress -> "address"
@@ -585,12 +838,12 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
         if (phone != null && phone == StringSimilarity.normalizePhone(target.usablePhone)) return true
         val cardArea = StringSimilarity.nanpAreaCode(f.phone)
         if (cardArea != null && (cardArea == target.areaCode || cardArea == StringSimilarity.nanpAreaCode(target.phoneNumber))) return true
-        return corroboratesPlace(target, f)
+        return corroboratesPlace(target, listOfNotNull(f.address))
     }
 
     /** Whether [f]'s address names the city or ZIP the contact's address names. */
-    private fun corroboratesPlace(target: Target, f: Findings): Boolean {
-        val address = f.address?.lowercase() ?: return false
+    private fun corroboratesPlace(target: Target, addresses: List<String>): Boolean {
+        val address = addresses.joinToString(" | ") { it.lowercase() }.takeIf { it.isNotBlank() } ?: return false
         val known = target.residenceInfo?.lowercase()?.split(',')?.map { it.trim() }?.filter { it.length >= 3 }.orEmpty()
         return known.any { part -> part.none(Char::isDigit) && Regex("\\b${Regex.escape(part)}\\b").containsMatchIn(address) } ||
             Regex("\\b\\d{5}\\b").findAll(target.residenceInfo.orEmpty()).any { it.value in address }
@@ -670,7 +923,21 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
      * which the viewmodel records as a per-search miss without halting the
      * whole queue.
      */
-    fun looksLikeBlock(html: String): Boolean = BotWall.suspected(html)
+    fun looksLikeBlock(html: String): Boolean {
+        // Said in the activity log: a wrong call pauses the lookup, and the reason is what
+        // tells a real CAPTCHA from a page that merely carries one.
+        val reason = BotWall.reason(html) ?: return false
+        DiagnosticLogger.log("CYBG: page looks blocked ($reason)", DiagnosticLogger.LogEntry.LogLevel.WARN)
+        return true
+    }
+
+    /**
+     * Whether [email] is worth searching: something before and after one `@`, and a dot in the
+     * domain. A bare "@" or "name@" in a contact's email field used to start a search that could
+     * only come back empty.
+     */
+    internal fun isSearchableEmail(email: String): Boolean =
+        EMAIL_SHAPE.matches(email.trim())
 
     /** Whether a lookup page says it found nobody: a finished search with nothing in it. */
     fun foundNobody(html: String): Boolean = BotWall.saysNoResults(html)
@@ -691,10 +958,48 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
         val address: String?,
         val phone: String?,
         val middleName: String? = null,
-        val dob: String? = null
+        val dob: String? = null,
+        /** The site lists this person as deceased. */
+        val deceased: Boolean = false,
+        /** The address of this person's own page on the site, when the results list links to it. */
+        val detailUrl: String? = null
+    )
+
+    /**
+     * What one person's own page adds to the teaser a results list shows: every phone, email and
+     * address on file, relatives, and the age or birth date. Held with the choices until the user
+     * says which person is their contact, then dropped.
+     */
+    data class PersonDetails(
+        val phones: List<String> = emptyList(),
+        val emails: List<String> = emptyList(),
+        val addresses: List<String> = emptyList(),
+        val relatives: List<String> = emptyList(),
+        val dob: String? = null,
+        val deceased: Boolean = false
     )
 
     companion object {
+        /** Something, one `@`, and a domain with at least one dot. */
+        private val EMAIL_SHAPE = Regex("""[^@\s]+@[^@\s.]+(\.[^@\s.]+)+""")
+
+        /** An email address inside some text; one the page masks ("j***@x.com") is not matched. */
+        private val EMAIL_IN_TEXT = Regex("""[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}""")
+
+        /** Most of any one list (phones, addresses, relatives) kept from a person's page. */
+        private const val MAX_DETAIL_ITEMS = 12
+
+        /** Most people's own pages opened, and put to the user, in one batch: best fit first. */
+        const val MAX_DETAIL_PAGES = 8
+
+        /** Most people held for one contact across all its searches; past this the list is no one's to choose from. */
+        const val MAX_POOL = 100
+
+        private val PAGE_OF = Regex("""Displaying page\s+(\d+)\s+of\s+(\d+)""", RegexOption.IGNORE_CASE)
+        private const val NEXT_ICON = ".fa-angle-right, .fa-chevron-right, .fa-caret-right, .fa-arrow-right, .fa-chevron-circle-right"
+        private val RESULT_PATHS = listOf("/people/", "/phone/", "/email/", "/address/")
+        private val SAFE_QUERY = Regex("""[A-Za-z0-9=&_%.,+-]*""")
+
         /** Starts the note on a contact whose details the user picked from a lookup. */
         const val CHOSEN_PREFIX = "chosen by you:"
         /** Starts the note on a contact the user said none of the lookup's people is. */
@@ -703,7 +1008,7 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
         // Class selectors are guesses at CBC's markup and drift with redesigns; the structured-
         // data fallback and [describeParse]'s log line exist for when they miss.
         private const val NAME_SELECTORS =
-            ".name, h1.full-name, .full-name, .person-name, [itemprop=name]"
+            ".name, .name-given, h1.full-name, .full-name, .person-name, [itemprop=name]"
         private const val ADDRESS_SELECTORS =
             ".address, .current-address, .address-current, .person-address, .city-state, [itemprop=address]"
         private const val PHONE_SELECTORS =
@@ -711,7 +1016,10 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
         private const val DOB_SELECTORS =
             ".dob, .date-of-birth, .born, .age, [data-dob], [itemprop=birthDate]"
         private const val MAX_JSON_DEPTH = 8
-        private const val CARD_SELECTORS = ".person-card, .result-card, .search-result, .card-person, [data-result-card]"
+        // `.card-hover` is how CyberBackgroundChecks marks a person's card; its ad widgets share the
+        // class but have no `.name-given`, so only a card that names someone counts.
+        private const val CARD_SELECTORS =
+            ".person-card, .result-card, .search-result, .card-person, [data-result-card], .card-hover:has(.name-given)"
         /** More than this many people for one contact is a list no one can choose from. */
         const val MAX_PEOPLE = 10
 

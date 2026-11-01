@@ -37,6 +37,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -128,6 +129,15 @@ fun BrowserScreen(
     // How often a dump has turned out to be a sign-in page; past a few, stop bouncing and pause.
     var signInBounces by remember { mutableIntStateOf(0) }
     var mainFrameFailed by remember { mutableStateOf(false) }
+    // This mission's own load has begun (onPageStarted): until then the page in the browser is the
+    // previous mission's, and must not be taken for this one's.
+    var navStarted by remember { mutableStateOf(false) }
+    // When the user last touched the page: someone working on a CAPTCHA is not skipped past.
+    var lastTouchAt by remember { mutableLongStateOf(0L) }
+    // Seconds until a paused lookup is skipped on its own; 0 when it isn't counting down.
+    var skipCountdown by remember { mutableIntStateOf(0) }
+    // Bumped when a direct read finds nothing drawn yet, so the extraction effect tries again.
+    var readRetry by remember { mutableIntStateOf(0) }
     // Increments on every page-finish. Drill-in missions (CBC) re-run their
     // extraction script on each navigation, keyed off this counter.
     var pageLoadCount by remember { mutableIntStateOf(0) }
@@ -177,11 +187,13 @@ fun BrowserScreen(
         needsSignIn = false
         signInBounces = 0
         mainFrameFailed = false
+        navStarted = false
         pageLoadCount = 0
         if (host.loadedKey == missionKey && !activeView.url.isNullOrEmpty()) {
             // A rotation rebuilt the screen around the page this mission already has open: pick
             // it up where it is rather than reloading it over a half-finished sign-in or CAPTCHA.
             // If it is still loading, onPageFinished takes it from here.
+            navStarted = true
             if (activeView.progress >= 100) {
                 pageReady = true
                 pageLoadCount = 1
@@ -195,34 +207,66 @@ fun BrowserScreen(
         }
     }
 
+    // What becomes of a page handed back by the mission's script or read directly: a sign-in page
+    // goes back to the user, a wall pauses for them, anything else is the mission's result and the
+    // run moves on. [force] is the user saying "this page is fine": the wall check is skipped.
+    fun handlePage(html: String?, force: Boolean = false) {
+        val safe = html.orEmpty()
+        if (mission.requiresSignIn && mission.looksSignedOut(safe)) {
+            // The script dumped a sign-in page after all (a session that lapsed mid-read):
+            // not data. Hand the page back to the user instead of importing "nothing"; if
+            // it keeps happening while the page looks signed in, stop bouncing and pause.
+            DiagnosticLogger.log("BrowserScreen: mission ${currentIndex + 1} read a sign-in page; waiting for the user")
+            if (signInBounces < MAX_SIGN_IN_BOUNCES) {
+                signInBounces += 1
+                waitForSignIn()
+            } else {
+                paused = true
+            }
+        } else if (!force && isBlocked(safe)) {
+            DiagnosticLogger.log("BrowserScreen: mission ${currentIndex + 1} blocked, pausing for user")
+            paused = true
+        } else {
+            if (force) DiagnosticLogger.log("BrowserScreen: mission ${currentIndex + 1} read as it stands, at the user's word")
+            onMissionResult(mission, MissionOutcome.Extracted(safe))
+            advance()
+        }
+    }
+
     // The JavaScript bridge was constructed with AndroidView's initial
     // mission. Always dispatch to the latest Compose callback instead, and
     // ignore callbacks from pages whose extraction is no longer underway.
     val onHtmlExtracted by rememberUpdatedState<(String?, String?, String?) -> Unit>(
         newValue = { token, missionKey, html ->
             if (!batchComplete && pageReady && automationRan && !paused && extractionGate.accept(token, missionKey)) {
-                val safe = html.orEmpty()
-                if (mission.requiresSignIn && mission.looksSignedOut(safe)) {
-                    // The script dumped a sign-in page after all (a session that lapsed mid-read):
-                    // not data. Hand the page back to the user instead of importing "nothing"; if
-                    // it keeps happening while the page looks signed in, stop bouncing and pause.
-                    DiagnosticLogger.log("BrowserScreen: mission ${currentIndex + 1} read a sign-in page; waiting for the user")
-                    if (signInBounces < MAX_SIGN_IN_BOUNCES) {
-                        signInBounces += 1
-                        waitForSignIn()
-                    } else {
-                        paused = true
-                    }
-                } else if (isBlocked(safe)) {
-                    DiagnosticLogger.log("BrowserScreen: mission ${currentIndex + 1} blocked, pausing for user")
-                    paused = true
-                } else {
-                    onMissionResult(mission, MissionOutcome.Extracted(safe))
-                    advance()
-                }
+                handlePage(html)
             }
         }
     )
+
+    // Reads the page as it stands, straight from the browser, with no script of the mission's own
+    // and no bridge: for a lookup, whose script only dumps the page's source. Used when the page
+    // is in front of the user and they say it is fine, and as a last try before a lookup is
+    // given up on. [force] skips the wall check (the user's word); otherwise a page that is
+    // blank, or still has nothing drawn, goes to [unreadable]. Tied to this extraction, so a
+    // read that comes back after the run has moved on is dropped.
+    fun readNow(force: Boolean, unreadable: () -> Unit) {
+        val view = webView ?: return unreadable()
+        val key = "$batchId-$currentIndex"
+        val token = extractionGate.beginExtraction(key) ?: return
+        automationRan = true
+        view.evaluateJavascript(PageSource.READ_SCRIPT) { raw ->
+            if (batchComplete || !extractionGate.accept(token, key)) return@evaluateJavascript
+            val html = PageSource.decode(raw)
+            if (!force && !PageSource.looksDrawn(html)) {
+                DiagnosticLogger.log("BrowserScreen: mission ${currentIndex + 1} had nothing drawn to read")
+                unreadable()
+            } else {
+                paused = false
+                handlePage(html, force)
+            }
+        }
+    }
 
     // Once the page reports ready, give the SPA a moment to render results,
     // then auto-evaluate the extraction script. Browse-only missions
@@ -236,7 +280,7 @@ fun BrowserScreen(
     //
     // An import (requiresSignIn) first checks the page is not a sign-in page: if it is, the page
     // is the user's (needsSignIn) and nothing is injected until it stops being one.
-    LaunchedEffect(batchId, currentIndex, pageLoadCount, paused, needsSignIn) {
+    LaunchedEffect(batchId, currentIndex, pageLoadCount, paused, needsSignIn, readRetry) {
         if (!mission.autoExtract || batchComplete) return@LaunchedEffect
         if (paused || needsSignIn || !pageReady) return@LaunchedEffect
         if (!mission.rerunAfterNavigation && automationRan) return@LaunchedEffect
@@ -252,6 +296,13 @@ fun BrowserScreen(
                     return@LaunchedEffect
                 }
             }
+            if (mission.readsPageDirectly) {
+                // A lookup wants only the page's source: read it straight from the browser. No
+                // bridge for the page's scripts to see, and nothing to go missing between the
+                // script and the screen.
+                readNow(force = false, unreadable = { readRetry += 1 })
+                return@LaunchedEffect
+            }
             val missionKey = "$batchId-$currentIndex"
             val token = extractionGate.beginExtraction(missionKey) ?: return@LaunchedEffect
             val script = extractionGate.tagScript(
@@ -262,6 +313,49 @@ fun BrowserScreen(
             automationRan = true
             webView?.evaluateJavascript(script, null)
         }
+    }
+
+    // A page's "finished" event can be a long time coming: ads and trackers keep a lookup page
+    // loading well after it has drawn what it will show. Once this mission's own load is well under
+    // way and the document has text on it, the page is taken as ready, as it would be on finishing.
+    LaunchedEffect(batchId, currentIndex, pageReady, paused, needsSignIn, navStarted) {
+        if (pageReady || paused || needsSignIn || batchComplete || !navStarted) return@LaunchedEffect
+        if (!mission.autoExtract || !mission.readsPageDirectly) return@LaunchedEffect
+        while (true) {
+            delay(READY_POLL_MS)
+            val view = webView ?: continue
+            if (mainFrameFailed || view.progress < READY_PROGRESS) continue
+            if (evaluateBoolean(view, PageSource.READY_SCRIPT)) {
+                DiagnosticLogger.log("BrowserScreen: mission ${currentIndex + 1} page drawn before its load finished; reading it")
+                pageReady = true
+                pageLoadCount += 1
+                return@LaunchedEffect
+            }
+        }
+    }
+
+    // A lookup that is paused is not left waiting for ever: in a run of lookups it is skipped after
+    // a short while, and the run goes on to the next contact, with what was found put to the user
+    // at the end. Touching the page (someone is solving a CAPTCHA) gives it longer.
+    LaunchedEffect(batchId, currentIndex, paused) {
+        skipCountdown = 0
+        if (!paused || !stopsBatch || !mission.autoExtract || batchComplete) return@LaunchedEffect
+        val pausedAt = android.os.SystemClock.uptimeMillis()
+        while (!batchComplete) {
+            val touched = lastTouchAt > pausedAt
+            val waitMs = if (touched) PAUSED_TOUCHED_MS else PAUSED_AUTO_SKIP_MS
+            val since = android.os.SystemClock.uptimeMillis() - (if (touched) lastTouchAt else pausedAt)
+            val left = waitMs - since
+            if (left <= 0) break
+            skipCountdown = ((left + 999) / 1000).toInt()
+            delay(500)
+        }
+        if (batchComplete) return@LaunchedEffect
+        DiagnosticLogger.log("BrowserScreen: mission ${currentIndex + 1} skipped on its own after waiting")
+        skipCountdown = 0
+        paused = false
+        onMissionResult(mission, MissionOutcome.Blocked)
+        advance()
     }
 
     // While the user signs in: look at the page now and then, and take it back when it is the
@@ -292,10 +386,16 @@ fun BrowserScreen(
         delay(mission.watchdogMs)
         if (!paused && !batchComplete) {
             DiagnosticLogger.log(
-                "BrowserScreen: mission ${currentIndex + 1} timed out (pageReady=$pageReady, automationRan=$automationRan); pausing",
+                "BrowserScreen: mission ${currentIndex + 1} timed out (pageReady=$pageReady, automationRan=$automationRan)",
                 DiagnosticLogger.LogEntry.LogLevel.WARN
             )
-            paused = true
+            // A lookup whose page is in front of us is read as it stands before it is given up
+            // on: the load event, or the script's call, may be what never came.
+            if (mission.readsPageDirectly && !mainFrameFailed) {
+                readNow(force = false, unreadable = { paused = true })
+            } else {
+                paused = true
+            }
         }
     }
 
@@ -364,7 +464,11 @@ fun BrowserScreen(
     Scaffold(
         topBar = {
             AppTopBar(
-                title = context?.takeIf { it.isNotBlank() }
+                // Which search this page is, after who it is for: the user can see a contact being
+                // searched by phone, email, address or name, and when it is a person's own page.
+                title = context?.takeIf { it.isNotBlank() }?.let { who ->
+                    mission.displayMode()?.let { "$who · $it" } ?: who
+                }
                     ?: if (missions.size > 1) {
                         stringResource(R.string.browser_title_of, mission.displayLabel(), currentIndex + 1, missions.size)
                     } else {
@@ -426,6 +530,12 @@ fun BrowserScreen(
                         }
                     }
                     host.view = view
+                    // Note when the user touches the page, so a lookup they are working on (a
+                    // CAPTCHA) is not skipped past. Touches go on to the page as usual.
+                    view.setOnTouchListener { _, _ ->
+                        lastTouchAt = android.os.SystemClock.uptimeMillis()
+                        false
+                    }
                     // The bridge is the same object across a rotation; point it at this screen.
                     host.bridge.sink = { token, missionKey, html ->
                         // JavascriptInterface callbacks run off the UI
@@ -441,6 +551,7 @@ fun BrowserScreen(
                                 if (batchComplete) return
                                 extractionGate.invalidate()
                                 pageReady = false
+                                navStarted = true
                                 mainFrameFailed = false
                             }
 
@@ -599,10 +710,26 @@ fun BrowserScreen(
                     AppCaption(
                         stringResource(if (stopsBatch) R.string.browser_paused_caption_batch else R.string.browser_paused_caption)
                     )
+                    if (mission.readsPageDirectly) AppCaption(stringResource(R.string.browser_paused_fine))
+                    // The countdown to skipping on its own, in a run of lookups.
+                    if (skipCountdown > 0) {
+                        AppCaption(stringResource(R.string.browser_auto_skip, skipCountdown))
+                    }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
                     ) {
+                        // "This page is fine, it is not a CAPTCHA": read what is on screen, whatever
+                        // the checks made of it. Whether it found anyone, and who is who, is settled
+                        // afterwards, from what the lookups bring back.
+                        if (mission.readsPageDirectly) {
+                            AzButton(
+                                text = stringResource(R.string.browser_read_this),
+                                onClick = { readNow(force = true, unreadable = {}) },
+                                modifier = Modifier.weight(1f),
+                                shape = AzButtonShape.RECTANGLE
+                            )
+                        }
                         AzButton(
                             text = stringResource(R.string.try_again),
                             onClick = {
@@ -620,6 +747,11 @@ fun BrowserScreen(
                             modifier = Modifier.weight(1f),
                             shape = AzButtonShape.RECTANGLE
                         )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                    ) {
                         AzButton(
                             text = stringResource(R.string.browser_skip),
                             onClick = {
@@ -677,11 +809,25 @@ private fun BrowserMission.displayLabel(): String = when (this) {
     is BrowserMission.CbcByEmail -> stringResource(R.string.mission_lookup_email)
     is BrowserMission.CbcByAddress -> stringResource(R.string.mission_lookup_address)
     is BrowserMission.CbcByName -> stringResource(R.string.mission_lookup_name)
+    is BrowserMission.CbcDetail -> stringResource(R.string.mission_lookup_details)
+    is BrowserMission.CbcResultsPage -> stringResource(R.string.mission_lookup_more)
     BrowserMission.HarvestWhatsApp -> stringResource(R.string.settings_import_whatsapp)
     BrowserMission.HarvestInstagram -> stringResource(R.string.settings_import_instagram)
     BrowserMission.HarvestGoogleContacts -> stringResource(R.string.settings_import_google)
     BrowserMission.HarvestFacebookFriends -> stringResource(R.string.settings_import_facebook)
     else -> label
+}
+
+/** What a lookup is searching by, in a few words; null for a mission that is not a search. */
+@Composable
+private fun BrowserMission.displayMode(): String? = when (this) {
+    is BrowserMission.CbcByPhone -> stringResource(R.string.mission_mode_phone)
+    is BrowserMission.CbcByEmail -> stringResource(R.string.mission_mode_email)
+    is BrowserMission.CbcByAddress -> stringResource(R.string.mission_mode_address)
+    is BrowserMission.CbcByName -> stringResource(R.string.mission_mode_name)
+    is BrowserMission.CbcDetail -> stringResource(R.string.mission_mode_details)
+    is BrowserMission.CbcResultsPage -> stringResource(R.string.mission_mode_more)
+    else -> null
 }
 
 /** The words telling the user how to sign in while an import waits; see [displayLabel]. */
@@ -779,6 +925,18 @@ private fun Context.findActivity(): Activity? {
 /** How often the page is looked at while the user signs in. */
 private const val SIGN_IN_POLL_MS = 1_500L
 
+/** How often a lookup page is checked for having drawn, while its load event is awaited. */
+private const val READY_POLL_MS = 1_000L
+
+/** How far (percent) a page's own load must be before its content is trusted to be this page's. */
+private const val READY_PROGRESS = 70
+
+/** A paused lookup in a run is skipped after this long without a touch on the page... */
+private const val PAUSED_AUTO_SKIP_MS = 20_000L
+
+/** ...or this long after the last touch, for someone working on a CAPTCHA. */
+private const val PAUSED_TOUCHED_MS = 90_000L
+
 /** How many times a dumped sign-in page is handed back to the user before the screen just pauses. */
 private const val MAX_SIGN_IN_BOUNCES = 3
 
@@ -802,6 +960,12 @@ private suspend fun probePage(webView: android.webkit.WebView?): PageProbe? {
  * 400 ms, for at most about six seconds; then returns either way (the extraction script and
  * the parser cope with a thin page, and the watchdog covers a dead one).
  */
+/** Runs [script] in the page and says whether it answered `true`; false if it didn't answer. */
+private suspend fun evaluateBoolean(webView: android.webkit.WebView, script: String): Boolean =
+    kotlinx.coroutines.suspendCancellableCoroutine { cont ->
+        webView.evaluateJavascript(script) { result -> if (cont.isActive) cont.resumeWith(Result.success(result == "true")) }
+    }
+
 private suspend fun awaitRenderedContent(webView: android.webkit.WebView?) {
     delay(600L)
     repeat(14) {

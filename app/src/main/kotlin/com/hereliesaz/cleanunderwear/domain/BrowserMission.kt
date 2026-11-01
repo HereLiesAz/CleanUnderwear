@@ -43,8 +43,19 @@ sealed class BrowserMission {
      * Default returns the entire document HTML; missions that want a tighter
      * payload can override.
      */
-    open val extractionScript: String =
-        "(function(){window.HTMLOUT.dump(document.documentElement.outerHTML);})();"
+    open val extractionScript: String = DEFAULT_DUMP_SCRIPT
+
+    /**
+     * Whether [extractionScript] only hands back the page's own source. BrowserScreen then reads
+     * the page straight from the browser, with no bridge for the page's scripts to see, and can
+     * read it again at any time (the watchdog's last try, the user's "Read this page").
+     */
+    val readsPageDirectly: Boolean get() = extractionScript == DEFAULT_DUMP_SCRIPT
+
+    companion object {
+        /** The script of a mission that wants nothing but the page's source. */
+        const val DEFAULT_DUMP_SCRIPT = "(function(){window.HTMLOUT.dump(document.documentElement.outerHTML);})();"
+    }
 
     /**
      * When false, BrowserScreen loads the URL and steps aside — no auto-run
@@ -125,6 +136,28 @@ sealed class BrowserMission {
     data class CbcByName(val displayName: String) : BrowserMission() {
         override val initialUrl: String = CyberBackgroundChecks.getNameSearchUrl(displayName)
         override val label: String = "Identity lookup · name"
+        override val rerunAfterNavigation: Boolean = true
+    }
+
+    /**
+     * A later page of a results list (page 2 of 6), opened to find more people when the ones
+     * already shown were all ruled out. [url] has been checked to be one of the site's own
+     * search-result pages (CyberBackgroundChecksEnricher.safeResultsUrl).
+     */
+    data class CbcResultsPage(val url: String) : BrowserMission() {
+        override val initialUrl: String = url
+        override val label: String = "Identity lookup · more results"
+        override val rerunAfterNavigation: Boolean = true
+    }
+
+    /**
+     * One person's own page, opened from a results list: it carries what the list only hints at
+     * (every phone, email and address on file, relatives). [url] has been checked to be one of the
+     * site's own `/detail/` pages before this is made (CyberBackgroundChecksEnricher.safeDetailUrl).
+     */
+    data class CbcDetail(val url: String) : BrowserMission() {
+        override val initialUrl: String = url
+        override val label: String = "Identity lookup · person's page"
         override val rerunAfterNavigation: Boolean = true
     }
 

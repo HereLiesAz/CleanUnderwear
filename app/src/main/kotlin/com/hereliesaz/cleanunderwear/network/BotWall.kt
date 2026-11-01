@@ -8,15 +8,28 @@ import org.jsoup.Jsoup
  * nothing about whether the record exists, and must not be read as "no record found".
  */
 object BotWall {
-    /** Markers that only a challenge or block page carries. */
+    /**
+     * Markers in the page source that only a challenge or block page carries.
+     *
+     * Cloudflare puts a passive bot-detection script on ordinary pages behind it
+     * (`/cdn-cgi/challenge-platform/.../scripts/jsd/main.js`), and Turnstile's own script may sit on
+     * a plain search form. Neither makes a page a wall, so the bare `/cdn-cgi/challenge` and
+     * `challenges.cloudflare.com` are not markers: a results page carrying them was taken for a
+     * block every time. What marks the interactive challenge is its `orchestrate` script.
+     */
     private val CHALLENGE_MARKERS = listOf(
-        "/cdn-cgi/challenge",
-        "challenges.cloudflare.com",
         "cf-browser-verification",
         "cf_chl_",
         "<title>just a moment...</title>",
         "attention required! | cloudflare",
         "_incapsula_resource",
+    )
+
+    /** The interactive challenge's script path, as opposed to the passive `scripts/jsd` beacon. */
+    private val CHALLENGE_SCRIPT = Regex("""challenge-platform/[^"'\s>]*orchestrate""")
+
+    /** What a challenge page says to the visitor; read from the visible text, not the source. */
+    private val CHALLENGE_PHRASES = listOf(
         "are you a robot",
         "verify you are human",
         "unusual traffic from your computer",
@@ -42,13 +55,18 @@ object BotWall {
     /** Whether the page's visible text says the search found nobody. */
     fun saysNoResults(body: String): Boolean = NO_RESULTS.containsMatchIn(visibleText(body))
 
+    /** Whether the page source carries a marker only a challenge or block page has. */
+    private fun hasChallengeMarker(lower: String): Boolean =
+        CHALLENGE_MARKERS.any { it in lower } || CHALLENGE_SCRIPT.containsMatchIn(lower)
+
     /** Strict check for automated fetches: a challenge page, or a CAPTCHA with nothing else on it. */
     fun detected(body: String): Boolean {
         if (body.isBlank()) return true
         val lower = body.lowercase()
-        if (CHALLENGE_MARKERS.any { it in lower }) return true
-        if (WIDGET_MARKERS.none { it in lower }) return false
+        if (hasChallengeMarker(lower)) return true
         val text = visibleText(body)
+        if (CHALLENGE_PHRASES.any { it in text.lowercase() }) return true
+        if (WIDGET_MARKERS.none { it in lower }) return false
         if (NO_RESULTS.containsMatchIn(text)) return false
         return text.length < NEAR_EMPTY_TEXT
     }
@@ -59,15 +77,26 @@ object BotWall {
      * user can see. A script that merely loads a CAPTCHA library doesn't count: sites load one on
      * ordinary pages, a zero-results page among them, and the page then answered the search.
      */
-    fun suspected(body: String): Boolean {
-        if (body.isBlank()) return true
-        if (CHALLENGE_MARKERS.any { it in body.lowercase() }) return true
+    fun suspected(body: String): Boolean = reason(body) != null
+
+    /**
+     * Why [suspected] says so, in a few words for the activity log (never the page's own text);
+     * null when the page is not a wall. A wrong call here pauses every lookup, so the log names
+     * the reason.
+     */
+    fun reason(body: String): String? {
+        if (body.isBlank()) return "empty page"
+        val lower = body.lowercase()
+        if (hasChallengeMarker(lower)) return "challenge page markers"
         val doc = Jsoup.parse(body)
         val text = doc.text()
-        if (NO_RESULTS.containsMatchIn(text)) return false
-        if (doc.selectFirst(WIDGET_ELEMENTS) != null) return true
-        val lower = text.lowercase()
-        return "captcha" in lower || "access denied" in lower
+        val textLower = text.lowercase()
+        if (CHALLENGE_PHRASES.any { it in textLower }) return "challenge wording"
+        if (NO_RESULTS.containsMatchIn(text)) return null
+        if (doc.selectFirst(WIDGET_ELEMENTS) != null) return "a CAPTCHA widget on the page"
+        if ("captcha" in textLower) return "the word CAPTCHA on the page"
+        if ("access denied" in textLower) return "access denied wording"
+        return null
     }
 
     /** Elements a CAPTCHA puts on the page (as opposed to a script that could show one). */

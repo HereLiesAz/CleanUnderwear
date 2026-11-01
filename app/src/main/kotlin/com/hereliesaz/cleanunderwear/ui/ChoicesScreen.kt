@@ -38,7 +38,10 @@ import com.hereliesaz.cleanunderwear.domain.LookupOption
  */
 @Composable
 fun ChoicesScreen(viewModel: MainViewModel, onNavigateBack: () -> Unit) {
-    val choices by viewModel.choices.collectAsState()
+    val everyChoice by viewModel.choices.collectAsState()
+    // A contact whose last batch was ruled out waits for the next run: not put to the user now.
+    val choices = everyChoice.filter { !it.wantsMore }
+    val waitingForNextRun = everyChoice.count { it.wantsMore }
     // "Decide later" moves a contact to the back of the line for this visit; it stays saved.
     var later by rememberSaveable { mutableStateOf(listOf<Int>()) }
     val ordered = choices.sortedBy { later.indexOf(it.targetId) }
@@ -56,11 +59,13 @@ fun ChoicesScreen(viewModel: MainViewModel, onNavigateBack: () -> Unit) {
             ) {
                 Text(stringResource(R.string.choices_nothing_left), style = MaterialTheme.typography.titleMedium)
                 AppCaption(stringResource(R.string.choices_nothing_left_caption))
+                if (waitingForNextRun > 0) AppCaption(stringResource(R.string.choices_waiting_next_run, waitingForNextRun))
                 AppAction(stringResource(R.string.done), onNavigateBack)
             }
             return@Scaffold
         }
-        key(current.targetId) {
+        // A new batch ("none of these" went on to the next) starts the screen afresh: nothing picked.
+        key(current.targetId, current.rounds) {
             ChoiceFor(
                 choice = current,
                 remaining = ordered.size,
@@ -82,7 +87,6 @@ private fun ChoiceFor(
 ) {
     val target by viewModel.observeTarget(choice.targetId).collectAsState(initial = null)
     var picked by rememberSaveable { mutableStateOf<Int?>(null) }
-    var confirmNone by rememberSaveable { mutableStateOf(false) }
     val name = target?.displayName ?: choice.contactName
     val bottomBar = LocalBottomBarHeight.current
 
@@ -112,6 +116,10 @@ private fun ChoiceFor(
                     )
                 }
                 AppCaption(stringResource(R.string.choices_picking_fills, name))
+                // More were found than are shown: say how many, so it is plain there are more to see.
+                if (choice.foundSoFar > choice.options.size) {
+                    AppCaption(stringResource(R.string.choices_showing, choice.options.size, choice.foundSoFar))
+                }
             }
         }
         itemsIndexed(choice.options) { index, option ->
@@ -125,22 +133,19 @@ private fun ChoiceFor(
                     Modifier.fillMaxWidth(),
                     enabled = picked != null
                 )
-                // Discards everyone found for this contact, so it asks first.
-                AppTextAction(stringResource(R.string.choices_none, name), { confirmNone = true })
+                if (choice.hasMore) {
+                    // None of these: the next run goes on to the next ones, from what the searches
+                    // found, without searching again and without showing anyone twice. Nothing is
+                    // opened now and nothing is discarded; this contact leaves the list for now.
+                    AppAction(stringResource(R.string.choices_none_more), { viewModel.nextBatchOnNextRun(choice.targetId) }, Modifier.fillMaxWidth())
+                    AppCaption(stringResource(R.string.choices_none_more_caption, name))
+                } else {
+                    // Everyone found has been shown. There is no way to give them up: all of it
+                    // stays held until one of them is identified.
+                    AppCaption(stringResource(R.string.choices_all_shown, name))
+                }
                 if (remaining > 1) AppTextAction(stringResource(R.string.choices_decide_later), onLater)
             }
-        }
-    }
-
-    if (confirmNone) {
-        val found = choice.options.size
-        AppDialog(
-            title = stringResource(R.string.choices_none_title, name),
-            confirm = stringResource(R.string.choices_none_confirm),
-            onConfirm = { confirmNone = false; viewModel.chooseLookup(choice.targetId, null) },
-            onDismiss = { confirmNone = false }
-        ) {
-            Text(pluralStringResource(R.plurals.choices_none_body, found, found, name))
         }
     }
 }
@@ -163,8 +168,29 @@ private fun OptionCard(option: LookupOption, selected: Boolean, onSelect: () -> 
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
+                if (option.deceased) {
+                    Text(
+                        stringResource(R.string.choices_listed_deceased),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
                 option.address?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
-                option.phone?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                option.phone?.let { Text(formatPhone(it), style = MaterialTheme.typography.bodyMedium) }
+                // What the person's own page added, when it was read: more to tell people apart by.
+                val shownPhone = option.phone?.filter { it.isDigit() }
+                option.phones.orEmpty().filter { it != shownPhone }.take(4).takeIf { it.isNotEmpty() }?.let { more ->
+                    AppCaption(stringResource(R.string.choices_more_phones, more.joinToString(", ") { formatPhone(it) }))
+                }
+                option.emails.orEmpty().take(3).takeIf { it.isNotEmpty() }?.let {
+                    AppCaption(stringResource(R.string.choices_emails, it.joinToString(", ")))
+                }
+                option.otherAddresses.orEmpty().take(3).takeIf { it.isNotEmpty() }?.let {
+                    AppCaption(stringResource(R.string.choices_past_addresses, it.joinToString("; ")))
+                }
+                option.relatives.orEmpty().take(5).takeIf { it.isNotEmpty() }?.let {
+                    AppCaption(stringResource(R.string.choices_relatives, it.joinToString(", ")))
+                }
                 if (option.fits.isNotEmpty()) {
                     val fits = option.fits.map { lookupReason(it) }
                     AppCaption(stringResource(R.string.choices_fits, fits.joinToString(", ") { it.replaceFirstChar { c -> c.lowercase() } }))
@@ -191,6 +217,7 @@ private fun lookupReason(key: String): String = when (key) {
     "Same phone number" -> stringResource(R.string.choices_fit_same_phone)
     "Same area code" -> stringResource(R.string.choices_fit_same_area_code)
     "Same city or ZIP" -> stringResource(R.string.choices_fit_same_place)
+    "Same email address" -> stringResource(R.string.choices_fit_same_email)
     "Same age" -> stringResource(R.string.choices_fit_same_age)
     "A different name" -> stringResource(R.string.choices_differs_name)
     "A different age" -> stringResource(R.string.choices_differs_age)
@@ -214,4 +241,11 @@ private fun lookupModes(keys: List<String>): String {
         }
     }
     return words.joinToString(stringResource(R.string.list_and))
+}
+
+/** Ten digits as "(555) 123-4567"; anything else as it came. */
+private fun formatPhone(raw: String): String {
+    val digits = raw.filter { it.isDigit() }
+    val ten = if (digits.length == 11 && digits.startsWith("1")) digits.drop(1) else digits
+    return if (ten.length == 10) "(${ten.take(3)}) ${ten.substring(3, 6)}-${ten.substring(6)}" else raw
 }
