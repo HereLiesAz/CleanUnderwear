@@ -810,6 +810,7 @@ private fun BrowserMission.displayLabel(): String = when (this) {
     is BrowserMission.CbcByAddress -> stringResource(R.string.mission_lookup_address)
     is BrowserMission.CbcByName -> stringResource(R.string.mission_lookup_name)
     is BrowserMission.CbcDetail -> stringResource(R.string.mission_lookup_details)
+    is BrowserMission.CbcResultsPage -> stringResource(R.string.mission_lookup_more)
     BrowserMission.HarvestWhatsApp -> stringResource(R.string.settings_import_whatsapp)
     BrowserMission.HarvestInstagram -> stringResource(R.string.settings_import_instagram)
     BrowserMission.HarvestGoogleContacts -> stringResource(R.string.settings_import_google)
@@ -825,6 +826,7 @@ private fun BrowserMission.displayMode(): String? = when (this) {
     is BrowserMission.CbcByAddress -> stringResource(R.string.mission_mode_address)
     is BrowserMission.CbcByName -> stringResource(R.string.mission_mode_name)
     is BrowserMission.CbcDetail -> stringResource(R.string.mission_mode_details)
+    is BrowserMission.CbcResultsPage -> stringResource(R.string.mission_mode_more)
     else -> null
 }
 

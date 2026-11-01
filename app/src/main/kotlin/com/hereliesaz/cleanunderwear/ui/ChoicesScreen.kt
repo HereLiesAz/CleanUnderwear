@@ -60,7 +60,8 @@ fun ChoicesScreen(viewModel: MainViewModel, onNavigateBack: () -> Unit) {
             }
             return@Scaffold
         }
-        key(current.targetId) {
+        // A new batch ("none of these" went on to the next) starts the screen afresh: nothing picked.
+        key(current.targetId, current.rounds) {
             ChoiceFor(
                 choice = current,
                 remaining = ordered.size,
@@ -112,6 +113,10 @@ private fun ChoiceFor(
                     )
                 }
                 AppCaption(stringResource(R.string.choices_picking_fills, name))
+                // More were found than are shown: say how many, so it is plain there are more to see.
+                if (choice.foundSoFar > choice.options.size) {
+                    AppCaption(stringResource(R.string.choices_showing, choice.options.size, choice.foundSoFar))
+                }
             }
         }
         itemsIndexed(choice.options) { index, option ->
@@ -125,15 +130,23 @@ private fun ChoiceFor(
                     Modifier.fillMaxWidth(),
                     enabled = picked != null
                 )
-                // Discards everyone found for this contact, so it asks first.
-                AppTextAction(stringResource(R.string.choices_none, name), { confirmNone = true })
+                if (choice.hasMore) {
+                    // None of these: on to the next ones, from what the searches found, without
+                    // searching again and without showing anyone twice. Nothing is discarded.
+                    AppAction(stringResource(R.string.choices_none_more), { viewModel.extendChoice(choice.targetId) }, Modifier.fillMaxWidth())
+                    // Ending the search for this contact discards everyone found, so it asks first.
+                    AppTextAction(stringResource(R.string.choices_stop_looking, name), { confirmNone = true })
+                } else {
+                    // Discards everyone found for this contact, so it asks first.
+                    AppTextAction(stringResource(R.string.choices_none, name), { confirmNone = true })
+                }
                 if (remaining > 1) AppTextAction(stringResource(R.string.choices_decide_later), onLater)
             }
         }
     }
 
     if (confirmNone) {
-        val found = choice.options.size
+        val found = choice.foundSoFar
         AppDialog(
             title = stringResource(R.string.choices_none_title, name),
             confirm = stringResource(R.string.choices_none_confirm),

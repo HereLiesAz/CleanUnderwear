@@ -38,12 +38,50 @@ data class LookupOption(
     val relatives: List<String>? = null
 )
 
-/** Everyone a lookup found for one contact, waiting for the user to say which, if any, is them. */
+/**
+ * A person the searches found, as the results list showed them: held, not yet put to the user
+ * or opened, until the ones before them have been ruled out.
+ */
+data class PooledPerson(
+    val name: String?,
+    val middleName: String?,
+    val dob: String?,
+    val address: String?,
+    val phone: String?,
+    val deceased: Boolean,
+    val detailUrl: String?,
+    val foundBy: List<String>
+)
+
+/** A page of a search's results not read yet: [url], and the search it belongs to ("phone", "name"). */
+data class MorePage(val url: String, val by: String)
+
+/**
+ * Everyone a lookup found for one contact, waiting for the user to say which, if any, is them.
+ *
+ * [options] is the batch in front of the user. The rest of what the searches found is held until
+ * the user names the right person, so that "none of these" can go on to the next batch without
+ * searching again and without offering anyone twice: [pool] (found, ranked, not yet shown),
+ * [seen] (a key for everyone found so far, shown or pooled) and [morePages] (later pages of the
+ * searches' result lists, opened only when the pool runs short). These are null for choices
+ * saved before they existed, which are read back without their defaults.
+ */
 data class LookupChoice(
     val targetId: Int,
     val contactName: String,
-    val options: List<LookupOption>
-)
+    val options: List<LookupOption>,
+    val pool: List<PooledPerson>? = null,
+    val seen: List<String>? = null,
+    val morePages: List<MorePage>? = null,
+    /** How many batches the user has been through, this one included. */
+    val rounds: Int = 1
+) {
+    /** More people can still be shown: some are held, or more result pages could be opened. */
+    val hasMore: Boolean get() = !pool.isNullOrEmpty() || !morePages.isNullOrEmpty()
+
+    /** Everyone found so far, shown or held. */
+    val foundSoFar: Int get() = maxOf(seen?.size ?: 0, options.size)
+}
 
 /**
  * The choices a run of "Fill in details" leaves for the user. A run looks everyone up first and

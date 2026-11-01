@@ -262,6 +262,9 @@
     <string name="choices_past_addresses">Also lived at: %1$s</string>
     <string name="choices_relatives">Related to: %1$s</string>
     <string name="choices_fit_same_email">Same email address</string>
+    <string name="choices_none_more">None of these: show the next ones</string>
+    <string name="choices_stop_looking">None of them is %1$s: stop looking</string>
+    <string name="choices_showing">Showing %1$d of the %2$d people found so far.</string>
     <string name="choices_listed_deceased">Listed as deceased on the page</string>
     <string name="choices_differs">Doesn\'t fit: %1$s</string>
     <string name="choices_found_by">Found by searching their %1$s</string>
@@ -550,6 +553,13 @@
     <string name="vm_lookup_progress">%1$d of %2$d looked up · people found for %3$d, to choose from at the end</string>
     <string name="vm_lookup_stopped">Stopped after %1$d of %2$d.</string>
     <string name="vm_lookup_nothing_to_search">%1$s: nothing to search by</string>
+    <string name="vm_what_more_people">Looking at more people</string>
+    <string name="vm_lookup_more">Looking for more people for %1$s…</string>
+    <string name="vm_lookup_no_more">No one else to look at for %1$s.</string>
+    <plurals name="vm_lookup_more_shown">
+        <item quantity="one">Showing the next person.</item>
+        <item quantity="other">Showing the next %1$d people.</item>
+    </plurals>
     <plurals name="vm_lookup_details">
         <item quantity="one">Reading the page of the person found for %1$s…</item>
         <item quantity="other">Reading the pages of the %2$d people found for %1$s…</item>
@@ -602,6 +612,8 @@
     <string name="mission_mode_address">searching by address</string>
     <string name="mission_mode_name">searching by name</string>
     <string name="mission_mode_details">reading their page</string>
+    <string name="mission_lookup_more">Identity lookup · more results</string>
+    <string name="mission_mode_more">looking for more people</string>
     <string name="mission_lookup_details">Identity lookup · person\'s page</string>
     <string name="mission_signin_whatsapp">Link WhatsApp here. Under the code, tap \"Link with phone number\", then enter the code it shows in WhatsApp on this phone (Settings, Linked devices, Link a device). Or scan the code with a second device. The import carries on by itself once your chats appear.</string>
     <string name="mission_signin_instagram">Sign in to Instagram here. The import carries on by itself once you\'re in.</string>

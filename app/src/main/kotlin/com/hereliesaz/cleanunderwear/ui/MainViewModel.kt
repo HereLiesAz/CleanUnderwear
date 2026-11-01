@@ -574,7 +574,7 @@ class MainViewModel @Inject constructor(
                             )
                         } else {
                             target.copy(
-                                enrichmentProvenance = cbcEnricher.noneOfThem(choice.options.size),
+                                enrichmentProvenance = cbcEnricher.noneOfThem(choice.foundSoFar),
                                 monitorabilityState = if (target.status == TargetStatus.UNVERIFIED) {
                                     com.hereliesaz.cleanunderwear.data.MonitorabilityState.ENRICHMENT_FAILED
                                 } else {
@@ -1175,43 +1175,39 @@ class MainViewModel @Inject constructor(
                     if (resolveCancellationRequested) { finish(str(R.string.vm_lookup_stopped, index, total)); return@runExclusive }
 
                     if (collected.isNotEmpty()) {
-                        // A results list only hints at each person. Open the page of each candidate,
-                        // best fit first, one after another in the same browser, and read it: every
-                        // phone, email and address on file, relatives, the age. That is held with
-                        // the choices, to tell people apart by and to fill the contact in from, and
-                        // dropped once the user has said which one is theirs.
-                        val urls = cbcEnricher.options(target, collected)
-                            .mapNotNull { it.detailUrl }.distinct()
-                            .take(CyberBackgroundChecksEnricher.MAX_DETAIL_PAGES)
-                        var details = emptyMap<String, CyberBackgroundChecksEnricher.PersonDetails>()
-                        var stoppedInDetails = false
-                        if (urls.isNotEmpty()) {
-                            _operationState.value = _operationState.value.copy(
-                                description = qty(R.plurals.vm_lookup_details, urls.size, target.displayName, urls.size)
+                        // Everyone the searches found, best fit first. A batch of the best is put to
+                        // the user, with each person's own page opened and read (a list only hints
+                        // at them); the rest is held, with a key for everyone found and the later
+                        // pages of the lists, until the user names the right person. If none of
+                        // these is, the next batch comes from what is held (opening further pages
+                        // when it runs short), and no one is offered twice.
+                        val everyone = cbcEnricher.rank(target, cbcEnricher.candidates(collected))
+                            .take(CyberBackgroundChecksEnricher.MAX_POOL)
+                        val batch = everyone.take(CyberBackgroundChecksEnricher.MAX_DETAIL_PAGES)
+                        val held = everyone.drop(CyberBackgroundChecksEnricher.MAX_DETAIL_PAGES)
+                        val morePages = extracted.filterNot { (mission, _) -> mission in nobody }.mapNotNull { (mission, html) ->
+                            com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log(
+                                "CYBG ${mission.label}: ${cbcEnricher.describePager(html, mission.initialUrl)}"
                             )
-                            val pages = mutableListOf<Pair<BrowserMission, String>>()
-                            val detailOutcome = launchMissionsAndAwait(urls.map { BrowserMission.CbcDetail(it) }) { mission, html ->
-                                pages.removeAll { it.first == mission }
-                                pages.add(mission to html)
-                            }
-                            stoppedInDetails = detailOutcome == BatchOutcome.UserCancelled || resolveCancellationRequested
-                            details = withContext(Dispatchers.Default) {
-                                pages.mapNotNull { (mission, html) ->
-                                    val url = (mission as? BrowserMission.CbcDetail)?.url ?: return@mapNotNull null
-                                    val parsed = cbcEnricher.parseDetail(html)
-                                    com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log(
-                                        "CYBG detail: ${cbcEnricher.describeDetail(html, parsed)}"
-                                    )
-                                    parsed?.let { url to it }
-                                }.toMap()
-                            }
-                        }
-                        val options = cbcEnricher.options(target, collected, details)
+                            cbcEnricher.nextListPage(html, mission.initialUrl)
+                                ?.let { com.hereliesaz.cleanunderwear.domain.MorePage(it, cbcEnricher.modeLabel(mission)) }
+                        }.distinctBy { it.url }
+                        val (details, stoppedInDetails) = readDetailPages(target, batch.mapNotNull { it.candidate.findings.detailUrl })
+                        val options = cbcEnricher.rank(target, batch.map { it.candidate }, details).map { it.option }
                         _choices.value = withContext(Dispatchers.IO) {
-                            lookupChoices.put(com.hereliesaz.cleanunderwear.domain.LookupChoice(target.id, target.displayName, options))
+                            lookupChoices.put(
+                                com.hereliesaz.cleanunderwear.domain.LookupChoice(
+                                    targetId = target.id,
+                                    contactName = target.displayName,
+                                    options = options,
+                                    pool = held.map { cbcEnricher.pooled(it.candidate) },
+                                    seen = everyone.map { cbcEnricher.keyOf(it.candidate.findings) },
+                                    morePages = morePages,
+                                )
+                            )
                         }
                         toChoose++
-                        noteResult(index + 1, qty(R.plurals.vm_lookup_people_found, options.size, target.displayName, options.size))
+                        noteResult(index + 1, qty(R.plurals.vm_lookup_people_found, everyone.size, target.displayName, everyone.size))
                         // Stopped while the pages were being read: what was found is kept, as the
                         // stop dialog says, and the run ends here.
                         if (stoppedInDetails) { finish(str(R.string.vm_lookup_stopped, index + 1, total)); return@runExclusive }
@@ -1257,6 +1253,119 @@ class MainViewModel @Inject constructor(
             }
             } finally {
                 resolvePending = false
+            }
+        }
+    }
+
+    /**
+     * Opens the page of each address in [urls], one after another in the same browser, and reads
+     * what each gives. Returns what was read, by page address, and whether the user stopped the
+     * run meanwhile.
+     */
+    private suspend fun readDetailPages(
+        target: Target,
+        urls: List<String>,
+    ): Pair<Map<String, CyberBackgroundChecksEnricher.PersonDetails>, Boolean> {
+        if (urls.isEmpty()) return emptyMap<String, CyberBackgroundChecksEnricher.PersonDetails>() to false
+        _operationState.value = _operationState.value.copy(
+            description = qty(R.plurals.vm_lookup_details, urls.size, target.displayName, urls.size)
+        )
+        val pages = mutableListOf<Pair<BrowserMission, String>>()
+        val outcome = launchMissionsAndAwait(urls.map { BrowserMission.CbcDetail(it) }) { mission, html ->
+            pages.removeAll { it.first == mission }
+            pages.add(mission to html)
+        }
+        val stopped = outcome == BatchOutcome.UserCancelled || resolveCancellationRequested
+        val details = withContext(Dispatchers.Default) {
+            pages.mapNotNull { (mission, html) ->
+                val url = (mission as? BrowserMission.CbcDetail)?.url ?: return@mapNotNull null
+                val parsed = cbcEnricher.parseDetail(html)
+                com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log("CYBG detail: ${cbcEnricher.describeDetail(html, parsed)}")
+                parsed?.let { url to it }
+            }.toMap()
+        }
+        return details to stopped
+    }
+
+    private val extending = mutableSetOf<Int>()
+
+    /**
+     * "None of these" for a contact with more people held: the next batch of the best fits not yet
+     * shown, with each one's own page read, replaces the one on screen. The people held come
+     * first; when they run short, further pages of the searches' result lists are opened (a few at
+     * a time), and anyone already shown or held is left out, so no one is offered twice. A stop
+     * leaves the choice exactly as it was.
+     */
+    fun extendChoice(targetId: Int) {
+        val choice = _choices.value.firstOrNull { it.targetId == targetId } ?: return
+        if (!choice.hasMore || !extending.add(targetId)) return
+        viewModelScope.launch(failSafe) {
+            try {
+                exclusive("lookup-more", str(R.string.vm_what_more_people)) {
+                    resolveCancellationRequested = false
+                    try {
+                        val target = repository.getTargetById(targetId) ?: return@exclusive
+                        begin(OperationState(description = str(R.string.vm_lookup_more, target.displayName), progress = -1f))
+                        var held = choice.pool.orEmpty().map(cbcEnricher::candidate)
+                        val seen = choice.seen.orEmpty().toMutableSet()
+                        var pages = choice.morePages.orEmpty()
+                        var pagesRead = 0
+                        // Further pages of the result lists, until enough are held to fill a batch.
+                        while (held.size < CyberBackgroundChecksEnricher.MAX_DETAIL_PAGES && pages.isNotEmpty() && pagesRead < MORE_PAGES_PER_ROUND) {
+                            val page = pages.first()
+                            pages = pages.drop(1)
+                            pagesRead++
+                            var read: String? = null
+                            val outcome = launchMissionsAndAwait(listOf(BrowserMission.CbcResultsPage(page.url))) { _, html -> read = html }
+                            if (outcome == BatchOutcome.UserCancelled || resolveCancellationRequested) return@exclusive
+                            val html = read ?: continue
+                            com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log(
+                                "CYBG more results (${page.by}): ${cbcEnricher.describePager(html, page.url)}"
+                            )
+                            // Anyone already shown or held is left out: no one is offered twice.
+                            val fresh = withContext(Dispatchers.Default) {
+                                cbcEnricher.unseen(cbcEnricher.parsePeople(html), page.by, seen)
+                            }
+                            held = (held + fresh).take(CyberBackgroundChecksEnricher.MAX_POOL)
+                            // The same search's next page comes straight after this one.
+                            cbcEnricher.nextListPage(html, page.url)?.let {
+                                pages = listOf(com.hereliesaz.cleanunderwear.domain.MorePage(it, page.by)) + pages
+                            }
+                        }
+                        if (held.isEmpty()) {
+                            // No one else to look at: say so, and stop offering more.
+                            _choices.value = withContext(Dispatchers.IO) {
+                                lookupChoices.put(choice.copy(pool = emptyList(), morePages = emptyList(), seen = seen.toList()))
+                            }
+                            post(str(R.string.vm_lookup_no_more, target.displayName))
+                            return@exclusive
+                        }
+                        val ranked = cbcEnricher.rank(target, held)
+                        val batch = ranked.take(CyberBackgroundChecksEnricher.MAX_DETAIL_PAGES)
+                        val rest = ranked.drop(CyberBackgroundChecksEnricher.MAX_DETAIL_PAGES)
+                        val (details, stopped) = readDetailPages(target, batch.mapNotNull { it.candidate.findings.detailUrl })
+                        if (stopped) return@exclusive
+                        val options = cbcEnricher.rank(target, batch.map { it.candidate }, details).map { it.option }
+                        _choices.value = withContext(Dispatchers.IO) {
+                            lookupChoices.put(
+                                choice.copy(
+                                    options = options,
+                                    pool = rest.map { cbcEnricher.pooled(it.candidate) },
+                                    seen = seen.toList(),
+                                    morePages = pages,
+                                    rounds = choice.rounds + 1,
+                                )
+                            )
+                        }
+                        post(qty(R.plurals.vm_lookup_more_shown, options.size, options.size))
+                    } finally {
+                        if (_activeMissionBatch.value?.retainBrowserForResolve == true) _activeMissionBatch.value = null
+                        resolveCancellationRequested = false
+                        if (_operationState.value.isRunning) _operationState.value = OperationState(isRunning = false)
+                    }
+                }
+            } finally {
+                extending.remove(targetId)
             }
         }
     }
@@ -1464,6 +1573,9 @@ private const val AUTO_UPDATE_CHECK_INTERVAL_MS = 12L * 60 * 60 * 1000
  * abandoned browser keeps the daily check and Delete everything queued behind it for good.
  */
 internal const val USER_WAIT_LOOKUP_MS = 15L * 60 * 1000
+
+/** Most further result pages opened for one "none of these" before the next batch is shown. */
+private const val MORE_PAGES_PER_ROUND = 3
 
 /** The same limit for an import, where the user may be signing in, linking WhatsApp, or answering 2FA. */
 internal const val USER_WAIT_IMPORT_MS = 20L * 60 * 1000

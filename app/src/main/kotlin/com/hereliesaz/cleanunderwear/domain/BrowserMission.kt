@@ -140,6 +140,17 @@ sealed class BrowserMission {
     }
 
     /**
+     * A later page of a results list (page 2 of 6), opened to find more people when the ones
+     * already shown were all ruled out. [url] has been checked to be one of the site's own
+     * search-result pages (CyberBackgroundChecksEnricher.safeResultsUrl).
+     */
+    data class CbcResultsPage(val url: String) : BrowserMission() {
+        override val initialUrl: String = url
+        override val label: String = "Identity lookup · more results"
+        override val rerunAfterNavigation: Boolean = true
+    }
+
+    /**
      * One person's own page, opened from a results list: it carries what the list only hints at
      * (every phone, email and address on file, relatives). [url] has been checked to be one of the
      * site's own `/detail/` pages before this is made (CyberBackgroundChecksEnricher.safeDetailUrl).
