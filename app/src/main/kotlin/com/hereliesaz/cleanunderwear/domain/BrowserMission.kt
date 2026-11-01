@@ -140,6 +140,17 @@ sealed class BrowserMission {
     }
 
     /**
+     * One person's own page, opened from a results list: it carries what the list only hints at
+     * (every phone, email and address on file, relatives). [url] has been checked to be one of the
+     * site's own `/detail/` pages before this is made (CyberBackgroundChecksEnricher.safeDetailUrl).
+     */
+    data class CbcDetail(val url: String) : BrowserMission() {
+        override val initialUrl: String = url
+        override val label: String = "Identity lookup · person's page"
+        override val rerunAfterNavigation: Boolean = true
+    }
+
+    /**
      * WhatsApp Web: the user links WhatsApp here (WhatsApp Web shows a QR code, and under it
      * "Link with phone number", which is the way to link the phone the app is running on), then
      * the chat list is read.

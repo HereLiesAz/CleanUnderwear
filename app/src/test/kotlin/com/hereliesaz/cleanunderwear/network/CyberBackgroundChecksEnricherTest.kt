@@ -2,6 +2,7 @@ package com.hereliesaz.cleanunderwear.network
 
 import com.hereliesaz.cleanunderwear.data.Target
 import com.hereliesaz.cleanunderwear.domain.BrowserMission
+import com.hereliesaz.cleanunderwear.domain.LookupOption
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -314,6 +315,137 @@ class CyberBackgroundChecksEnricherTest {
         assertFalse(options.single { it.name == "Jane A Roe" }.deceased)
         val adopted = enricher.adopt(target(displayName = "Jane Roe"), options.single { it.name == "Jane Roe" })
         assertTrue(adopted.enrichmentProvenance!!.endsWith("listed as deceased"))
+    }
+
+    // ---- Each person's own page ----
+    //
+    // Invented, in the markup a result card uses (the page's own markup is assumed to reuse it:
+    // describeDetail's log line says which parts a real page gave, to tune these against).
+
+    private val cbcDetailPage = """
+        <html><head><script>var a = 1;</script></head><body>
+        <nav>Menu <a class="phone" href="#">(999) 555-0000</a></nav>
+        <h1><span class="name-given">Jane A Roe</span> <span class="age-label">Age:</span> <span class="age">40</span></h1>
+        <p class="address-current"><a class="address" href="/a/1">12 Elm St, Springfield, IL 62701 1234</a> <small>[Sangamon County]</small></p>
+        <a class="address" href="/a/2">400 Pine Rd, Chicago, IL 60601 0001</a>
+        <a class="address" href="/a/2">400 Pine Rd, Chicago, IL 60601 0001</a>
+        <span class="phones-label">Phones</span>
+        <a class="phone" href="#">(217) 555-0142</a> <a class="phone" href="#">(312) 555-0188</a> <a class="phone" href="#">(312) 555-0188</a>
+        <a href="mailto:Jane.Roe@Example.com">Jane.Roe@Example.com</a> <span class="email">j***@example.com</span>
+        <a class="relative" href="/detail/rhea-roe/9">Rhea Roe</a> <a class="relative" href="/detail/sam-roe/8">Sam Roe</a>
+        <div class="card card-hover wam-pro-max-widget"><a class="phone" href="#">(000) 555-0999</a></div>
+        <footer><a class="phone" href="#">(888) 555-0111</a></footer>
+        </body></html>
+    """.trimIndent()
+
+    @Test
+    fun parseDetail_readsEveryPhoneEmailAddressAndRelativeOnThePersonsPage() {
+        val d = enricher.parseDetail(cbcDetailPage)!!
+        assertEquals(listOf("2175550142", "3125550188"), d.phones)
+        assertEquals(listOf("jane.roe@example.com"), d.emails)
+        assertEquals(listOf("12 Elm St, Springfield, IL 62701 1234", "400 Pine Rd, Chicago, IL 60601 0001"), d.addresses)
+        assertEquals(listOf("Rhea Roe", "Sam Roe"), d.relatives)
+        assertEquals("~${java.time.Year.now().value - 40}", d.dob)
+        assertFalse(d.deceased)
+    }
+
+    @Test
+    fun parseDetail_ignoresTheNavigationFooterAndAdWidgets() {
+        val d = enricher.parseDetail(cbcDetailPage)!!
+        assertTrue(d.phones.none { it.startsWith("999") || it.startsWith("000") || it.startsWith("888") })
+    }
+
+    @Test
+    fun parseDetail_aPageWithNothingOnItIsNull() {
+        assertNull(enricher.parseDetail("<html><body><p>Not found</p></body></html>"))
+        assertNull(enricher.parseDetail(""))
+    }
+
+    @Test
+    fun parseDetail_readsDeceasedFromTheAgeSlot() {
+        val d = enricher.parseDetail("<html><body><span class=\"age\">Deceased</span><a class=\"address\">1 Main St, Town, ST 11111</a></body></html>")!!
+        assertTrue(d.deceased)
+        assertNull(d.dob)
+    }
+
+    @Test
+    fun describeDetail_namesThePartsNeverTheValues() {
+        val d = enricher.parseDetail(cbcDetailPage)
+        val line = enricher.describeDetail(cbcDetailPage, d)
+        assertEquals("phones=2 emails=1 addresses=2 relatives=2 age/dob=\u2713", line)
+    }
+
+    @Test
+    fun parsePeople_linksEachCardToItsOwnPageAndNotToARelative() {
+        val html = """<html><body>
+            <div class="card card-hover"><h2><a class="name-link" href="https://www.cyberbackgroundchecks.com/detail/jane-a-roe/pid1"><span class="name-given">Jane A Roe</span></a></h2>
+              <a class="relative" href="https://www.cyberbackgroundchecks.com/detail/rhea-roe/pid9">Rhea Roe</a></div>
+            <div class="card card-hover"><h2><span class="name-given">Jane B Roe</span></h2>
+              <a class="relative" href="https://www.cyberbackgroundchecks.com/detail/rhea-roe/pid9">Rhea Roe</a>
+              <a class="btn btn-primary" href="/detail/jane-b-roe/pid2?ref=x#top">VIEW DETAILS</a></div>
+            </body></html>"""
+        val people = enricher.parsePeople(html)
+        assertEquals("https://www.cyberbackgroundchecks.com/detail/jane-a-roe/pid1", people[0].detailUrl)
+        assertEquals("https://www.cyberbackgroundchecks.com/detail/jane-b-roe/pid2", people[1].detailUrl)
+    }
+
+    @Test
+    fun safeDetailUrl_followsOnlyThisSitesDetailPagesOverHttps() {
+        assertEquals("https://www.cyberbackgroundchecks.com/detail/x/y", enricher.safeDetailUrl("/detail/x/y"))
+        assertEquals("https://www.cyberbackgroundchecks.com/detail/x/y", enricher.safeDetailUrl("https://WWW.cyberbackgroundchecks.com/detail/x/y?a=1#b"))
+        for (bad in listOf(
+            "http://www.cyberbackgroundchecks.com/detail/x/y",
+            "https://evil.example.com/detail/x/y",
+            "https://www.cyberbackgroundchecks.com.evil.example/detail/x/y",
+            "https://www.cyberbackgroundchecks.com/address/x",
+            "https://www.cyberbackgroundchecks.com/detail/",
+            "javascript:alert(1)",
+            "//evil.example.com/detail/x",
+            "",
+        )) assertNull(bad, enricher.safeDetailUrl(bad))
+    }
+
+    @Test
+    fun options_matchOnEveryPhoneEmailAndAddressOnThePersonsPage() {
+        val url = "https://www.cyberbackgroundchecks.com/detail/jane-a-roe/pid1"
+        val listed = CyberBackgroundChecksEnricher.Findings(
+            name = "Jane A Roe", address = "12 Elm St, Springfield, IL 62701 1234", phone = "2175550142", detailUrl = url
+        )
+        val other = CyberBackgroundChecksEnricher.Findings(
+            name = "Jane B Roe", address = "9 Oak Ave, Austin, TX 78701 5555", phone = "5125550100",
+            detailUrl = "https://www.cyberbackgroundchecks.com/detail/jane-b-roe/pid2"
+        )
+        val mission = BrowserMission.CbcByName("Jane Roe")
+        // The contact's number is the person's SECOND phone, which the list did not show.
+        val contact = target(displayName = "Jane Roe", phone = "312-555-0188", email = "jane.roe@example.com", residence = "400 Pine Rd, Chicago, IL 60601")
+        val without = enricher.options(contact, listOf(mission to listed, mission to other))
+        assertFalse(without.first { it.name == "Jane A Roe" }.fits.contains("Same phone number"))
+
+        val details = mapOf(url to enricher.parseDetail(cbcDetailPage)!!)
+        val with = enricher.options(contact, listOf(mission to listed, mission to other), details)
+        val jane = with.first { it.name == "Jane A Roe" }
+        assertTrue(jane.fits.contains("Same phone number"))
+        assertTrue(jane.fits.contains("Same email address"))
+        assertTrue(jane.fits.contains("Same city or ZIP"))
+        assertEquals("Jane A Roe", with.first().name)
+        // What the page added is carried for the user to choose by.
+        assertEquals(listOf("2175550142", "3125550188"), jane.phones)
+        assertEquals(listOf("Rhea Roe", "Sam Roe"), jane.relatives)
+        assertEquals(listOf("400 Pine Rd, Chicago, IL 60601 0001"), jane.otherAddresses)
+        assertNull(with.first { it.name == "Jane B Roe" }.phones)
+    }
+
+    @Test
+    fun adopt_fillsAnEmailGapFromThePersonsPageButNeverOverwrites() {
+        val option = LookupOption(
+            "Jane A Roe", "A", null, "12 Elm St, Springfield, IL", null, listOf("name"), emptyList(), emptyList(),
+            emails = listOf("j***@example.com", "jane.roe@example.com"), phones = listOf("2175550142")
+        )
+        val filled = enricher.adopt(target(displayName = "Unnamed Entity"), option)
+        assertEquals("jane.roe@example.com", filled.email)
+        assertEquals("2175550142", filled.phoneNumber?.filter { it.isDigit() })
+        val kept = enricher.adopt(target(displayName = "Jane Roe", email = "mine@example.com"), option)
+        assertEquals("mine@example.com", kept.email)
     }
 
     // ---- looksLikeBlock ----

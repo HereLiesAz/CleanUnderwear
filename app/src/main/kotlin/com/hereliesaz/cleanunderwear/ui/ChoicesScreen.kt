@@ -171,7 +171,21 @@ private fun OptionCard(option: LookupOption, selected: Boolean, onSelect: () -> 
                     )
                 }
                 option.address?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
-                option.phone?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                option.phone?.let { Text(formatPhone(it), style = MaterialTheme.typography.bodyMedium) }
+                // What the person's own page added, when it was read: more to tell people apart by.
+                val shownPhone = option.phone?.filter { it.isDigit() }
+                option.phones.orEmpty().filter { it != shownPhone }.take(4).takeIf { it.isNotEmpty() }?.let { more ->
+                    AppCaption(stringResource(R.string.choices_more_phones, more.joinToString(", ") { formatPhone(it) }))
+                }
+                option.emails.orEmpty().take(3).takeIf { it.isNotEmpty() }?.let {
+                    AppCaption(stringResource(R.string.choices_emails, it.joinToString(", ")))
+                }
+                option.otherAddresses.orEmpty().take(3).takeIf { it.isNotEmpty() }?.let {
+                    AppCaption(stringResource(R.string.choices_past_addresses, it.joinToString("; ")))
+                }
+                option.relatives.orEmpty().take(5).takeIf { it.isNotEmpty() }?.let {
+                    AppCaption(stringResource(R.string.choices_relatives, it.joinToString(", ")))
+                }
                 if (option.fits.isNotEmpty()) {
                     val fits = option.fits.map { lookupReason(it) }
                     AppCaption(stringResource(R.string.choices_fits, fits.joinToString(", ") { it.replaceFirstChar { c -> c.lowercase() } }))
@@ -198,6 +212,7 @@ private fun lookupReason(key: String): String = when (key) {
     "Same phone number" -> stringResource(R.string.choices_fit_same_phone)
     "Same area code" -> stringResource(R.string.choices_fit_same_area_code)
     "Same city or ZIP" -> stringResource(R.string.choices_fit_same_place)
+    "Same email address" -> stringResource(R.string.choices_fit_same_email)
     "Same age" -> stringResource(R.string.choices_fit_same_age)
     "A different name" -> stringResource(R.string.choices_differs_name)
     "A different age" -> stringResource(R.string.choices_differs_age)
@@ -221,4 +236,11 @@ private fun lookupModes(keys: List<String>): String {
         }
     }
     return words.joinToString(stringResource(R.string.list_and))
+}
+
+/** Ten digits as "(555) 123-4567"; anything else as it came. */
+private fun formatPhone(raw: String): String {
+    val digits = raw.filter { it.isDigit() }
+    val ten = if (digits.length == 11 && digits.startsWith("1")) digits.drop(1) else digits
+    return if (ten.length == 10) "(${ten.take(3)}) ${ten.substring(3, 6)}-${ten.substring(6)}" else raw
 }

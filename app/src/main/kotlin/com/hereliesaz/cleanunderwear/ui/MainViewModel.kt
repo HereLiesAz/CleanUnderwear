@@ -31,6 +31,7 @@ import com.hereliesaz.cleanunderwear.domain.SuspectCase
 import com.hereliesaz.cleanunderwear.domain.SuspectReport
 import com.hereliesaz.cleanunderwear.domain.SuspectReview
 import com.hereliesaz.cleanunderwear.domain.TriageTargetsUseCase
+import com.hereliesaz.cleanunderwear.network.CyberBackgroundChecksEnricher
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -1163,12 +1164,46 @@ class MainViewModel @Inject constructor(
                     if (resolveCancellationRequested) { finish(str(R.string.vm_lookup_stopped, index, total)); return@runExclusive }
 
                     if (collected.isNotEmpty()) {
-                        val options = cbcEnricher.options(target, collected)
+                        // A results list only hints at each person. Open the page of each candidate,
+                        // best fit first, one after another in the same browser, and read it: every
+                        // phone, email and address on file, relatives, the age. That is held with
+                        // the choices, to tell people apart by and to fill the contact in from, and
+                        // dropped once the user has said which one is theirs.
+                        val urls = cbcEnricher.options(target, collected)
+                            .mapNotNull { it.detailUrl }.distinct()
+                            .take(CyberBackgroundChecksEnricher.MAX_DETAIL_PAGES)
+                        var details = emptyMap<String, CyberBackgroundChecksEnricher.PersonDetails>()
+                        var stoppedInDetails = false
+                        if (urls.isNotEmpty()) {
+                            _operationState.value = _operationState.value.copy(
+                                description = qty(R.plurals.vm_lookup_details, urls.size, target.displayName, urls.size)
+                            )
+                            val pages = mutableListOf<Pair<BrowserMission, String>>()
+                            val detailOutcome = launchMissionsAndAwait(urls.map { BrowserMission.CbcDetail(it) }) { mission, html ->
+                                pages.removeAll { it.first == mission }
+                                pages.add(mission to html)
+                            }
+                            stoppedInDetails = detailOutcome == BatchOutcome.UserCancelled || resolveCancellationRequested
+                            details = withContext(Dispatchers.Default) {
+                                pages.mapNotNull { (mission, html) ->
+                                    val url = (mission as? BrowserMission.CbcDetail)?.url ?: return@mapNotNull null
+                                    val parsed = cbcEnricher.parseDetail(html)
+                                    com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log(
+                                        "CYBG detail: ${cbcEnricher.describeDetail(html, parsed)}"
+                                    )
+                                    parsed?.let { url to it }
+                                }.toMap()
+                            }
+                        }
+                        val options = cbcEnricher.options(target, collected, details)
                         _choices.value = withContext(Dispatchers.IO) {
                             lookupChoices.put(com.hereliesaz.cleanunderwear.domain.LookupChoice(target.id, target.displayName, options))
                         }
                         toChoose++
                         noteResult(index + 1, qty(R.plurals.vm_lookup_people_found, options.size, target.displayName, options.size))
+                        // Stopped while the pages were being read: what was found is kept, as the
+                        // stop dialog says, and the run ends here.
+                        if (stoppedInDetails) { finish(str(R.string.vm_lookup_stopped, index + 1, total)); return@runExclusive }
                         continue
                     }
 

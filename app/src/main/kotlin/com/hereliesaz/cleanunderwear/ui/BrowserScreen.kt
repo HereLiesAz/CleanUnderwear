@@ -805,6 +805,7 @@ private fun BrowserMission.displayLabel(): String = when (this) {
     is BrowserMission.CbcByEmail -> stringResource(R.string.mission_lookup_email)
     is BrowserMission.CbcByAddress -> stringResource(R.string.mission_lookup_address)
     is BrowserMission.CbcByName -> stringResource(R.string.mission_lookup_name)
+    is BrowserMission.CbcDetail -> stringResource(R.string.mission_lookup_details)
     BrowserMission.HarvestWhatsApp -> stringResource(R.string.settings_import_whatsapp)
     BrowserMission.HarvestInstagram -> stringResource(R.string.settings_import_instagram)
     BrowserMission.HarvestGoogleContacts -> stringResource(R.string.settings_import_google)

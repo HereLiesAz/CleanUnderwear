@@ -27,7 +27,15 @@ data class LookupOption(
     val fits: List<String>,
     val differs: List<String>,
     /** The page the person was found on lists them as deceased. Saved choices from before have it false. */
-    val deceased: Boolean = false
+    val deceased: Boolean = false,
+    /** The address of the person's own page, whose details follow. */
+    val detailUrl: String? = null,
+    // What the person's own page added. Null, not empty, when it wasn't read, and for saved
+    // choices from before (which are read back without their defaults).
+    val phones: List<String>? = null,
+    val emails: List<String>? = null,
+    val otherAddresses: List<String>? = null,
+    val relatives: List<String>? = null
 )
 
 /** Everyone a lookup found for one contact, waiting for the user to say which, if any, is them. */

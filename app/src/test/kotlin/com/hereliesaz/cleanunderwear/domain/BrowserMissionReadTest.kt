@@ -13,6 +13,7 @@ class BrowserMissionReadTest {
             BrowserMission.CbcByEmail("jane@example.com"),
             BrowserMission.CbcByPhone("5551234567"),
             BrowserMission.CbcByAddress("1 Main St"),
+            BrowserMission.CbcDetail("https://www.cyberbackgroundchecks.com/detail/jane-roe/abc"),
         ).forEach { assertTrue(it.label, it.readsPageDirectly) }
     }
 
