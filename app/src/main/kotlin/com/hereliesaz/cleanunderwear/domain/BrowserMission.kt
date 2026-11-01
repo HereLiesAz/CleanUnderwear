@@ -43,8 +43,19 @@ sealed class BrowserMission {
      * Default returns the entire document HTML; missions that want a tighter
      * payload can override.
      */
-    open val extractionScript: String =
-        "(function(){window.HTMLOUT.dump(document.documentElement.outerHTML);})();"
+    open val extractionScript: String = DEFAULT_DUMP_SCRIPT
+
+    /**
+     * Whether [extractionScript] only hands back the page's own source. BrowserScreen then reads
+     * the page straight from the browser, with no bridge for the page's scripts to see, and can
+     * read it again at any time (the watchdog's last try, the user's "Read this page").
+     */
+    val readsPageDirectly: Boolean get() = extractionScript == DEFAULT_DUMP_SCRIPT
+
+    companion object {
+        /** The script of a mission that wants nothing but the page's source. */
+        const val DEFAULT_DUMP_SCRIPT = "(function(){window.HTMLOUT.dump(document.documentElement.outerHTML);})();"
+    }
 
     /**
      * When false, BrowserScreen loads the URL and steps aside — no auto-run

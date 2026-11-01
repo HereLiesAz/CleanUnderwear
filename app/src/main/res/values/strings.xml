@@ -257,6 +257,7 @@
     <string name="choices_born_about">Born about %1$s</string>
     <string name="choices_born">Born %1$s</string>
     <string name="choices_fits">Fits: %1$s</string>
+    <string name="choices_listed_deceased">Listed as deceased on the page</string>
     <string name="choices_differs">Doesn\'t fit: %1$s</string>
     <string name="choices_found_by">Found by searching their %1$s</string>
 
@@ -577,7 +578,10 @@
     <string name="browser_reading">Reading the page. Please don\'t touch it.</string>
     <string name="browser_let_me_use">Let me use the page</string>
     <string name="browser_paused">This page needs you, or didn\'t load. If it shows a CAPTCHA or a sign-in, complete it and the lookup carries on by itself.</string>
-    <string name="browser_paused_caption_batch">Try again reloads this page. Skip moves on without it. Stop ends every lookup left; what was found so far is kept.</string>
+    <string name="browser_paused_fine">If the page is fine and is not a CAPTCHA, tap Read this page.</string>
+    <string name="browser_paused_caption_batch">Read this page uses what is on screen. Try again reloads it. Skip moves on without it. Stop ends every lookup left; what was found so far is kept.</string>
+    <string name="browser_read_this">Read this page</string>
+    <string name="browser_auto_skip">Moving on to the next one in %1$d s, unless you touch the page. Anything found is shown at the end.</string>
     <string name="browser_paused_caption">Try again reloads this page. Skip moves on without it. Stop closes it.</string>
     <string name="browser_signin_caption">Nothing is read until you\'re in. Back steps back through the pages you visit.</string>
     <string name="mission_lookup_phone">Identity lookup · phone</string>

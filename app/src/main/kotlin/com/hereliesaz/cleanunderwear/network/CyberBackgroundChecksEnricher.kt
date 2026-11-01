@@ -43,7 +43,7 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
             ?.let { add(BrowserMission.CbcByPhone(it)) }
 
         target.email
-            ?.takeIf { it.isNotBlank() && it.contains("@") }
+            ?.takeIf(::isSearchableEmail)
             ?.let { add(BrowserMission.CbcByEmail(it)) }
 
         target.residenceInfo
@@ -68,7 +68,7 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
             ?.takeIf { it.length >= 10 }
         if (phone != null) return BrowserMission.CbcByPhone(phone)
 
-        val email = target.email?.takeIf { it.isNotBlank() && it.contains("@") }
+        val email = target.email?.takeIf(::isSearchableEmail)
         if (email != null) return BrowserMission.CbcByEmail(email)
 
         val address = target.residenceInfo?.takeIf { it.isNotBlank() }
@@ -110,9 +110,8 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
             ?: if (root !== doc.body()) root.selectFirst("h1, h2, h3") else null)
             ?.text()?.trim()?.takeIf { it.isNotBlank() }
 
-        val address = root
-            .selectFirst(ADDRESS_SELECTORS)
-            ?.text()?.trim()?.takeIf { it.isNotBlank() }
+        val address = (root.selectFirst("a.address") ?: root.selectFirst(ADDRESS_SELECTORS))
+            ?.text()?.let(::cleanAddress)?.takeIf { it.isNotBlank() }
 
         val phone = root
             .selectFirst(PHONE_SELECTORS)
@@ -121,9 +120,10 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
             ?.takeIf { it.length >= 10 }
 
         // DOB / age — a dedicated field if present, else "Age N" / "DOB ..." text.
+        // The age slot reads "Deceased" for someone the site lists as dead: that is no age.
         val dob = root
             .selectFirst(DOB_SELECTORS)
-            ?.text()?.trim()?.takeIf { it.isNotBlank() }
+            ?.text()?.trim()?.takeIf { it.isNotBlank() && !it.equals("deceased", ignoreCase = true) }
             ?: DOB_TEXT.find(root.text())?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
 
         // Structured data (schema.org Person, as JSON-LD or microdata) doesn't drift with the
@@ -173,16 +173,25 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
     private fun readCard(card: Element): Findings? {
         val name = (card.selectFirst(NAME_SELECTORS) ?: card.selectFirst("h1, h2, h3, h4"))
             ?.text()?.trim()?.takeIf { it.isNotBlank() }?.let(::naturalOrder) ?: return null
-        val dob = card.selectFirst(DOB_SELECTORS)?.text()?.trim()?.takeIf { it.isNotBlank() }
+        // The age slot reads "Deceased" for someone the site lists as dead: that is no age, and
+        // it is what the user most needs to see about this person.
+        val ageText = card.selectFirst(DOB_SELECTORS)?.text()?.trim()?.takeIf { it.isNotBlank() }
+        val deceased = ageText.equals("deceased", ignoreCase = true)
+        val dob = (if (deceased) null else ageText)
             ?: DOB_TEXT.find(card.text())?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
         return Findings(
             name = name,
-            address = card.selectFirst(ADDRESS_SELECTORS)?.text()?.trim()?.takeIf { it.isNotBlank() },
+            address = (card.selectFirst("a.address") ?: card.selectFirst(ADDRESS_SELECTORS))
+                ?.text()?.let(::cleanAddress)?.takeIf { it.isNotBlank() },
             phone = card.selectFirst(PHONE_SELECTORS)?.text()?.filter { it.isDigit() || it == '+' }?.takeIf { it.length >= 10 },
             middleName = middleFrom(name),
-            dob = dob?.let(::pinAge)
+            dob = dob?.let(::pinAge),
+            deceased = deceased
         )
     }
+
+    /** An address without the county note the site puts after it ("[Harrison County]"). */
+    private fun cleanAddress(text: String): String = text.replace(Regex("\\s*\\[[^\\]]*]\\s*$"), "").trim()
 
     /**
      * The same person listed twice (on one page, or by two searches) has one key: first and last
@@ -231,7 +240,7 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
                 fits += "Came up for their ${by.filter { it == "phone" || it == "email" }.joinToString(" and ")}"
                 score += 2
             }
-            LookupOption(f.name, f.middleName, f.dob, f.address, f.phone, by, fits, differs) to score
+            LookupOption(f.name, f.middleName, f.dob, f.address, f.phone, by, fits, differs, group.any { it.second.deceased }) to score
         }.sortedByDescending { it.second }.map { it.first }.take(MAX_PEOPLE)
     }
 
@@ -242,7 +251,10 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
     fun adopt(target: Target, option: LookupOption): Target = merge(
         target,
         Findings(option.name, option.address, option.phone, option.middleName, option.dob)
-    ).copy(enrichmentProvenance = "${option.foundBy.joinToString("+")} · $CHOSEN_PREFIX ${option.name ?: "a result"}")
+    ).copy(
+        enrichmentProvenance = "${option.foundBy.joinToString("+")} · $CHOSEN_PREFIX ${option.name ?: "a result"}" +
+            if (option.deceased) " · listed as deceased" else ""
+    )
 
     /** The note left when the user said none of the people found is this contact. */
     fun noneOfThem(count: Int): String = "$NONE_PREFIX $count result${if (count == 1) "" else "s"}"
@@ -670,7 +682,21 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
      * which the viewmodel records as a per-search miss without halting the
      * whole queue.
      */
-    fun looksLikeBlock(html: String): Boolean = BotWall.suspected(html)
+    fun looksLikeBlock(html: String): Boolean {
+        // Said in the activity log: a wrong call pauses the lookup, and the reason is what
+        // tells a real CAPTCHA from a page that merely carries one.
+        val reason = BotWall.reason(html) ?: return false
+        DiagnosticLogger.log("CYBG: page looks blocked ($reason)", DiagnosticLogger.LogEntry.LogLevel.WARN)
+        return true
+    }
+
+    /**
+     * Whether [email] is worth searching: something before and after one `@`, and a dot in the
+     * domain. A bare "@" or "name@" in a contact's email field used to start a search that could
+     * only come back empty.
+     */
+    internal fun isSearchableEmail(email: String): Boolean =
+        EMAIL_SHAPE.matches(email.trim())
 
     /** Whether a lookup page says it found nobody: a finished search with nothing in it. */
     fun foundNobody(html: String): Boolean = BotWall.saysNoResults(html)
@@ -691,10 +717,15 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
         val address: String?,
         val phone: String?,
         val middleName: String? = null,
-        val dob: String? = null
+        val dob: String? = null,
+        /** The site lists this person as deceased. */
+        val deceased: Boolean = false
     )
 
     companion object {
+        /** Something, one `@`, and a domain with at least one dot. */
+        private val EMAIL_SHAPE = Regex("""[^@\s]+@[^@\s.]+(\.[^@\s.]+)+""")
+
         /** Starts the note on a contact whose details the user picked from a lookup. */
         const val CHOSEN_PREFIX = "chosen by you:"
         /** Starts the note on a contact the user said none of the lookup's people is. */
@@ -703,7 +734,7 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
         // Class selectors are guesses at CBC's markup and drift with redesigns; the structured-
         // data fallback and [describeParse]'s log line exist for when they miss.
         private const val NAME_SELECTORS =
-            ".name, h1.full-name, .full-name, .person-name, [itemprop=name]"
+            ".name, .name-given, h1.full-name, .full-name, .person-name, [itemprop=name]"
         private const val ADDRESS_SELECTORS =
             ".address, .current-address, .address-current, .person-address, .city-state, [itemprop=address]"
         private const val PHONE_SELECTORS =
@@ -711,7 +742,10 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
         private const val DOB_SELECTORS =
             ".dob, .date-of-birth, .born, .age, [data-dob], [itemprop=birthDate]"
         private const val MAX_JSON_DEPTH = 8
-        private const val CARD_SELECTORS = ".person-card, .result-card, .search-result, .card-person, [data-result-card]"
+        // `.card-hover` is how CyberBackgroundChecks marks a person's card; its ad widgets share the
+        // class but have no `.name-given`, so only a card that names someone counts.
+        private const val CARD_SELECTORS =
+            ".person-card, .result-card, .search-result, .card-person, [data-result-card], .card-hover:has(.name-given)"
         /** More than this many people for one contact is a list no one can choose from. */
         const val MAX_PEOPLE = 10
 

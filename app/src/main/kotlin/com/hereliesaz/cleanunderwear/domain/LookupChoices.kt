@@ -15,6 +15,7 @@ import javax.inject.Singleton
  * @param foundBy the searches that returned this person ("phone", "name").
  * @param fits what about them matches the contact ("Same phone number").
  * @param differs what doesn't ("A different age").
+ * @param deceased the site lists this person as deceased: shown plainly, never acted on by itself.
  */
 data class LookupOption(
     val name: String?,
@@ -24,7 +25,9 @@ data class LookupOption(
     val phone: String?,
     val foundBy: List<String>,
     val fits: List<String>,
-    val differs: List<String>
+    val differs: List<String>,
+    /** The page the person was found on lists them as deceased. Saved choices from before have it false. */
+    val deceased: Boolean = false
 )
 
 /** Everyone a lookup found for one contact, waiting for the user to say which, if any, is them. */

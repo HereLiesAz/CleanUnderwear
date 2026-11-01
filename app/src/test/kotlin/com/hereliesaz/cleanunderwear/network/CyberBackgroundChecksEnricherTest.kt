@@ -234,6 +234,88 @@ class CyberBackgroundChecksEnricherTest {
         assertEquals("212", merged.areaCode)
     }
 
+    // ---- A real results list ----
+    //
+    // CyberBackgroundChecks' name-search results as the app's browser shows them, with invented
+    // people: each person a `div.card.card-hover` (name in `.name-given`, the age in `.age`, which
+    // reads "Deceased" for someone listed as dead, the address in `a.address` followed by a county
+    // note, phones as `a.phone`), plus unnamed ad widgets that share the `.card-hover` class.
+
+    private val cbcResultsList = """
+        <html><head><script>
+          (function(){var a=document.createElement('script');
+          a.src='/cdn-cgi/challenge-platform/h/b/scripts/jsd/abc123/main.js';document.head.appendChild(a);})();
+        </script></head><body>
+        <h4>3 results for <b>Jane Roe</b></h4>
+        <div class="search-results__content">
+        <div class="card card-hover"><div class="card-header"><h2 class="mb-0">
+          <a class="name-link" href="/detail/jane-roe/1"><span class="name-given"> Jane Roe </span></a>
+          <span class="age-label">Age: </span><span class="badge badge-danger age">Deceased</span></h2></div>
+          <div class="card-body"><h3 class="section-label"><span class="address-current-label">Lives at</span></h3>
+          <span>No addresses available</span></div></div>
+        <div class="card card-hover wam-pro-max-widget"><h2>Find out more</h2><span class="age">Deceased</span></div>
+        <div class="card card-hover"><div class="card-header"><h2 class="mb-0">
+          <a class="name-link" href="/detail/jane-a-roe/2"><span class="name-given">Jane A Roe</span></a>
+          <span class="age-label">Age: </span><span class="age">40</span></h2></div>
+          <div class="card-body">
+            <p class="address-current max-lines-1 d-inline"><a class="address" href="/address/x">12 Elm St, Springfield, IL 62701 1234</a>
+              <small class="text-muted county">[Sangamon County]</small></p>
+            <span class="phones-label">Phones</span> <a class="phone" href="#">(217) 555-0142</a> <a class="phone" href="#">(217) 555-0199</a>
+            <span class="relatives-label">Related to</span> <a class="relative" href="/d/3">Rhea Roe</a>
+          </div></div>
+        <div class="card card-hover"><div class="card-header"><h2 class="mb-0">
+          <a class="name-link" href="/detail/jane-b-roe/3"><span class="name-given">Jane B Roe</span></a>
+          <span class="age-label">Age: </span><span class="age">24</span></h2></div>
+          <div class="card-body"><p class="address-current"><a class="address" href="/address/y">9 Oak Ave, Austin, TX 78701 5555</a>
+            <small class="county">[Travis County]</small></p></div></div>
+        </div></body></html>
+    """.trimIndent()
+
+    @Test
+    fun parsePeople_readsEveryNamedCardAndSkipsTheAdWidgets() {
+        val people = enricher.parsePeople(cbcResultsList)
+        assertEquals(listOf("Jane Roe", "Jane A Roe", "Jane B Roe"), people.map { it.name })
+    }
+
+    @Test
+    fun parsePeople_readsAddressWithoutTheCountyNoteAndThePhones() {
+        val people = enricher.parsePeople(cbcResultsList)
+        val a = people[1]
+        assertEquals("12 Elm St, Springfield, IL 62701 1234", a.address)
+        assertEquals("2175550142", a.phone)
+        assertEquals("Jane", a.name!!.split(" ").first())
+        assertEquals("A", a.middleName)
+        assertEquals("9 Oak Ave, Austin, TX 78701 5555", people[2].address)
+    }
+
+    @Test
+    fun parsePeople_turnsAnAgeIntoABirthYearAndKeepsDeceasedOutOfIt() {
+        val people = enricher.parsePeople(cbcResultsList)
+        val thisYear = java.time.Year.now().value
+        assertEquals("~${thisYear - 40}", people[1].dob)
+        assertEquals("~${thisYear - 24}", people[2].dob)
+        // "Deceased" fills the age slot for the first person: not an age, but a flag.
+        assertNull(people[0].dob)
+        assertTrue(people[0].deceased)
+        assertFalse(people[1].deceased)
+    }
+
+    @Test
+    fun theResultsPageIsNeitherNobodyNorABlock() {
+        assertFalse(enricher.foundNobody(cbcResultsList))
+        assertFalse(enricher.looksLikeBlock(cbcResultsList))
+    }
+
+    @Test
+    fun options_carryTheDeceasedFlagToWhatTheUserChoosesFrom() {
+        val found = enricher.parsePeople(cbcResultsList).map { BrowserMission.CbcByName("Jane Roe") to it }
+        val options = enricher.options(target(displayName = "Jane Roe"), found)
+        assertTrue(options.single { it.name == "Jane Roe" }.deceased)
+        assertFalse(options.single { it.name == "Jane A Roe" }.deceased)
+        val adopted = enricher.adopt(target(displayName = "Jane Roe"), options.single { it.name == "Jane Roe" })
+        assertTrue(adopted.enrichmentProvenance!!.endsWith("listed as deceased"))
+    }
+
     // ---- looksLikeBlock ----
 
     @Test
@@ -260,6 +342,17 @@ class CyberBackgroundChecksEnricherTest {
             </body></html>
         """.trimIndent()
         assertFalse(enricher.looksLikeBlock(html))
+    }
+
+    @Test
+    fun pickAllMissions_malformedEmail_dropsEmailMission() {
+        // A bare "@" in a contact's email field used to start a search that could only be empty.
+        for (bad in listOf("@", "name@", "@example.com", "a@b", "a b@example.com", "a@@example.com")) {
+            val missions = enricher.pickAllMissions(target(displayName = "Jane Roe", email = bad))
+            assertTrue(bad, missions.none { it is BrowserMission.CbcByEmail })
+            assertEquals(bad, null, enricher.pickMission(target(displayName = "Unnamed Entity", email = bad)))
+        }
+        assertTrue(enricher.pickAllMissions(target(displayName = "Jane Roe", email = " jane@example.co.uk ")).any { it is BrowserMission.CbcByEmail })
     }
 
     // ---- Sanity: pickAllMissions feeds reasonable URLs ----

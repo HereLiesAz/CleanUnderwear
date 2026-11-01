@@ -163,6 +163,13 @@ private fun OptionCard(option: LookupOption, selected: Boolean, onSelect: () -> 
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
+                if (option.deceased) {
+                    Text(
+                        stringResource(R.string.choices_listed_deceased),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
                 option.address?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                 option.phone?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                 if (option.fits.isNotEmpty()) {
