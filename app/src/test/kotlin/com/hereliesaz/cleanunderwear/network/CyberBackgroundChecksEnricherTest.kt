@@ -403,9 +403,9 @@ class CyberBackgroundChecksEnricherTest {
     @Test
     fun parsePeople_linksEachCardToItsOwnPageAndNotToARelative() {
         val html = """<html><body>
-            <div class="card card-hover"><h2><a class="name-link" href="https://www.cyberbackgroundchecks.com/detail/jane-a-roe/pid1"><span class="name-given">Jane A Roe</span></a></h2>
+            <div class="card card-hover"><h2><a class="name-link" href="https://www.cyberbackgroundchecks.com/detail/jane-a-roe/pid1"><span class="name-given">Jane A Roe</span></a> <span class="age">30</span></h2>
               <a class="relative" href="https://www.cyberbackgroundchecks.com/detail/rhea-roe/pid9">Rhea Roe</a></div>
-            <div class="card card-hover"><h2><span class="name-given">Jane B Roe</span></h2>
+            <div class="card card-hover"><h2><span class="name-given">Jane B Roe</span> <span class="age">50</span></h2>
               <a class="relative" href="https://www.cyberbackgroundchecks.com/detail/rhea-roe/pid9">Rhea Roe</a>
               <a class="btn btn-primary" href="/detail/jane-b-roe/pid2?ref=x#top">VIEW DETAILS</a></div>
             </body></html>"""
