@@ -597,6 +597,11 @@
     <string name="mission_lookup_email">Identity lookup · email</string>
     <string name="mission_lookup_address">Identity lookup · address</string>
     <string name="mission_lookup_name">Identity lookup · name</string>
+    <string name="mission_mode_phone">searching by phone number</string>
+    <string name="mission_mode_email">searching by email</string>
+    <string name="mission_mode_address">searching by address</string>
+    <string name="mission_mode_name">searching by name</string>
+    <string name="mission_mode_details">reading their page</string>
     <string name="mission_lookup_details">Identity lookup · person\'s page</string>
     <string name="mission_signin_whatsapp">Link WhatsApp here. Under the code, tap \"Link with phone number\", then enter the code it shows in WhatsApp on this phone (Settings, Linked devices, Link a device). Or scan the code with a second device. The import carries on by itself once your chats appear.</string>
     <string name="mission_signin_instagram">Sign in to Instagram here. The import carries on by itself once you\'re in.</string>

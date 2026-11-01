@@ -1083,6 +1083,13 @@ class MainViewModel @Inject constructor(
                     description = str(R.string.vm_lookup_first, total),
                     progress = 0f
                 ))
+                // What the run will search by, in the activity log: a contact is searched by its
+                // phone number first when it has one, then email, address and name.
+                val withPhone = unverified.count { t -> cbcEnricher.pickAllMissions(t).any { it is BrowserMission.CbcByPhone } }
+                val withEmail = unverified.count { t -> cbcEnricher.pickAllMissions(t).any { it is BrowserMission.CbcByEmail } }
+                com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log(
+                    "CYBG: $total contacts to look up; $withPhone have a phone number to search by, $withEmail an email address"
+                )
                 // Contacts with people to choose from. Nobody is asked mid-run: every contact is
                 // looked up first, and the choosing comes after, all together.
                 var toChoose = 0
@@ -1109,6 +1116,10 @@ class MainViewModel @Inject constructor(
                     if (resolveCancellationRequested) { finish(str(R.string.vm_lookup_stopped, index, total)); return@runExclusive }
                     val target = repository.getTargetById(lite.id) ?: continue
                     val missions = cbcEnricher.pickAllMissions(target)
+                    com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log(
+                        "CYBG: searches for ${target.displayName}: " +
+                            (missions.joinToString(", ") { it.label.substringAfterLast("· ") }.ifEmpty { "none" })
+                    )
                     if (missions.isEmpty()) {
                         repository.updateMonitorabilityState(
                             target.id,

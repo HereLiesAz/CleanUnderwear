@@ -464,7 +464,11 @@ fun BrowserScreen(
     Scaffold(
         topBar = {
             AppTopBar(
-                title = context?.takeIf { it.isNotBlank() }
+                // Which search this page is, after who it is for: the user can see a contact being
+                // searched by phone, email, address or name, and when it is a person's own page.
+                title = context?.takeIf { it.isNotBlank() }?.let { who ->
+                    mission.displayMode()?.let { "$who · $it" } ?: who
+                }
                     ?: if (missions.size > 1) {
                         stringResource(R.string.browser_title_of, mission.displayLabel(), currentIndex + 1, missions.size)
                     } else {
@@ -811,6 +815,17 @@ private fun BrowserMission.displayLabel(): String = when (this) {
     BrowserMission.HarvestGoogleContacts -> stringResource(R.string.settings_import_google)
     BrowserMission.HarvestFacebookFriends -> stringResource(R.string.settings_import_facebook)
     else -> label
+}
+
+/** What a lookup is searching by, in a few words; null for a mission that is not a search. */
+@Composable
+private fun BrowserMission.displayMode(): String? = when (this) {
+    is BrowserMission.CbcByPhone -> stringResource(R.string.mission_mode_phone)
+    is BrowserMission.CbcByEmail -> stringResource(R.string.mission_mode_email)
+    is BrowserMission.CbcByAddress -> stringResource(R.string.mission_mode_address)
+    is BrowserMission.CbcByName -> stringResource(R.string.mission_mode_name)
+    is BrowserMission.CbcDetail -> stringResource(R.string.mission_mode_details)
+    else -> null
 }
 
 /** The words telling the user how to sign in while an import waits; see [displayLabel]. */
