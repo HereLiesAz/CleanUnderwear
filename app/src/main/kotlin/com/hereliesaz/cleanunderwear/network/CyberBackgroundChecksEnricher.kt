@@ -399,6 +399,51 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
     fun unseen(people: List<Findings>, by: String, seen: MutableSet<String>): List<Candidate> =
         people.map { Candidate(it, listOf(by)) }.filter { seen.add(keyOf(it.findings)) }
 
+    /**
+     * What of the contact decides whether a person is them: its number, email, address, birth
+     * date, middle name and name. Held with the results the user passed over; when it changes,
+     * those results are looked at again ([requalified]).
+     */
+    fun fingerprint(t: Target): String = listOf(
+        StringSimilarity.normalizePhone(t.usablePhone),
+        t.email?.trim()?.lowercase(),
+        t.residenceInfo?.lowercase()?.replace(Regex("\\s+"), " ")?.trim(),
+        t.dateOfBirth?.let { Regex("(19|20)\\d{2}").find(it)?.value ?: it },
+        t.middleName?.trim()?.lowercase(),
+        t.displayName.trim().lowercase()
+    ).joinToString("|") { it.orEmpty() }
+
+    /** A person passed over, as a candidate to be scored again. */
+    private fun candidateOf(o: LookupOption): Candidate = Candidate(
+        Findings(o.name, o.address, o.phone, o.middleName, o.dob, o.deceased, o.detailUrl), o.foundBy
+    )
+
+    /** What the person's own page gave when it was read, rebuilt from the option that kept it. */
+    private fun detailsOf(o: LookupOption): PersonDetails? =
+        if (o.phones == null && o.emails == null && o.otherAddresses == null && o.relatives == null) null
+        else PersonDetails(
+            phones = o.phones.orEmpty(), emails = o.emails.orEmpty(), addresses = o.otherAddresses.orEmpty(),
+            relatives = o.relatives.orEmpty(), dob = o.dob, deceased = o.deceased
+        )
+
+    /**
+     * Of the people [ruledOut] (shown, and passed over), those that new details about [target]
+     * make fit: scored against the contact as it is now, each gained a strong reason it lacked
+     * when it was passed over (its phone number or email, its age, its city or ZIP), and has no
+     * different name or age against it. Best fit first, with the fresh reasons. Nothing that fit
+     * no better than before comes back, so the same people are not suggested again for nothing.
+     */
+    fun requalified(target: Target, ruledOut: List<LookupOption>): List<LookupOption> {
+        if (ruledOut.isEmpty()) return emptyList()
+        val details = ruledOut.mapNotNull { o -> o.detailUrl?.let { url -> detailsOf(o)?.let { url to it } } }.toMap()
+        val before = ruledOut.associateBy { keyOf(candidateOf(it).findings) }
+        return rank(target, ruledOut.map(::candidateOf), details).filter { r ->
+            val old = before[keyOf(r.candidate.findings)]?.fits.orEmpty().toSet()
+            r.option.fits.any { it !in old && it in STRONG_FITS } &&
+                r.option.differs.none { it == "A different name" || it == "A different age" }
+        }.map { it.option }
+    }
+
     /** A candidate as it is held in the pool. */
     fun pooled(c: Candidate): PooledPerson = c.findings.let {
         PooledPerson(it.name, it.middleName, it.dob, it.address, it.phone, it.deceased, it.detailUrl, c.by)
@@ -994,6 +1039,9 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
 
         /** Most people held for one contact across all its searches; past this the list is no one's to choose from. */
         const val MAX_POOL = 100
+
+        /** The reasons that, newly true of a person passed over, bring them back. */
+        private val STRONG_FITS = setOf("Same phone number", "Same email address", "Same age", "Same city or ZIP")
 
         private val PAGE_OF = Regex("""Displaying page\s+(\d+)\s+of\s+(\d+)""", RegexOption.IGNORE_CASE)
         private const val NEXT_ICON = ".fa-angle-right, .fa-chevron-right, .fa-caret-right, .fa-arrow-right, .fa-chevron-circle-right"

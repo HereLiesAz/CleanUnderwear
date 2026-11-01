@@ -623,6 +623,91 @@ class CyberBackgroundChecksEnricherTest {
         )) assertNull(bad, enricher.safeResultsUrl(bad))
     }
 
+    // ---- Results passed over come back when new details make them fit ----
+
+    private fun passedOver(
+        name: String, url: String, fits: List<String>, phones: List<String>? = null, emails: List<String>? = null,
+        address: String? = null, other: List<String>? = null, dob: String? = null, differs: List<String> = emptyList(),
+    ) = LookupOption(
+        name = name, middleName = null, dob = dob, address = address, phone = phones?.firstOrNull(),
+        foundBy = listOf("name"), fits = fits, differs = differs, detailUrl = url,
+        phones = phones, emails = emails, otherAddresses = other
+    )
+
+    @Test
+    fun fingerprint_changesWhenWhatDecidesAMatchChanges() {
+        val base = target(displayName = "Jane Roe")
+        assertEquals(enricher.fingerprint(base), enricher.fingerprint(base.copy(lastScrapedTimestamp = 99L)))
+        assertTrue(enricher.fingerprint(base) != enricher.fingerprint(base.copy(phoneNumber = "312-555-0188")))
+        assertTrue(enricher.fingerprint(base) != enricher.fingerprint(base.copy(email = "jane@example.com")))
+        assertTrue(enricher.fingerprint(base) != enricher.fingerprint(base.copy(residenceInfo = "1 Main St, Town, ST 11111")))
+        assertTrue(enricher.fingerprint(base) != enricher.fingerprint(base.copy(dateOfBirth = "~1985")))
+        // Formatting of the same number is not a change.
+        assertEquals(
+            enricher.fingerprint(base.copy(phoneNumber = "312-555-0188")),
+            enricher.fingerprint(base.copy(phoneNumber = "(312) 555 0188"))
+        )
+    }
+
+    @Test
+    fun requalified_bringsBackAPersonWhoNowFitsByASecondNumber() {
+        val a = passedOver(
+            "Jane A Roe", "https://www.cyberbackgroundchecks.com/detail/a/1", fits = listOf("Same name"),
+            phones = listOf("2175550142", "3125550188"), address = "12 Elm St, Springfield, IL 62701 1234"
+        )
+        // Nothing about the contact has changed: no one comes back.
+        assertTrue(enricher.requalified(target(displayName = "Jane Roe"), listOf(a)).isEmpty())
+        // The user adds a number, and it is the person's second one.
+        val back = enricher.requalified(target(displayName = "Jane Roe", phone = "312-555-0188"), listOf(a))
+        assertEquals(listOf("Jane A Roe"), back.map { it.name })
+        assertTrue(back.single().fits.contains("Same phone number"))
+    }
+
+    @Test
+    fun requalified_bringsBackByEmailAgeOrCityToo() {
+        val byEmail = passedOver("Jane A Roe", "https://www.cyberbackgroundchecks.com/detail/a/1", listOf("Same name"), emails = listOf("jane.roe@example.com"))
+        assertEquals(1, enricher.requalified(target(displayName = "Jane Roe", email = "Jane.Roe@Example.com"), listOf(byEmail)).size)
+        val thisYear = java.time.Year.now().value
+        val byAge = passedOver("Jane B Roe", "https://www.cyberbackgroundchecks.com/detail/b/2", listOf("Same name"), dob = "~${thisYear - 40}")
+        assertEquals(1, enricher.requalified(target(displayName = "Jane Roe").copy(dateOfBirth = "~${thisYear - 40}"), listOf(byAge)).size)
+        val byCity = passedOver("Jane C Roe", "https://www.cyberbackgroundchecks.com/detail/c/3", listOf("Same name"), address = "9 Oak Ave, Austin, TX 78701 5555")
+        assertEquals(1, enricher.requalified(target(displayName = "Jane Roe", residence = "Austin, TX 78701"), listOf(byCity)).size)
+    }
+
+    @Test
+    fun requalified_neverReSuggestsWhatFitNoBetterOrIsPlainlyDifferent() {
+        // It already fitted by number when it was passed over: a new, unrelated detail brings nothing.
+        val alreadyFitted = passedOver(
+            "Jane A Roe", "https://www.cyberbackgroundchecks.com/detail/a/1",
+            fits = listOf("Same name", "Same phone number"), phones = listOf("3125550188")
+        )
+        assertTrue(enricher.requalified(target(displayName = "Jane Roe", phone = "312-555-0188", email = "x@example.com"), listOf(alreadyFitted)).isEmpty())
+        // A different name stays out however much else fits.
+        val otherName = passedOver("Mary Smith", "https://www.cyberbackgroundchecks.com/detail/m/9", listOf("Same phone number"), phones = listOf("3125550188"))
+        assertTrue(enricher.requalified(target(displayName = "Jane Roe", phone = "312-555-0188"), listOf(otherName)).isEmpty())
+        // A different age counts against.
+        val thisYear = java.time.Year.now().value
+        val wrongAge = passedOver("Jane A Roe", "https://www.cyberbackgroundchecks.com/detail/a/1", listOf("Same name"), phones = listOf("3125550188"), dob = "~${thisYear - 70}")
+        assertTrue(enricher.requalified(target(displayName = "Jane Roe", phone = "312-555-0188").copy(dateOfBirth = "~${thisYear - 30}"), listOf(wrongAge)).isEmpty())
+        assertTrue(enricher.requalified(target(displayName = "Jane Roe"), emptyList()).isEmpty())
+    }
+
+    @Test
+    fun aChoiceKeepsWhatWasPassedOverThroughSavingAndReading() {
+        val gson = com.google.gson.Gson()
+        val passed = passedOver("Jane A Roe", "https://www.cyberbackgroundchecks.com/detail/a/1", listOf("Same name"), phones = listOf("2175550142"))
+        val choice = LookupChoice(
+            4, "Jane Roe", emptyList(), wantsMore = true, ruledOut = listOf(passed),
+            knownAtRuling = "a|b", resuggested = true
+        )
+        val back = gson.fromJson(gson.toJson(choice), LookupChoice::class.java)
+        assertEquals(choice, back)
+        val old = gson.fromJson("""{"targetId":7,"contactName":"Jane","options":[]}""", LookupChoice::class.java)
+        assertNull(old.ruledOut)
+        assertNull(old.knownAtRuling)
+        assertFalse(old.resuggested)
+    }
+
     // ---- looksLikeBlock ----
 
     @Test
