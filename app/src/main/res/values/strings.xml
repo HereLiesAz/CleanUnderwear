@@ -245,14 +245,7 @@
     <string name="choices_picking_fills">Picking one fills in what %1$s is missing from it; nothing you already have is changed.</string>
     <string name="choices_thats">That\'s %1$s</string>
     <string name="choices_pick_one">Pick one above</string>
-    <string name="choices_none">None of these is %1$s</string>
     <string name="choices_decide_later">Decide later</string>
-    <string name="choices_none_title">None of these is %1$s?</string>
-    <string name="choices_none_confirm">None of these</string>
-    <plurals name="choices_none_body">
-        <item quantity="one">The person found for %2$s is set aside, and later runs won\'t look %2$s up again. Look up details on their screen can still try again.</item>
-        <item quantity="other">The %1$d people found for %2$s are set aside, and later runs won\'t look %2$s up again. Look up details on their screen can still try again.</item>
-    </plurals>
     <string name="choices_no_name">No name given</string>
     <string name="choices_born_about">Born about %1$s</string>
     <string name="choices_born">Born %1$s</string>
@@ -262,10 +255,10 @@
     <string name="choices_past_addresses">Also lived at: %1$s</string>
     <string name="choices_relatives">Related to: %1$s</string>
     <string name="choices_fit_same_email">Same email address</string>
+    <string name="choices_all_shown">That is everyone found so far for %1$s. All of it stays held until one of them is identified.</string>
     <string name="choices_none_more">None of these: try the next ones</string>
     <string name="choices_none_more_caption">Nothing happens now. The next Fill in details run looks at the next ones for %1$s, and they come back here.</string>
     <string name="choices_waiting_next_run">%1$d contacts will get their next ones on the next Fill in details run.</string>
-    <string name="choices_stop_looking">None of them is %1$s: stop looking</string>
     <string name="choices_showing">Showing %1$d of the %2$d people found so far.</string>
     <string name="choices_listed_deceased">Listed as deceased on the page</string>
     <string name="choices_differs">Doesn\'t fit: %1$s</string>
@@ -556,7 +549,7 @@
     <string name="vm_lookup_stopped">Stopped after %1$d of %2$d.</string>
     <string name="vm_lookup_nothing_to_search">%1$s: nothing to search by</string>
     <string name="vm_lookup_more">Looking for more people for %1$s…</string>
-    <string name="vm_lookup_no_more">No one else to look at for %1$s.</string>
+    <string name="vm_lookup_no_more">No one else to look at for %1$s yet. What was found stays held.</string>
     <string name="vm_next_run">Noted. The next Fill in details run looks at the next %2$d for %1$s.</string>
     <plurals name="vm_lookup_more_shown_for">
         <item quantity="one">%1$s: the next person is ready to look at.</item>

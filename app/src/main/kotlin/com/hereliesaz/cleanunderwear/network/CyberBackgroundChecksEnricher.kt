@@ -499,9 +499,6 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
         )
     }
 
-    /** The note left when the user said none of the people found is this contact. */
-    fun noneOfThem(count: Int): String = "$NONE_PREFIX $count result${if (count == 1) "" else "s"}"
-
     /**
      * One line for the diagnostic log: what [parseFindings] got from a page, or, when it got
      * nothing, enough of the page's shape (headings, likely class names) to fix the selectors

@@ -87,7 +87,6 @@ private fun ChoiceFor(
 ) {
     val target by viewModel.observeTarget(choice.targetId).collectAsState(initial = null)
     var picked by rememberSaveable { mutableStateOf<Int?>(null) }
-    var confirmNone by rememberSaveable { mutableStateOf(false) }
     val name = target?.displayName ?: choice.contactName
     val bottomBar = LocalBottomBarHeight.current
 
@@ -140,26 +139,13 @@ private fun ChoiceFor(
                     // opened now and nothing is discarded; this contact leaves the list for now.
                     AppAction(stringResource(R.string.choices_none_more), { viewModel.nextBatchOnNextRun(choice.targetId) }, Modifier.fillMaxWidth())
                     AppCaption(stringResource(R.string.choices_none_more_caption, name))
-                    // Ending the search for this contact discards everyone found, so it asks first.
-                    AppTextAction(stringResource(R.string.choices_stop_looking, name), { confirmNone = true })
                 } else {
-                    // Discards everyone found for this contact, so it asks first.
-                    AppTextAction(stringResource(R.string.choices_none, name), { confirmNone = true })
+                    // Everyone found has been shown. There is no way to give them up: all of it
+                    // stays held until one of them is identified.
+                    AppCaption(stringResource(R.string.choices_all_shown, name))
                 }
                 if (remaining > 1) AppTextAction(stringResource(R.string.choices_decide_later), onLater)
             }
-        }
-    }
-
-    if (confirmNone) {
-        val found = choice.foundSoFar
-        AppDialog(
-            title = stringResource(R.string.choices_none_title, name),
-            confirm = stringResource(R.string.choices_none_confirm),
-            onConfirm = { confirmNone = false; viewModel.chooseLookup(choice.targetId, null) },
-            onDismiss = { confirmNone = false }
-        ) {
-            Text(pluralStringResource(R.plurals.choices_none_body, found, found, name))
         }
     }
 }

@@ -552,30 +552,14 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch(failSafe) { _choices.value = withContext(Dispatchers.IO) { lookupChoices.load() } }
     }
 
-    /** Notes that none of the [count] people found is the contact. The caller holds the pipeline. */
-    private suspend fun recordNone(targetId: Int, count: Int) {
-        repository.inTransaction {
-            val target = repository.getTargetById(targetId) ?: return@inTransaction
-            repository.updateTarget(
-                target.copy(
-                    enrichmentProvenance = cbcEnricher.noneOfThem(count),
-                    monitorabilityState = if (target.status == TargetStatus.UNVERIFIED) {
-                        com.hereliesaz.cleanunderwear.data.MonitorabilityState.ENRICHMENT_FAILED
-                    } else {
-                        target.monitorabilityState
-                    }
-                )
-            )
-        }
-    }
-
     /**
-     * The user's answer for one contact: [option] is them (its details fill the contact's gaps, as
-     * a confirmed lookup's always did), or, when null, none of the people found is. "None" is
-     * remembered, so later runs don't look the contact up again; its own Look up details still can.
+     * The user has identified the person who is [option] as this contact: its details fill the
+     * contact's gaps (nothing the contact already has is overwritten), and what was held for the
+     * contact (everyone else found, and the pages not yet read) is dropped. It is held until
+     * then; the user is never asked to give a contact up.
      */
-    fun chooseLookup(targetId: Int, option: com.hereliesaz.cleanunderwear.domain.LookupOption?) {
-        val choice = _choices.value.firstOrNull { it.targetId == targetId } ?: return
+    fun chooseLookup(targetId: Int, option: com.hereliesaz.cleanunderwear.domain.LookupOption) {
+        if (_choices.value.none { it.targetId == targetId }) return
         _choices.value = _choices.value.filter { it.targetId != targetId }
         viewModelScope.launch(failSafe) {
             withContext(Dispatchers.IO) { lookupChoices.remove(setOf(targetId)) }
@@ -583,22 +567,11 @@ class MainViewModel @Inject constructor(
                 repository.inTransaction {
                     val target = repository.getTargetById(targetId) ?: return@inTransaction
                     repository.updateTarget(
-                        if (option != null) {
-                            cbcEnricher.adopt(target, option).copy(
-                                // Details resolve UNVERIFIED; any other status stands.
-                                status = if (target.status == TargetStatus.UNVERIFIED) TargetStatus.MONITORING else target.status,
-                                monitorabilityState = com.hereliesaz.cleanunderwear.data.MonitorabilityState.READY
-                            )
-                        } else {
-                            target.copy(
-                                enrichmentProvenance = cbcEnricher.noneOfThem(choice.foundSoFar),
-                                monitorabilityState = if (target.status == TargetStatus.UNVERIFIED) {
-                                    com.hereliesaz.cleanunderwear.data.MonitorabilityState.ENRICHMENT_FAILED
-                                } else {
-                                    target.monitorabilityState
-                                }
-                            )
-                        }
+                        cbcEnricher.adopt(target, option).copy(
+                            // Details resolve UNVERIFIED; any other status stands.
+                            status = if (target.status == TargetStatus.UNVERIFIED) TargetStatus.MONITORING else target.status,
+                            monitorabilityState = com.hereliesaz.cleanunderwear.data.MonitorabilityState.READY
+                        )
                     )
                 }
             }
@@ -1137,6 +1110,9 @@ class MainViewModel @Inject constructor(
                     // A contact whose last batch was ruled out goes on to the next batch, from what
                     // its searches already found: nothing is searched again.
                     val waiting = _choices.value.firstOrNull { it.targetId == target.id && it.wantsMore }
+                    // Everyone found has been looked at and no further pages are held: nothing to do
+                    // until a search finds more. It stays held, and is not looked at again for nothing.
+                    if (waiting != null && !waiting.hasMore) continue
                     if (waiting != null) {
                         _operationState.value = _operationState.value.copy(
                             description = str(R.string.vm_lookup_item, target.displayName, index + 1, total),
@@ -1144,13 +1120,9 @@ class MainViewModel @Inject constructor(
                         )
                         when (val more = extendFromPool(target, waiting)) {
                             MoreResult.Stopped -> { finish(str(R.string.vm_lookup_stopped, index, total)); return@runExclusive }
-                            MoreResult.NoMore -> {
-                                // The user ruled out everyone shown and no one is left: the same as
-                                // saying none of them is the contact.
-                                recordNone(target.id, waiting.foundSoFar)
-                                _choices.value = withContext(Dispatchers.IO) { lookupChoices.remove(setOf(target.id)) }
-                                noteResult(index + 1, str(R.string.vm_lookup_no_more, target.displayName))
-                            }
+                            // No one left to look at, for now. Nothing is given up: everything found stays
+                            // held until one of the people is identified as the contact.
+                            MoreResult.NoMore -> noteResult(index + 1, str(R.string.vm_lookup_no_more, target.displayName))
                             is MoreResult.Shown -> {
                                 toChoose++
                                 noteResult(index + 1, qty(R.plurals.vm_lookup_more_shown_for, more.count, target.displayName, more.count))
@@ -1389,7 +1361,14 @@ class MainViewModel @Inject constructor(
                 pages = listOf(com.hereliesaz.cleanunderwear.domain.MorePage(it, page.by)) + pages
             }
         }
-        if (held.isEmpty()) return MoreResult.NoMore
+        if (held.isEmpty()) {
+            // Nothing new: what was read is remembered (so no page is read twice), and the choice
+            // stays held as it is.
+            _choices.value = withContext(Dispatchers.IO) {
+                lookupChoices.put(choice.copy(pool = emptyList(), seen = seen.toList(), morePages = pages))
+            }
+            return MoreResult.NoMore
+        }
         val ranked = cbcEnricher.rank(target, held)
         val batch = ranked.take(CyberBackgroundChecksEnricher.MAX_DETAIL_PAGES)
         val rest = ranked.drop(CyberBackgroundChecksEnricher.MAX_DETAIL_PAGES)
