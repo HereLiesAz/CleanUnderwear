@@ -552,6 +552,23 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch(failSafe) { _choices.value = withContext(Dispatchers.IO) { lookupChoices.load() } }
     }
 
+    /** Notes that none of the [count] people found is the contact. The caller holds the pipeline. */
+    private suspend fun recordNone(targetId: Int, count: Int) {
+        repository.inTransaction {
+            val target = repository.getTargetById(targetId) ?: return@inTransaction
+            repository.updateTarget(
+                target.copy(
+                    enrichmentProvenance = cbcEnricher.noneOfThem(count),
+                    monitorabilityState = if (target.status == TargetStatus.UNVERIFIED) {
+                        com.hereliesaz.cleanunderwear.data.MonitorabilityState.ENRICHMENT_FAILED
+                    } else {
+                        target.monitorabilityState
+                    }
+                )
+            )
+        }
+    }
+
     /**
      * The user's answer for one contact: [option] is them (its details fill the contact's gaps, as
      * a confirmed lookup's always did), or, when null, none of the people found is. "None" is
@@ -1035,7 +1052,9 @@ class MainViewModel @Inject constructor(
                     it.enrichmentProvenance?.startsWith(com.hereliesaz.cleanunderwear.network.CyberBackgroundChecksEnricher.NONE_PREFIX) == true ||
                     // Someone the user already picked: another search finds the same people.
                     it.enrichmentProvenance?.contains(com.hereliesaz.cleanunderwear.network.CyberBackgroundChecksEnricher.CHOSEN_PREFIX) == true ||
-                    _choices.value.any { c -> c.targetId == it.id }
+                    // Its choice is still waiting for an answer (but not one whose last batch was
+                    // ruled out: that goes on to the next batch in this run).
+                    _choices.value.any { c -> c.targetId == it.id && !c.wantsMore }
             }
     }
 
@@ -1115,6 +1134,30 @@ class MainViewModel @Inject constructor(
                 for ((index, lite) in unverified.withIndex()) {
                     if (resolveCancellationRequested) { finish(str(R.string.vm_lookup_stopped, index, total)); return@runExclusive }
                     val target = repository.getTargetById(lite.id) ?: continue
+                    // A contact whose last batch was ruled out goes on to the next batch, from what
+                    // its searches already found: nothing is searched again.
+                    val waiting = _choices.value.firstOrNull { it.targetId == target.id && it.wantsMore }
+                    if (waiting != null) {
+                        _operationState.value = _operationState.value.copy(
+                            description = str(R.string.vm_lookup_item, target.displayName, index + 1, total),
+                            progress = index.toFloat() / total
+                        )
+                        when (val more = extendFromPool(target, waiting)) {
+                            MoreResult.Stopped -> { finish(str(R.string.vm_lookup_stopped, index, total)); return@runExclusive }
+                            MoreResult.NoMore -> {
+                                // The user ruled out everyone shown and no one is left: the same as
+                                // saying none of them is the contact.
+                                recordNone(target.id, waiting.foundSoFar)
+                                _choices.value = withContext(Dispatchers.IO) { lookupChoices.remove(setOf(target.id)) }
+                                noteResult(index + 1, str(R.string.vm_lookup_no_more, target.displayName))
+                            }
+                            is MoreResult.Shown -> {
+                                toChoose++
+                                noteResult(index + 1, qty(R.plurals.vm_lookup_more_shown_for, more.count, target.displayName, more.count))
+                            }
+                        }
+                        continue
+                    }
                     val missions = cbcEnricher.pickAllMissions(target)
                     com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log(
                         "CYBG: searches for ${target.displayName}: " +
@@ -1287,87 +1330,85 @@ class MainViewModel @Inject constructor(
         return details to stopped
     }
 
-    private val extending = mutableSetOf<Int>()
+    /**
+     * "None of these" for a contact with more people held. Nothing is opened and no one is
+     * interrupted: the batch is ruled out (its people stay in the choice's record of who has
+     * been seen, so they are never shown again) and the contact waits for the next run of
+     * Fill in details, which goes on to the next batch from what the searches already found.
+     */
+    fun nextBatchOnNextRun(targetId: Int) {
+        val choice = _choices.value.firstOrNull { it.targetId == targetId } ?: return
+        if (!choice.hasMore || choice.wantsMore) return
+        viewModelScope.launch(failSafe) {
+            _choices.value = withContext(Dispatchers.IO) { lookupChoices.put(choice.copy(wantsMore = true)) }
+            post(str(R.string.vm_next_run, choice.contactName, CyberBackgroundChecksEnricher.MAX_DETAIL_PAGES))
+        }
+    }
+
+    /** What going on to a contact's next batch came to. */
+    private sealed class MoreResult {
+        /** The user stopped the run; the choice is as it was. */
+        object Stopped : MoreResult()
+        /** No one else to look at. */
+        object NoMore : MoreResult()
+        /** The next batch of [count] people replaces the ruled-out one. */
+        data class Shown(val count: Int) : MoreResult()
+    }
 
     /**
-     * "None of these" for a contact with more people held: the next batch of the best fits not yet
-     * shown, with each one's own page read, replaces the one on screen. The people held come
-     * first; when they run short, further pages of the searches' result lists are opened (a few at
-     * a time), and anyone already shown or held is left out, so no one is offered twice. A stop
-     * leaves the choice exactly as it was.
+     * The next batch for a contact whose last was ruled out ([LookupChoice.wantsMore]), as part of
+     * a run (it holds the pipeline already). The people held come first; when they run short,
+     * further pages of the searches' result lists are opened (a few at a time). Anyone already
+     * shown or held is left out, so no one is offered twice. Nothing is searched again.
      */
-    fun extendChoice(targetId: Int) {
-        val choice = _choices.value.firstOrNull { it.targetId == targetId } ?: return
-        if (!choice.hasMore || !extending.add(targetId)) return
-        viewModelScope.launch(failSafe) {
-            try {
-                exclusive("lookup-more", str(R.string.vm_what_more_people)) {
-                    resolveCancellationRequested = false
-                    try {
-                        val target = repository.getTargetById(targetId) ?: return@exclusive
-                        begin(OperationState(description = str(R.string.vm_lookup_more, target.displayName), progress = -1f))
-                        var held = choice.pool.orEmpty().map(cbcEnricher::candidate)
-                        val seen = choice.seen.orEmpty().toMutableSet()
-                        var pages = choice.morePages.orEmpty()
-                        var pagesRead = 0
-                        // Further pages of the result lists, until enough are held to fill a batch.
-                        while (held.size < CyberBackgroundChecksEnricher.MAX_DETAIL_PAGES && pages.isNotEmpty() && pagesRead < MORE_PAGES_PER_ROUND) {
-                            val page = pages.first()
-                            pages = pages.drop(1)
-                            pagesRead++
-                            var read: String? = null
-                            val outcome = launchMissionsAndAwait(listOf(BrowserMission.CbcResultsPage(page.url))) { _, html -> read = html }
-                            if (outcome == BatchOutcome.UserCancelled || resolveCancellationRequested) return@exclusive
-                            val html = read ?: continue
-                            com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log(
-                                "CYBG more results (${page.by}): ${cbcEnricher.describePager(html, page.url)}"
-                            )
-                            // Anyone already shown or held is left out: no one is offered twice.
-                            val fresh = withContext(Dispatchers.Default) {
-                                cbcEnricher.unseen(cbcEnricher.parsePeople(html), page.by, seen)
-                            }
-                            held = (held + fresh).take(CyberBackgroundChecksEnricher.MAX_POOL)
-                            // The same search's next page comes straight after this one.
-                            cbcEnricher.nextListPage(html, page.url)?.let {
-                                pages = listOf(com.hereliesaz.cleanunderwear.domain.MorePage(it, page.by)) + pages
-                            }
-                        }
-                        if (held.isEmpty()) {
-                            // No one else to look at: say so, and stop offering more.
-                            _choices.value = withContext(Dispatchers.IO) {
-                                lookupChoices.put(choice.copy(pool = emptyList(), morePages = emptyList(), seen = seen.toList()))
-                            }
-                            post(str(R.string.vm_lookup_no_more, target.displayName))
-                            return@exclusive
-                        }
-                        val ranked = cbcEnricher.rank(target, held)
-                        val batch = ranked.take(CyberBackgroundChecksEnricher.MAX_DETAIL_PAGES)
-                        val rest = ranked.drop(CyberBackgroundChecksEnricher.MAX_DETAIL_PAGES)
-                        val (details, stopped) = readDetailPages(target, batch.mapNotNull { it.candidate.findings.detailUrl })
-                        if (stopped) return@exclusive
-                        val options = cbcEnricher.rank(target, batch.map { it.candidate }, details).map { it.option }
-                        _choices.value = withContext(Dispatchers.IO) {
-                            lookupChoices.put(
-                                choice.copy(
-                                    options = options,
-                                    pool = rest.map { cbcEnricher.pooled(it.candidate) },
-                                    seen = seen.toList(),
-                                    morePages = pages,
-                                    rounds = choice.rounds + 1,
-                                )
-                            )
-                        }
-                        post(qty(R.plurals.vm_lookup_more_shown, options.size, options.size))
-                    } finally {
-                        if (_activeMissionBatch.value?.retainBrowserForResolve == true) _activeMissionBatch.value = null
-                        resolveCancellationRequested = false
-                        if (_operationState.value.isRunning) _operationState.value = OperationState(isRunning = false)
-                    }
-                }
-            } finally {
-                extending.remove(targetId)
+    private suspend fun extendFromPool(target: Target, choice: com.hereliesaz.cleanunderwear.domain.LookupChoice): MoreResult {
+        _operationState.value = _operationState.value.copy(description = str(R.string.vm_lookup_more, target.displayName))
+        var held = choice.pool.orEmpty().map(cbcEnricher::candidate)
+        val seen = choice.seen.orEmpty().toMutableSet()
+        var pages = choice.morePages.orEmpty()
+        var pagesRead = 0
+        // Further pages of the result lists, until enough are held to fill a batch.
+        while (held.size < CyberBackgroundChecksEnricher.MAX_DETAIL_PAGES && pages.isNotEmpty() && pagesRead < MORE_PAGES_PER_ROUND) {
+            val page = pages.first()
+            pages = pages.drop(1)
+            pagesRead++
+            var read: String? = null
+            val outcome = launchMissionsAndAwait(listOf(BrowserMission.CbcResultsPage(page.url))) { _, html -> read = html }
+            if (outcome == BatchOutcome.UserCancelled || resolveCancellationRequested) return MoreResult.Stopped
+            val html = read ?: continue
+            com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log(
+                "CYBG more results (${page.by}): ${cbcEnricher.describePager(html, page.url)}"
+            )
+            // Anyone already shown or held is left out: no one is offered twice.
+            val fresh = withContext(Dispatchers.Default) {
+                cbcEnricher.unseen(cbcEnricher.parsePeople(html), page.by, seen)
+            }
+            held = (held + fresh).take(CyberBackgroundChecksEnricher.MAX_POOL)
+            // The same search's next page comes straight after this one.
+            cbcEnricher.nextListPage(html, page.url)?.let {
+                pages = listOf(com.hereliesaz.cleanunderwear.domain.MorePage(it, page.by)) + pages
             }
         }
+        if (held.isEmpty()) return MoreResult.NoMore
+        val ranked = cbcEnricher.rank(target, held)
+        val batch = ranked.take(CyberBackgroundChecksEnricher.MAX_DETAIL_PAGES)
+        val rest = ranked.drop(CyberBackgroundChecksEnricher.MAX_DETAIL_PAGES)
+        val (details, stopped) = readDetailPages(target, batch.mapNotNull { it.candidate.findings.detailUrl })
+        if (stopped) return MoreResult.Stopped
+        val options = cbcEnricher.rank(target, batch.map { it.candidate }, details).map { it.option }
+        _choices.value = withContext(Dispatchers.IO) {
+            lookupChoices.put(
+                choice.copy(
+                    options = options,
+                    pool = rest.map { cbcEnricher.pooled(it.candidate) },
+                    seen = seen.toList(),
+                    morePages = pages,
+                    rounds = choice.rounds + 1,
+                    wantsMore = false,
+                )
+            )
+        }
+        return MoreResult.Shown(options.size)
     }
 
     /**

@@ -545,6 +545,7 @@ class CyberBackgroundChecksEnricherTest {
             LookupChoice::class.java
         )
         assertFalse(old.hasMore)
+        assertFalse(old.wantsMore)
         assertEquals(1, old.foundSoFar)
     }
 
@@ -554,7 +555,8 @@ class CyberBackgroundChecksEnricherTest {
         val held = enricher.pooled(CyberBackgroundChecksEnricher.Candidate(person("Jane A Roe", detailUrl("a"), "1 Main St"), listOf("name")))
         val choice = LookupChoice(
             3, "Jane Roe", emptyList(), pool = listOf(held), seen = listOf(detailUrl("a")),
-            morePages = listOf(MorePage("https://www.cyberbackgroundchecks.com/people/jane-roe?page=2", "name")), rounds = 2
+            morePages = listOf(MorePage("https://www.cyberbackgroundchecks.com/people/jane-roe?page=2", "name")), rounds = 2,
+            wantsMore = true
         )
         assertEquals(choice, gson.fromJson(gson.toJson(choice), LookupChoice::class.java))
     }

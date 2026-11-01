@@ -74,7 +74,12 @@ data class LookupChoice(
     val seen: List<String>? = null,
     val morePages: List<MorePage>? = null,
     /** How many batches the user has been through, this one included. */
-    val rounds: Int = 1
+    val rounds: Int = 1,
+    /**
+     * The user ruled this batch out ("none of these") and the contact waits for the next run of
+     * Fill in details, which goes on to the next batch. Such a choice is not put to the user.
+     */
+    val wantsMore: Boolean = false
 ) {
     /** More people can still be shown: some are held, or more result pages could be opened. */
     val hasMore: Boolean get() = !pool.isNullOrEmpty() || !morePages.isNullOrEmpty()

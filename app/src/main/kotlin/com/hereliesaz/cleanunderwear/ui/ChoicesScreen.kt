@@ -38,7 +38,10 @@ import com.hereliesaz.cleanunderwear.domain.LookupOption
  */
 @Composable
 fun ChoicesScreen(viewModel: MainViewModel, onNavigateBack: () -> Unit) {
-    val choices by viewModel.choices.collectAsState()
+    val everyChoice by viewModel.choices.collectAsState()
+    // A contact whose last batch was ruled out waits for the next run: not put to the user now.
+    val choices = everyChoice.filter { !it.wantsMore }
+    val waitingForNextRun = everyChoice.count { it.wantsMore }
     // "Decide later" moves a contact to the back of the line for this visit; it stays saved.
     var later by rememberSaveable { mutableStateOf(listOf<Int>()) }
     val ordered = choices.sortedBy { later.indexOf(it.targetId) }
@@ -56,6 +59,7 @@ fun ChoicesScreen(viewModel: MainViewModel, onNavigateBack: () -> Unit) {
             ) {
                 Text(stringResource(R.string.choices_nothing_left), style = MaterialTheme.typography.titleMedium)
                 AppCaption(stringResource(R.string.choices_nothing_left_caption))
+                if (waitingForNextRun > 0) AppCaption(stringResource(R.string.choices_waiting_next_run, waitingForNextRun))
                 AppAction(stringResource(R.string.done), onNavigateBack)
             }
             return@Scaffold
@@ -131,9 +135,11 @@ private fun ChoiceFor(
                     enabled = picked != null
                 )
                 if (choice.hasMore) {
-                    // None of these: on to the next ones, from what the searches found, without
-                    // searching again and without showing anyone twice. Nothing is discarded.
-                    AppAction(stringResource(R.string.choices_none_more), { viewModel.extendChoice(choice.targetId) }, Modifier.fillMaxWidth())
+                    // None of these: the next run goes on to the next ones, from what the searches
+                    // found, without searching again and without showing anyone twice. Nothing is
+                    // opened now and nothing is discarded; this contact leaves the list for now.
+                    AppAction(stringResource(R.string.choices_none_more), { viewModel.nextBatchOnNextRun(choice.targetId) }, Modifier.fillMaxWidth())
+                    AppCaption(stringResource(R.string.choices_none_more_caption, name))
                     // Ending the search for this contact discards everyone found, so it asks first.
                     AppTextAction(stringResource(R.string.choices_stop_looking, name), { confirmNone = true })
                 } else {

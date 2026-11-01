@@ -105,8 +105,10 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
             // Top-down: see the list, act on it, arrange it, then configure.
             azRailItem(id = "registry", text = str(R.string.rail_contacts), route = "targetList", info = str(R.string.rail_contacts_info))
             azRailItem(id = "review", text = str(R.string.rail_review), route = "review", info = str(R.string.rail_review_info))
-            if (choices.isNotEmpty()) {
-                azRailItem(id = "choices", text = str(R.string.choices_rail_item, choices.size), route = "choices", info = str(R.string.rail_choices_info))
+            // A contact whose last batch was ruled out waits for the next run: not counted.
+            val toAnswer = choices.count { !it.wantsMore }
+            if (toAnswer > 0) {
+                azRailItem(id = "choices", text = str(R.string.choices_rail_item, toAnswer), route = "choices", info = str(R.string.rail_choices_info))
             }
 
             azRailHostItem(id = "intelligence_ops", text = str(R.string.rail_actions))
