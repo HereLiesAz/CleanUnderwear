@@ -549,7 +549,10 @@ class MainViewModel @Inject constructor(
     fun consumeOpenChoices() { _openChoices.value = false }
 
     init {
-        viewModelScope.launch(failSafe) { _choices.value = withContext(Dispatchers.IO) { lookupChoices.load() } }
+        viewModelScope.launch(failSafe) {
+            _choices.value = withContext(Dispatchers.IO) { lookupChoices.load() }
+            reconsiderAllLater()
+        }
     }
 
     /**
@@ -656,6 +659,7 @@ class MainViewModel @Inject constructor(
             }
             _alternates.value = null
             refreshSuspects()
+            reconsiderAllLater()
         }
     }
 
@@ -698,6 +702,7 @@ class MainViewModel @Inject constructor(
             // A status the user just confirmed or cleared goes to the phone-book note now, not at
             // the next check.
             written?.let { syncNote(it.id) }
+            reconsiderAllLater()
         }
     }
 
@@ -979,6 +984,8 @@ class MainViewModel @Inject constructor(
                 sweepPending = false
                 if (_operationState.value.isRunning) _operationState.value = OperationState(isRunning = false)
             }
+            // The contacts may have gained details: look again at what was passed over.
+            reconsiderAllLater()
         }
     }
 
@@ -1310,10 +1317,72 @@ class MainViewModel @Inject constructor(
      */
     fun nextBatchOnNextRun(targetId: Int) {
         val choice = _choices.value.firstOrNull { it.targetId == targetId } ?: return
-        if (!choice.hasMore || choice.wantsMore) return
+        if (choice.wantsMore) return
         viewModelScope.launch(failSafe) {
-            _choices.value = withContext(Dispatchers.IO) { lookupChoices.put(choice.copy(wantsMore = true)) }
-            post(str(R.string.vm_next_run, choice.contactName, CyberBackgroundChecksEnricher.MAX_DETAIL_PAGES))
+            val target = repository.getTargetById(targetId)
+            // Those passed over are kept in full: never offered again as they are, but looked at
+            // again if new details about the contact make one of them fit.
+            val ruledOut = (choice.ruledOut.orEmpty() + choice.options)
+                .distinctBy { it.detailUrl ?: "${it.name}|${it.address}|${it.dob}" }
+            _choices.value = withContext(Dispatchers.IO) {
+                lookupChoices.put(
+                    choice.copy(
+                        options = emptyList(),
+                        wantsMore = true,
+                        resuggested = false,
+                        ruledOut = ruledOut,
+                        knownAtRuling = target?.let(cbcEnricher::fingerprint) ?: choice.knownAtRuling,
+                    )
+                )
+            }
+            post(
+                if (choice.hasMore) str(R.string.vm_next_run, choice.contactName, CyberBackgroundChecksEnricher.MAX_DETAIL_PAGES)
+                else str(R.string.vm_held, choice.contactName)
+            )
+        }
+    }
+
+    /**
+     * Looks again at what was passed over for [targetId]'s choice, if the contact has changed since
+     * (a number or email added, an address, an age): the people who now fit come back for the user
+     * to look at, with the reasons. Those who fit no better than before stay put. The caller holds
+     * the pipeline.
+     */
+    private suspend fun reconsider(targetId: Int) {
+        val choice = _choices.value.firstOrNull { it.targetId == targetId } ?: return
+        if (!choice.wantsMore || choice.ruledOut.isNullOrEmpty()) return
+        val target = repository.getTargetById(targetId) ?: return
+        val now = cbcEnricher.fingerprint(target)
+        if (now == choice.knownAtRuling) return
+        val back = if (choice.knownAtRuling == null) emptyList() else cbcEnricher.requalified(target, choice.ruledOut.orEmpty())
+            .take(CyberBackgroundChecksEnricher.MAX_DETAIL_PAGES)
+        val backKeys = back.map { it.detailUrl ?: "${it.name}|${it.address}|${it.dob}" }.toSet()
+        _choices.value = withContext(Dispatchers.IO) {
+            lookupChoices.put(
+                if (back.isEmpty()) choice.copy(knownAtRuling = now)
+                else choice.copy(
+                    options = back,
+                    wantsMore = false,
+                    resuggested = true,
+                    rounds = choice.rounds + 1,
+                    ruledOut = choice.ruledOut.orEmpty().filterNot { (it.detailUrl ?: "${it.name}|${it.address}|${it.dob}") in backKeys },
+                    knownAtRuling = now,
+                )
+            )
+        }
+        if (back.isNotEmpty()) {
+            com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log("CYBG: ${back.size} earlier result(s) fit ${target.displayName} now")
+            post(qty(R.plurals.vm_resuggested, back.size, target.displayName, back.size))
+        }
+    }
+
+    /** Looks again, for every contact with results held, once the pipeline is free. */
+    private fun reconsiderAllLater() {
+        if (_choices.value.none { it.wantsMore && !it.ruledOut.isNullOrEmpty() }) return
+        viewModelScope.launch(failSafe) {
+            pipelineCoordinator.runExclusive("reconsider") {
+                _choices.value.filter { it.wantsMore && !it.ruledOut.isNullOrEmpty() }.forEach { reconsider(it.targetId) }
+            }
         }
     }
 

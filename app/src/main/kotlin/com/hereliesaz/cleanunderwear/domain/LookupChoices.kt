@@ -79,7 +79,17 @@ data class LookupChoice(
      * The user ruled this batch out ("none of these") and the contact waits for the next run of
      * Fill in details, which goes on to the next batch. Such a choice is not put to the user.
      */
-    val wantsMore: Boolean = false
+    val wantsMore: Boolean = false,
+    /**
+     * The people shown and passed over, kept in full (with what their own pages gave): never
+     * offered again as they are, but looked at again when new details about the contact might
+     * make one of them fit. Null for choices saved before this existed.
+     */
+    val ruledOut: List<LookupOption>? = null,
+    /** What the contact looked like (see CyberBackgroundChecksEnricher.fingerprint) when the last batch was passed over. */
+    val knownAtRuling: String? = null,
+    /** This batch is earlier results brought back because new details about the contact make them fit. */
+    val resuggested: Boolean = false
 ) {
     /** More people can still be shown: some are held, or more result pages could be opened. */
     val hasMore: Boolean get() = !pool.isNullOrEmpty() || !morePages.isNullOrEmpty()

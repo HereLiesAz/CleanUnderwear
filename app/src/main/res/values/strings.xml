@@ -255,7 +255,9 @@
     <string name="choices_past_addresses">Also lived at: %1$s</string>
     <string name="choices_relatives">Related to: %1$s</string>
     <string name="choices_fit_same_email">Same email address</string>
-    <string name="choices_all_shown">That is everyone found so far for %1$s. All of it stays held until one of them is identified.</string>
+    <string name="choices_all_shown">That is everyone found so far for %1$s. Passing on them keeps them all held: they come back if details you add make one fit.</string>
+    <string name="choices_none_keep">None of these: keep them held</string>
+    <string name="choices_resuggested">New details about %1$s make these earlier results fit.</string>
     <string name="choices_none_more">None of these: try the next ones</string>
     <string name="choices_none_more_caption">Nothing happens now. The next Fill in details run looks at the next ones for %1$s, and they come back here.</string>
     <string name="choices_waiting_next_run">%1$d contacts will get their next ones on the next Fill in details run.</string>
@@ -550,6 +552,11 @@
     <string name="vm_lookup_nothing_to_search">%1$s: nothing to search by</string>
     <string name="vm_lookup_more">Looking for more people for %1$s…</string>
     <string name="vm_lookup_no_more">No one else to look at for %1$s yet. What was found stays held.</string>
+    <string name="vm_held">Noted. Everything found for %1$s stays held, and comes back if details you add make one of them fit.</string>
+    <plurals name="vm_resuggested">
+        <item quantity="one">%1$s has new details: an earlier result now fits. It is back in Who is it?</item>
+        <item quantity="other">%1$s has new details: %2$d earlier results now fit. They are back in Who is it?</item>
+    </plurals>
     <string name="vm_next_run">Noted. The next Fill in details run looks at the next %2$d for %1$s.</string>
     <plurals name="vm_lookup_more_shown_for">
         <item quantity="one">%1$s: the next person is ready to look at.</item>

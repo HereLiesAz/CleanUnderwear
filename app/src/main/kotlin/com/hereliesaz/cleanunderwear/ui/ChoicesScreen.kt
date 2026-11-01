@@ -117,6 +117,7 @@ private fun ChoiceFor(
                 }
                 AppCaption(stringResource(R.string.choices_picking_fills, name))
                 // More were found than are shown: say how many, so it is plain there are more to see.
+                if (choice.resuggested) AppCaption(stringResource(R.string.choices_resuggested, name))
                 if (choice.foundSoFar > choice.options.size) {
                     AppCaption(stringResource(R.string.choices_showing, choice.options.size, choice.foundSoFar))
                 }
@@ -140,8 +141,10 @@ private fun ChoiceFor(
                     AppAction(stringResource(R.string.choices_none_more), { viewModel.nextBatchOnNextRun(choice.targetId) }, Modifier.fillMaxWidth())
                     AppCaption(stringResource(R.string.choices_none_more_caption, name))
                 } else {
-                    // Everyone found has been shown. There is no way to give them up: all of it
-                    // stays held until one of them is identified.
+                    // Everyone found has been shown. Passing on them is allowed, and gives nothing
+                    // up: they stay held, never offered as they are again, and come back if details
+                    // added to the contact make one of them fit.
+                    AppAction(stringResource(R.string.choices_none_keep), { viewModel.nextBatchOnNextRun(choice.targetId) }, Modifier.fillMaxWidth())
                     AppCaption(stringResource(R.string.choices_all_shown, name))
                 }
                 if (remaining > 1) AppTextAction(stringResource(R.string.choices_decide_later), onLater)
