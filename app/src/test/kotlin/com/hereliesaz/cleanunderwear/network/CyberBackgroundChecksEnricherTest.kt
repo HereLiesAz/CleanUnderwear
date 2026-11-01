@@ -605,6 +605,33 @@ class CyberBackgroundChecksEnricherTest {
         assertNull(enricher.nextListPage(scripted, firstPageUrl))
     }
 
+    /** The pager as the site writes it (saved pages 1 to 3 of 25), without a rel link to lean on. */
+    private fun sitePager(page: Int, pages: Int): String {
+        val base = "https://www.cyberbackgroundchecks.com/people/jane-roe"
+        val first = if (page == 1) "$base#" else base
+        val prev = if (page == 1) "$base#" else if (page == 2) base else "$base/${page - 1}"
+        val prevItem = if (page == 1) "page-item disabled" else "page-item"
+        val next = if (page < pages) """<li class="page-item"><a class="page-link text-warning" title="Next page" aria-label="Next Page" href="$base/${page + 1}"><i class="fas fa-chevron-right text-warning"></i></a></li>
+            <li class="page-item"><a class="page-link text-warning" title="Last page" aria-label="Last Page" href="$base/$pages"><i class="fas fa-angle-double-right text-warning"></i></a></li>""" else ""
+        return """<html><body><ul class="pagination justify-content-center">
+            <li class="$prevItem"><a class="page-link text-warning" href="$first" title="First page" aria-label="First Page"><i class="fas fa-angle-double-left text-warning"></i></a></li>
+            <li class="$prevItem"><a class="page-link text-warning" href="$prev" title="Previous page" aria-label="Previous Page"><i class="fas fa-chevron-left text-warning"></i></a></li>
+            $next
+            <li class="page-item disabled"><a class="page-link text-warning" href="$base/$page#"><small>Displaying page <strong>$page</strong> of <strong>$pages</strong></small></a></li>
+        </ul></body></html>"""
+    }
+
+    @Test
+    fun nextListPage_readsThePagerTheSiteActuallyWrites() {
+        val base = "https://www.cyberbackgroundchecks.com/people/jane-roe"
+        // The first page is opened with an ad's fragment on it; the link still comes out clean.
+        assertEquals("$base/2", enricher.nextListPage(sitePager(1, 25), "$base#google_vignette"))
+        assertEquals("$base/3", enricher.nextListPage(sitePager(2, 25), "$base/2"))
+        assertEquals("$base/4", enricher.nextListPage(sitePager(3, 25), "$base/3"))
+        assertNull(enricher.nextListPage(sitePager(25, 25), "$base/25"))
+        assertEquals("pager: page 2 of 25, 4 links, next=\u2713", enricher.describePager(sitePager(2, 25), "$base/2"))
+    }
+
     @Test
     fun describePager_saysWhatItFoundWithoutTheContent() {
         val html = pager(1, 6, """<a href="/people/jane-roe?page=2" aria-label="Next">›</a><a href="/people/jane-roe?page=6">»</a>""")

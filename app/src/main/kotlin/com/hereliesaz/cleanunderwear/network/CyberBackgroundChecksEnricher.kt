@@ -291,13 +291,22 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
 
     private class Pager(val page: Int, val pages: Int, val anchors: List<Element>)
 
-    /** The element that says "Displaying page X of Y" and the links around it. */
+    /**
+     * The element that says "Displaying page X of Y" and the links around it. The numbers may sit
+     * in their own tags (`Displaying page <strong>2</strong> of <strong>25</strong>`), so the
+     * text is read whole and the innermost element that holds all of it is the label. The link
+     * the label itself sits in is not one of the pager's controls.
+     */
     private fun findPager(doc: org.jsoup.nodes.Document): Pager? {
-        val label = doc.getElementsMatchingOwnText(PAGE_OF.toPattern()).firstOrNull() ?: return null
-        val m = PAGE_OF.find(label.ownText()) ?: return null
+        val label = doc.getAllElements().lastOrNull { el ->
+            PAGE_OF.containsMatchIn(el.text()) && el.children().none { PAGE_OF.containsMatchIn(it.text()) }
+        } ?: return null
+        val m = PAGE_OF.find(label.text()) ?: return null
+        val own = label.closest("a")
+        fun controls(from: Element) = from.select("a[href]").filter { it !== own }
         var scope: Element? = label
-        while (scope != null && scope.select("a[href]").isEmpty()) scope = scope.parent()
-        val anchors = scope?.select("a[href]").orEmpty()
+        while (scope != null && controls(scope).isEmpty()) scope = scope.parent()
+        val anchors = scope?.let { controls(it) }.orEmpty()
         return Pager(m.groupValues[1].toInt(), m.groupValues[2].toInt(), anchors)
     }
 
