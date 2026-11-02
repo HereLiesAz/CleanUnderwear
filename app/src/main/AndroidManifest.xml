@@ -6,10 +6,9 @@
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.WRITE_CONTACTS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- A records check of a long contact list runs past the ~10 minutes a background job gets,
-         so it runs as a foreground task with a quiet notification (ScrapingWorker). -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- No foreground-service permissions: Play holds every release that declares one until a
+         declaration form is filed. The records check is a plain background job; what a run
+         doesn't reach comes first next time (ScrapingWorker). -->
     <!-- READ_CALL_LOG / READ_SMS are not declared: Google Play restricts them to default dialer
          and SMS apps and rejects every release that asks. Review uses messaging-app registration
          (read from contacts) instead; DeviceCommsHistory switches back on if they're declared. -->
@@ -36,11 +35,6 @@
                 android:value="androidx.startup"
                 tools:node="remove" />
         </provider>
-
-        <service
-            android:name="androidx.work.impl.foreground.SystemForegroundService"
-            android:foregroundServiceType="dataSync"
-            tools:node="merge" />
 
         <activity
             android:name=".MainActivity"
