@@ -8,7 +8,10 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- No foreground-service permissions: Play holds every release that declares one until a
          declaration form is filed. The records check is a plain background job; what a run
-         doesn't reach comes first next time (ScrapingWorker). -->
+         doesn't reach comes first next time (ScrapingWorker). WorkManager's own manifest adds
+         FOREGROUND_SERVICE to the merged one, so it is removed here; nothing in the app calls
+         setForeground. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" tools:node="remove" />
     <!-- READ_CALL_LOG / READ_SMS are not declared: Google Play restricts them to default dialer
          and SMS apps and rejects every release that asks. Review uses messaging-app registration
          (read from contacts) instead; DeviceCommsHistory switches back on if they're declared. -->
