@@ -2,11 +2,7 @@ package com.hereliesaz.cleanunderwear.worker
 
 import android.content.Context
 import androidx.hilt.work.HiltWorker
-import android.content.pm.ServiceInfo
-import android.os.Build
-import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
-import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.hereliesaz.cleanunderwear.domain.RunPipelineUseCase
@@ -24,35 +20,7 @@ class ScrapingWorker @AssistedInject constructor(
     private val runPipeline: RunPipelineUseCase
 ) : CoroutineWorker(appContext, workerParams) {
 
-    override suspend fun getForegroundInfo(): ForegroundInfo {
-        val manager = applicationContext.getSystemService(android.app.NotificationManager::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            manager.createNotificationChannel(
-                android.app.NotificationChannel(RUNNING_CHANNEL, "Checks running", android.app.NotificationManager.IMPORTANCE_LOW).apply {
-                    description = "Shown while the records check runs."
-                }
-            )
-        }
-        val notification = NotificationCompat.Builder(applicationContext, RUNNING_CHANNEL)
-            .setSmallIcon(com.hereliesaz.cleanunderwear.R.drawable.ic_stat_briefs)
-            .setContentTitle("Checking records")
-            .setContentText("Your contacts are being looked up in public records.")
-            .setOngoing(true)
-            .setSilent(true)
-            .build()
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ForegroundInfo(RUNNING_NOTIFICATION, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-        } else {
-            ForegroundInfo(RUNNING_NOTIFICATION, notification)
-        }
-    }
-
     companion object {
-        private const val RUNNING_CHANNEL = "checks_running"
-        // Untagged; contact alerts are posted under NotificationHelper.ALERT_TAG, so a contact
-        // whose id equals this one doesn't collide with it.
-        private const val RUNNING_NOTIFICATION = 4101
-
         /** Output key: the run's summary, shown to the user when they started the check. */
         const val SUMMARY = "summary"
 
@@ -63,15 +31,6 @@ class ScrapingWorker @AssistedInject constructor(
     }
 
     override suspend fun doWork(): Result {
-        // A long contact list takes longer than the ~10 minutes a background job is given; as a
-        // foreground task (a quiet ongoing notification) it can finish. Android can refuse that
-        // when the app is in the background; the check then runs as before, and what it doesn't
-        // reach comes first next time.
-        try {
-            setForeground(getForegroundInfo())
-        } catch (e: Exception) {
-            com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log("Records check runs in the background (${e.javaClass.simpleName})")
-        }
         return try {
             // Each progress report replaces the last whole, so both halves go every time.
             var progress = 0f
