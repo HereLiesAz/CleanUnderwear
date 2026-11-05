@@ -35,6 +35,7 @@ import com.hereliesaz.cleanunderwear.network.CyberBackgroundChecksEnricher
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -175,6 +176,10 @@ class MainViewModel @Inject constructor(
         val onAllComplete: () -> Unit,
         val onCancel: () -> Unit,
         val isBlocked: (String) -> Boolean,
+        /** Whether a page is the site shutting the request out: nothing on it for the user to do. */
+        val isBarred: (String) -> Boolean = { false },
+        /** A page that was not read, and why; the run went on without it. */
+        val onMissionUnread: (com.hereliesaz.cleanunderwear.domain.BrowserMission, UnreadWhy) -> Unit = { _, _ -> },
     )
 
     private var missionBatchSequence = 0L
@@ -193,6 +198,8 @@ class MainViewModel @Inject constructor(
         onAllComplete: () -> Unit = {},
         onCancel: () -> Unit = {},
         isBlocked: (String) -> Boolean = { false },
+        isBarred: (String) -> Boolean = { false },
+        onMissionUnread: (com.hereliesaz.cleanunderwear.domain.BrowserMission, UnreadWhy) -> Unit = { _, _ -> },
         retainBrowserForResolve: Boolean = false,
     ) {
         _activeMissionBatch.value = ActiveMissionBatch(
@@ -203,6 +210,8 @@ class MainViewModel @Inject constructor(
             onAllComplete = onAllComplete,
             onCancel = onCancel,
             isBlocked = isBlocked,
+            isBarred = isBarred,
+            onMissionUnread = onMissionUnread,
         )
     }
 
@@ -1111,8 +1120,53 @@ class MainViewModel @Inject constructor(
                     )
                 }
 
-                for ((index, lite) in unverified.withIndex()) {
-                    if (resolveCancellationRequested) { finish(str(R.string.vm_lookup_stopped, index, total)); return@runExclusive }
+                // Contacts no search could be read for this pass (the site shut the requests out, or a
+                // check on a page went unanswered). They are not "nobody found": they keep their state,
+                // go round once more after the rest, and what is left is said plainly at the end.
+                val retryLater = mutableListOf<Target>()
+                var retryHasBarred = false
+                // Contacts in a row whose every search the site shut out. Hammering on makes a block
+                // worse and there is nothing on its page to solve, so the run waits (saying why and
+                // what helps) and goes on by itself; past a long block it stops, saying so.
+                var barredRun = 0
+
+                // Waits [waitMs], showing why and what the user can do, until it is over or the user
+                // stops the run. False when it was stopped.
+                suspend fun waitOut(waitMs: Long): Boolean {
+                    val until = android.os.SystemClock.elapsedRealtime() + waitMs
+                    while (true) {
+                        val left = until - android.os.SystemClock.elapsedRealtime()
+                        if (left <= 0 || resolveCancellationRequested) break
+                        val secs = ((left + 999) / 1000).toInt()
+                        _operationState.value = _operationState.value.copy(
+                            description = str(R.string.vm_lookup_cooling, "%d:%02d".format(secs / 60, secs % 60)),
+                            findings = listOf(str(R.string.vm_lookup_cooling_why), str(R.string.vm_lookup_cooling_help)) + results
+                        )
+                        delay(1000)
+                    }
+                    return !resolveCancellationRequested
+                }
+
+                var queue: List<Target> = unverified
+                var pass = 0
+                while (true) {
+                // What came before this pass is done: the numbers go on from there.
+                val base = total - queue.size
+                for ((index, lite) in queue.withIndex()) {
+                    val position = base + index
+                    if (resolveCancellationRequested) { finish(str(R.string.vm_lookup_stopped, position, total)); return@runExclusive }
+                    if (barredRun >= BAR_RUN_TO_GIVE_UP) {
+                        // The site has shut out every search for a long while. Stopped, with what can be done.
+                        finish(str(R.string.vm_lookup_site_blocked, position, total))
+                        return@runExclusive
+                    }
+                    if (barredRun >= BAR_RUN_TO_WAIT) {
+                        val waitMs = minOf(BAR_WAIT_MAX_MS, BAR_WAIT_BASE_MS shl (barredRun - BAR_RUN_TO_WAIT).coerceIn(0, 6))
+                        com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log(
+                            "CYBG: the site shut out $barredRun contacts in a row; waiting ${waitMs / 1000} s"
+                        )
+                        if (!waitOut(waitMs)) { finish(str(R.string.vm_lookup_stopped, position, total)); return@runExclusive }
+                    }
                     val target = repository.getTargetById(lite.id) ?: continue
                     // A contact whose last batch was ruled out goes on to the next batch, from what
                     // its searches already found: nothing is searched again.
@@ -1122,17 +1176,17 @@ class MainViewModel @Inject constructor(
                     if (waiting != null && !waiting.hasMore) continue
                     if (waiting != null) {
                         _operationState.value = _operationState.value.copy(
-                            description = str(R.string.vm_lookup_item, target.displayName, index + 1, total),
-                            progress = index.toFloat() / total
+                            description = str(R.string.vm_lookup_item, target.displayName, position + 1, total),
+                            progress = position.toFloat() / total
                         )
                         when (val more = extendFromPool(target, waiting)) {
-                            MoreResult.Stopped -> { finish(str(R.string.vm_lookup_stopped, index, total)); return@runExclusive }
+                            MoreResult.Stopped -> { finish(str(R.string.vm_lookup_stopped, position, total)); return@runExclusive }
                             // No one left to look at, for now. Nothing is given up: everything found stays
                             // held until one of the people is identified as the contact.
-                            MoreResult.NoMore -> noteResult(index + 1, str(R.string.vm_lookup_no_more, target.displayName))
+                            MoreResult.NoMore -> noteResult(position + 1, str(R.string.vm_lookup_no_more, target.displayName))
                             is MoreResult.Shown -> {
                                 toChoose++
-                                noteResult(index + 1, qty(R.plurals.vm_lookup_more_shown_for, more.count, target.displayName, more.count))
+                                noteResult(position + 1, qty(R.plurals.vm_lookup_more_shown_for, more.count, target.displayName, more.count))
                             }
                         }
                         continue
@@ -1147,19 +1201,23 @@ class MainViewModel @Inject constructor(
                             target.id,
                             com.hereliesaz.cleanunderwear.data.MonitorabilityState.ENRICHMENT_FAILED
                         )
-                        noteResult(index + 1, str(R.string.vm_lookup_nothing_to_search, target.displayName))
+                        noteResult(position + 1, str(R.string.vm_lookup_nothing_to_search, target.displayName))
                         continue
                     }
 
                     _operationState.value = _operationState.value.copy(
-                        description = str(R.string.vm_lookup_item, target.displayName, index + 1, total),
-                        progress = index.toFloat() / total
+                        description = str(
+                            if (pass == 0) R.string.vm_lookup_item else R.string.vm_lookup_retry_item,
+                            target.displayName, position + 1, total
+                        ),
+                        progress = position.toFloat() / total
                     )
 
                     // WebView callbacks run on the UI thread. Keep them cheap:
                     // Jsoup parsing can stall the entire browser on large pages.
                     val extracted = mutableListOf<Pair<BrowserMission, String>>()
-                    val outcome = launchMissionsAndAwait(missions) { mission, html ->
+                    val unread = mutableListOf<Pair<BrowserMission, UnreadWhy>>()
+                    val outcome = launchMissionsAndAwait(missions, onUnread = { mission, why -> unread += mission to why }) { mission, html ->
                         // One result per search: a page re-extracted after a rotation replaces the first.
                         extracted.removeAll { it.first == mission }
                         extracted.add(mission to html)
@@ -1169,8 +1227,25 @@ class MainViewModel @Inject constructor(
                         // User backed out mid-target — stop the whole batch
                         // rather than barrel through every UNVERIFIED contact
                         // without their attention.
-                        finish(str(R.string.vm_lookup_stopped, index, total))
+                        finish(str(R.string.vm_lookup_stopped, position, total))
                         return@runExclusive
+                    }
+
+                    // Nothing of this contact could be read: the site shut every search out, or a check
+                    // went unanswered. That is not "nobody found": the contact is left as it is, tried
+                    // again after the rest, and (when the site is the cause) the run slows down.
+                    if (extracted.isNotEmpty()) {
+                        barredRun = 0
+                    } else if (unread.any { it.second != UnreadWhy.SKIPPED }) {
+                        val barred = unread.all { it.second == UnreadWhy.BARRED }
+                        barredRun = if (barred) barredRun + 1 else 0
+                        if (unread.any { it.second == UnreadWhy.BARRED }) retryHasBarred = true
+                        retryLater += target
+                        com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log(
+                            "CYBG: nothing read for ${target.displayName} (${unread.joinToString { it.second.name.lowercase() }}); it will be tried again"
+                        )
+                        noteResult(position + 1, str(if (barred) R.string.vm_lookup_blocked else R.string.vm_lookup_unanswered, target.displayName))
+                        continue
                     }
 
                     // A search that says it found nobody is noted and passed over, not parsed:
@@ -1194,7 +1269,7 @@ class MainViewModel @Inject constructor(
                             people.map { mission to it }
                         }
                     }
-                    if (resolveCancellationRequested) { finish(str(R.string.vm_lookup_stopped, index, total)); return@runExclusive }
+                    if (resolveCancellationRequested) { finish(str(R.string.vm_lookup_stopped, position, total)); return@runExclusive }
 
                     if (collected.isNotEmpty()) {
                         // Everyone the searches found, best fit first. A batch of the best is put to
@@ -1229,10 +1304,10 @@ class MainViewModel @Inject constructor(
                             )
                         }
                         toChoose++
-                        noteResult(index + 1, qty(R.plurals.vm_lookup_people_found, everyone.size, target.displayName, everyone.size))
+                        noteResult(position + 1, qty(R.plurals.vm_lookup_people_found, everyone.size, target.displayName, everyone.size))
                         // Stopped while the pages were being read: what was found is kept, as the
                         // stop dialog says, and the run ends here.
-                        if (stoppedInDetails) { finish(str(R.string.vm_lookup_stopped, index + 1, total)); return@runExclusive }
+                        if (stoppedInDetails) { finish(str(R.string.vm_lookup_stopped, position + 1, total)); return@runExclusive }
                         continue
                     }
 
@@ -1255,12 +1330,26 @@ class MainViewModel @Inject constructor(
                         )
                     }
                     noteResult(
-                        index + 1,
+                        position + 1,
                         str(if (nobody.isNotEmpty()) R.string.vm_lookup_nobody else R.string.vm_lookup_unreadable, target.displayName)
                     )
                 }
 
-                finish(qty(R.plurals.vm_lookup_done, total))
+                if (retryLater.isEmpty() || pass >= MAX_RETRY_PASSES || resolveCancellationRequested) break
+                // One more go at the ones nothing could be read for, after a pause when it was the
+                // site that shut them out (a block usually lifts).
+                if (retryHasBarred && !waitOut(RETRY_PASS_WAIT_MS)) { finish(str(R.string.vm_lookup_stopped, total - retryLater.size, total)); return@runExclusive }
+                queue = retryLater.toList()
+                retryLater.clear()
+                retryHasBarred = false
+                barredRun = 0
+                pass++
+                }
+                val doneMessage = qty(R.plurals.vm_lookup_done, total)
+                finish(
+                    if (retryLater.isEmpty()) doneMessage
+                    else str(R.string.vm_two_sentences, doneMessage, qty(R.plurals.vm_lookup_left_unread, retryLater.size, retryLater.size))
+                )
                 } finally {
                     // Do not destroy the shared browser between contacts, only
                     // when the complete Resolve run finishes or is cancelled.
@@ -1416,7 +1505,13 @@ class MainViewModel @Inject constructor(
             var read: String? = null
             val outcome = launchMissionsAndAwait(listOf(BrowserMission.CbcResultsPage(page.url))) { _, html -> read = html }
             if (outcome == BatchOutcome.UserCancelled || resolveCancellationRequested) return MoreResult.Stopped
-            val html = read ?: continue
+            val html = read
+            if (html == null) {
+                // Not read (the site shut the request out, or a check went unanswered): the page goes
+                // back to the front, to be read on a later run, not lost.
+                pages = listOf(page) + pages
+                break
+            }
             com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log(
                 "CYBG more results (${page.by}): ${cbcEnricher.describePager(html, page.url)}"
             )
@@ -1492,6 +1587,7 @@ class MainViewModel @Inject constructor(
      */
     private suspend fun launchMissionsAndAwait(
         missions: List<BrowserMission>,
+        onUnread: (BrowserMission, UnreadWhy) -> Unit = { _, _ -> },
         onEachExtracted: (BrowserMission, String) -> Unit,
     ): BatchOutcome {
         val deferred = CompletableDeferred<BatchOutcome>()
@@ -1501,6 +1597,8 @@ class MainViewModel @Inject constructor(
             onAllComplete = { deferred.complete(BatchOutcome.Completed) },
             onCancel = { deferred.complete(BatchOutcome.UserCancelled) },
             isBlocked = cbcEnricher::looksLikeBlock,
+            isBarred = cbcEnricher::isBarred,
+            onMissionUnread = onUnread,
             retainBrowserForResolve = true,
         )
         return awaitWithin(deferred, USER_WAIT_LOOKUP_MS) { giveUpWaiting(USER_WAIT_LOOKUP_MS); BatchOutcome.UserCancelled }
@@ -1652,6 +1750,20 @@ class MainViewModel @Inject constructor(
 
 /** How many contacts' results Fill in details keeps on screen, newest first. */
 private const val RECENT_RESULTS = 5
+
+/** Contacts in a row whose every search the site shut out, after which the run waits before the next. */
+private const val BAR_RUN_TO_WAIT = 2
+
+/** The wait doubles from this for each further contact shut out, up to [BAR_WAIT_MAX_MS]. */
+private const val BAR_WAIT_BASE_MS = 30_000L
+private const val BAR_WAIT_MAX_MS = 5L * 60 * 1000
+
+/** Past this many contacts in a row, the run stops and says the site is blocking this phone (about half an hour of waiting). */
+private const val BAR_RUN_TO_GIVE_UP = 10
+
+/** How many times the contacts nothing could be read for are gone round again, and the pause before it. */
+private const val MAX_RETRY_PASSES = 1
+private const val RETRY_PASS_WAIT_MS = 60_000L
 
 /** Automatic update checks run at most this often; the manual check in Settings ignores it. */
 private const val AUTO_UPDATE_CHECK_INTERVAL_MS = 12L * 60 * 60 * 1000

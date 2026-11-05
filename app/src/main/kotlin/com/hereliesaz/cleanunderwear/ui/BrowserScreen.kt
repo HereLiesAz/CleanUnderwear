@@ -67,8 +67,19 @@ import java.io.ByteArrayInputStream
  */
 sealed class MissionOutcome {
     data class Extracted(val html: String) : MissionOutcome()
+
+    /** A check was put to the user and not completed; the run went on without the page. */
     object Blocked : MissionOutcome()
+
+    /** The site shut the request out. Nothing on the page was for the user to do; the run went on. */
+    object Barred : MissionOutcome()
+
+    /** The user chose to skip this page. */
+    object Skipped : MissionOutcome()
 }
+
+/** Why a page of a lookup was not read, as the run is told. */
+enum class UnreadWhy { BARRED, STUCK, SKIPPED }
 
 /**
  * User-visible WebView for missions that require the user's real browser
@@ -99,6 +110,8 @@ fun BrowserScreen(
     onAllComplete: () -> Unit,
     onCancel: () -> Unit,
     isBlocked: (String) -> Boolean = { false },
+    /** Whether the page is the site shutting the request out: nothing on it for the user to do. */
+    isBarred: (String) -> Boolean = { false },
     /** Who or what this is for ("Looking up Jane Doe (4 of 212)"); the mission label if null. */
     context: String? = null,
     /** Whether backing out ends a whole run of lookups, not just this page. */
@@ -123,6 +136,12 @@ fun BrowserScreen(
     var pageReady by remember { mutableStateOf(false) }
     var automationRan by remember { mutableStateOf(false) }
     var paused by remember { mutableStateOf(false) }
+    // What the pause is waiting on, in words (a string resource); the general line when null.
+    var pauseWhy by remember { mutableStateOf<Int?>(null) }
+    fun pauseFor(why: Int?) {
+        pauseWhy = why
+        paused = true
+    }
     // The page in front is a sign-in / link-your-phone page that an import can't read: the scrim
     // is off and the page is the user's until it changes (BrowserMission.requiresSignIn).
     var needsSignIn by remember { mutableStateOf(false) }
@@ -221,11 +240,17 @@ fun BrowserScreen(
                 signInBounces += 1
                 waitForSignIn()
             } else {
-                paused = true
+                pauseFor(null)
             }
+        } else if (!force && isBarred(safe)) {
+            // The site has shut this request out: there is nothing here for anyone to complete, so
+            // the run goes on at once (and backs off, see the lookup run) instead of waiting.
+            DiagnosticLogger.log("BrowserScreen: mission ${currentIndex + 1} was shut out by the site; moving on")
+            onMissionResult(mission, MissionOutcome.Barred)
+            advance()
         } else if (!force && isBlocked(safe)) {
             DiagnosticLogger.log("BrowserScreen: mission ${currentIndex + 1} blocked, pausing for user")
-            paused = true
+            pauseFor(R.string.browser_paused_check)
         } else {
             if (force) DiagnosticLogger.log("BrowserScreen: mission ${currentIndex + 1} read as it stands, at the user's word")
             onMissionResult(mission, MissionOutcome.Extracted(safe))
@@ -392,9 +417,9 @@ fun BrowserScreen(
             // A lookup whose page is in front of us is read as it stands before it is given up
             // on: the load event, or the script's call, may be what never came.
             if (mission.readsPageDirectly && !mainFrameFailed) {
-                readNow(force = false, unreadable = { paused = true })
+                readNow(force = false, unreadable = { pauseFor(R.string.browser_paused_slow) })
             } else {
-                paused = true
+                pauseFor(if (mainFrameFailed) R.string.browser_paused_failed else R.string.browser_paused_slow)
             }
         }
     }
@@ -566,7 +591,7 @@ fun BrowserScreen(
                                         "BrowserScreen: navigation error at ${request.url}: ${error?.description}",
                                         DiagnosticLogger.LogEntry.LogLevel.WARN
                                     )
-                                    paused = true
+                                    pauseFor(R.string.browser_paused_failed)
                                 }
                             }
 
@@ -684,7 +709,7 @@ fun BrowserScreen(
                                         if (mission.requiresSignIn) {
                                             waitForSignIn()
                                         } else {
-                                            paused = true
+                                            pauseFor(null)
                                         }
                                     }
                                 )
@@ -703,7 +728,7 @@ fun BrowserScreen(
                     verticalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
                     Text(
-                        stringResource(R.string.browser_paused),
+                        stringResource(pauseWhy ?: R.string.browser_paused),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -756,7 +781,7 @@ fun BrowserScreen(
                             text = stringResource(R.string.browser_skip),
                             onClick = {
                                 paused = false
-                                onMissionResult(mission, MissionOutcome.Blocked)
+                                onMissionResult(mission, MissionOutcome.Skipped)
                                 advance()
                             },
                             modifier = Modifier.weight(1f),

@@ -74,4 +74,58 @@ class BotWallBrowserTest {
         assertTrue(BotWall.suspected(widget))
         assertNotNull(BotWall.reason(widget))
     }
+
+    // ---- What kind of wall: a check the user can complete, or the site shutting the request out ----
+
+    private val blockPage = """<html><head><title>Attention Required! | Cloudflare</title></head>
+        <body><h1>Sorry, you have been blocked</h1>
+        <h2>Why have I been blocked?</h2>
+        <p>This website is using a security service to protect itself from online attacks. The action you just
+        performed triggered the security solution.</p>
+        <h2>What can I do to resolve this?</h2>
+        <p>You can email the site owner to let them know you were blocked.</p>
+        <p>Cloudflare Ray ID: <strong>a55cfa0bcb00b91d</strong></p><p>Performance &amp; security by Cloudflare</p></body></html>"""
+
+    @Test
+    fun cloudflaresBlockPageIsBarredNotAChallenge() {
+        assertTrue(BotWall.suspected(blockPage))
+        assertTrue(BotWall.detected(blockPage))
+        assertEquals(BotWall.Wall.BARRED, BotWall.wallOf(blockPage))
+    }
+
+    @Test
+    fun aBlockPageIsRecognisedByWhatItSaysEvenWithoutTheTitle() {
+        val untitled = blockPage.replace("<title>Attention Required! | Cloudflare</title>", "<title>Cloudflare</title>")
+        assertEquals("blocked by the site", BotWall.reason(untitled))
+        assertEquals(BotWall.Wall.BARRED, BotWall.wallOf(untitled))
+    }
+
+    @Test
+    fun aRateLimitAndAnAccessDeniedPageAreBarredToo() {
+        val limited = "<html><body><h1>Error 1015</h1><p>You are being rate limited</p></body></html>"
+        val denied = "<html><body><h1>Access denied</h1><p>Error code 1020. You do not have access to this site.</p></body></html>"
+        assertEquals(BotWall.Wall.BARRED, BotWall.wallOf(limited))
+        assertEquals(BotWall.Wall.BARRED, BotWall.wallOf(denied))
+    }
+
+    @Test
+    fun aCheckTheUserCanCompleteIsAChallenge() {
+        val justAMoment = "<html><head><title>Just a moment...</title></head><body><p>Checking your browser</p>" +
+            "<script src=\"/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=abc\"></script></body></html>"
+        val widget = "<html><body><div class=\"cf-turnstile\" data-sitekey=\"x\"></div></body></html>"
+        // The older "Attention Required" page is a block page with a check on it: that is a challenge.
+        val oldCheck = "<html><head><title>Attention Required! | Cloudflare</title></head><body>" +
+            "<h1>One more step</h1><p>Please complete the security check to access the site.</p>" +
+            "<div class=\"g-recaptcha\" data-sitekey=\"x\"></div></body></html>"
+        assertEquals(BotWall.Wall.CHALLENGE, BotWall.wallOf(justAMoment))
+        assertEquals(BotWall.Wall.CHALLENGE, BotWall.wallOf(widget))
+        assertEquals(BotWall.Wall.CHALLENGE, BotWall.wallOf(oldCheck))
+    }
+
+    @Test
+    fun anAnswerOrABlankPageIsNoWall() {
+        assertNull(BotWall.wallOf(resultsPage))
+        assertNull(BotWall.wallOf(zeroResults))
+        assertNull(BotWall.wallOf(""))
+    }
 }

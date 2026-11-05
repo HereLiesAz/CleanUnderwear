@@ -570,6 +570,17 @@
         <item quantity="one">%1$s: %2$d person found</item>
         <item quantity="other">%1$s: %2$d people found</item>
     </plurals>
+    <string name="vm_lookup_cooling">Waiting %1$s before the next contact</string>
+    <string name="vm_lookup_cooling_why">The site is blocking this phone\'s searches. There is nothing on its page to solve.</string>
+    <string name="vm_lookup_cooling_help">It goes on by itself. Switching between Wi-Fi and mobile data often lifts a block. Stop ends the run.</string>
+    <string name="vm_lookup_retry_item">Trying %1$s again (%2$d of %3$d)</string>
+    <string name="vm_lookup_blocked">%1$s: blocked by the site, will try again</string>
+    <string name="vm_lookup_unanswered">%1$s: a check wasn\'t completed, will try again</string>
+    <string name="vm_lookup_site_blocked">Stopped after %1$d of %2$d: the site has blocked this phone\'s searches for a long while. Switch between Wi-Fi and mobile data, or try again later. What was found so far is kept.</string>
+    <plurals name="vm_lookup_left_unread">
+        <item quantity="one">%d contact couldn\'t be searched: the site blocked it, or a check wasn\'t completed. It is untouched; run Fill in details again later.</item>
+        <item quantity="other">%d contacts couldn\'t be searched: the site blocked them, or a check wasn\'t completed. They are untouched; run Fill in details again later.</item>
+    </plurals>
     <string name="vm_lookup_nobody">%1$s: nobody found</string>
     <string name="vm_lookup_unreadable">%1$s: couldn\'t read the page</string>
     <plurals name="vm_lookup_done">
@@ -599,6 +610,9 @@
     <string name="browser_reading">Reading the page. Please don\'t touch it.</string>
     <string name="browser_let_me_use">Let me use the page</string>
     <string name="browser_paused">This page needs you, or didn\'t load. If it shows a CAPTCHA or a sign-in, complete it and the lookup carries on by itself.</string>
+    <string name="browser_paused_check">A check on this page needs completing (a CAPTCHA, or \"verify you are human\"). Complete it on the page above and the lookup carries on by itself.</string>
+    <string name="browser_paused_failed">The page didn\'t load: no connection, or the site isn\'t answering. Try again, or the run moves on by itself.</string>
+    <string name="browser_paused_slow">The page didn\'t finish loading, or nothing was drawn. If it looks fine, tap Read this page; otherwise the run moves on by itself.</string>
     <string name="browser_paused_fine">If the page is fine and is not a CAPTCHA, tap Read this page.</string>
     <string name="browser_paused_caption_batch">Read this page uses what is on screen. Try again reloads it. Skip moves on without it. Stop ends every lookup left; what was found so far is kept.</string>
     <string name="browser_read_this">Read this page</string>

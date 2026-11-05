@@ -986,6 +986,17 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
     }
 
     /**
+     * Whether the site has shut this request out (Cloudflare's block page, a rate limit): a page
+     * with nothing on it for the user to complete. The lookup moves on at once, and the run
+     * backs off, rather than waiting for someone who has nothing to do.
+     */
+    fun isBarred(html: String): Boolean {
+        if (BotWall.wallOf(html) != BotWall.Wall.BARRED) return false
+        DiagnosticLogger.log("CYBG: the site has blocked this request (${BotWall.reason(html)})", DiagnosticLogger.LogEntry.LogLevel.WARN)
+        return true
+    }
+
+    /**
      * Whether [email] is worth searching: something before and after one `@`, and a dot in the
      * domain. A bare "@" or "name@" in a contact's email field used to start a search that could
      * only come back empty.
