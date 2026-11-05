@@ -11,7 +11,12 @@ buildscript {
         "org.bitbucket.b_c:jose4j:0.9.6",
         "org.apache.commons:commons-lang3:3.20.0",
         "org.apache.httpcomponents:httpclient:4.5.14",
-        "com.google.guava:guava:33.7.1-jre",
+        // Bouncy Castle: name-constraints bypass and ASN.1 nesting guard (fixed in 1.85), GOST CTR
+        // keystream reuse (1.84), bcpkix weak algorithm (1.84). Pulled in by the Android build tooling.
+        "org.bouncycastle:bcprov-jdk18on:1.85",
+        "org.bouncycastle:bcpkix-jdk18on:1.85",
+        // Guava: CompactHashMap/CompactHashSet deserialization allocates without limit (fixed in 33.7.2).
+        "com.google.guava:guava:33.7.2-jre",
         "com.google.android.gms:play-services-basement:18.10.0"
     )
 
