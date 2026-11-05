@@ -233,7 +233,7 @@ fun BrowserScreen(
             activeView.stopLoading()
             activeView.loadUrl(mission.initialUrl)
             host.loadedKey = missionKey
-            note("Opening ${shortUrl(mission.initialUrl)} (search ${currentIndex + 1} of ${missions.size}: ${mission.displayLabel()})")
+            note("Opening ${shortUrl(mission.initialUrl)} (search ${currentIndex + 1} of ${missions.size}: ${mission.label})")
         }
     }
 
