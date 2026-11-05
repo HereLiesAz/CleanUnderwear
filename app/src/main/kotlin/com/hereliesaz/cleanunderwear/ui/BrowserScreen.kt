@@ -147,10 +147,21 @@ fun BrowserScreen(
     }
     // What the pause is waiting on, in words (a string resource); the general line when null.
     var pauseWhy by remember { mutableStateOf<Int?>(null) }
+    // The sentences the bar shows, read here so the log can say the same thing.
+    val pausedGeneral = stringResource(R.string.browser_paused)
+    val pausedCheck = stringResource(R.string.browser_paused_check)
+    val pausedFailed = stringResource(R.string.browser_paused_failed)
+    val pausedSlow = stringResource(R.string.browser_paused_slow)
     fun pauseFor(why: Int?) {
         pauseWhy = why
         paused = true
-        note("Waiting on you: " + hostContext.getString(why ?: R.string.browser_paused), DiagnosticLogger.LogEntry.LogLevel.WARN)
+        val sentence = when (why) {
+            R.string.browser_paused_check -> pausedCheck
+            R.string.browser_paused_failed -> pausedFailed
+            R.string.browser_paused_slow -> pausedSlow
+            else -> pausedGeneral
+        }
+        note("Waiting on you: $sentence", DiagnosticLogger.LogEntry.LogLevel.WARN)
     }
     // The page in front is a sign-in / link-your-phone page that an import can't read: the scrim
     // is off and the page is the user's until it changes (BrowserMission.requiresSignIn).
