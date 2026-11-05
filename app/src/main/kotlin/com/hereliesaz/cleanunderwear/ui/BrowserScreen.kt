@@ -56,6 +56,7 @@ import com.hereliesaz.aznavrail.model.AzButtonShape
 import com.hereliesaz.cleanunderwear.R
 import com.hereliesaz.cleanunderwear.domain.BrowserMission
 import com.hereliesaz.cleanunderwear.domain.PageProbe
+import com.hereliesaz.cleanunderwear.network.BotWall
 import com.hereliesaz.cleanunderwear.util.DiagnosticLogger
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
@@ -67,8 +68,19 @@ import java.io.ByteArrayInputStream
  */
 sealed class MissionOutcome {
     data class Extracted(val html: String) : MissionOutcome()
+
+    /** A check was put to the user and not completed; the run went on without the page. */
     object Blocked : MissionOutcome()
+
+    /** The site shut the request out. Nothing on the page was for the user to do; the run went on. */
+    object Barred : MissionOutcome()
+
+    /** The user chose to skip this page. */
+    object Skipped : MissionOutcome()
 }
+
+/** Why a page of a lookup was not read, as the run is told. */
+enum class UnreadWhy { BARRED, STUCK, SKIPPED }
 
 /**
  * User-visible WebView for missions that require the user's real browser
@@ -99,6 +111,8 @@ fun BrowserScreen(
     onAllComplete: () -> Unit,
     onCancel: () -> Unit,
     isBlocked: (String) -> Boolean = { false },
+    /** Whether the page is the site shutting the request out: nothing on it for the user to do. */
+    isBarred: (String) -> Boolean = { false },
     /** Who or what this is for ("Looking up Jane Doe (4 of 212)"); the mission label if null. */
     context: String? = null,
     /** Whether backing out ends a whole run of lookups, not just this page. */
@@ -123,6 +137,32 @@ fun BrowserScreen(
     var pageReady by remember { mutableStateOf(false) }
     var automationRan by remember { mutableStateOf(false) }
     var paused by remember { mutableStateOf(false) }
+    // The log under the page: what this screen is doing right now, and (open) the steps that led
+    // here and why it can or can't carry on. Every step goes to the activity log as well.
+    var logOpen by remember { mutableStateOf(BrowserLogPreference.shown(hostContext)) }
+    var status by remember { mutableStateOf("") }
+    fun note(text: String, level: DiagnosticLogger.LogEntry.LogLevel = DiagnosticLogger.LogEntry.LogLevel.DEBUG) {
+        status = text
+        DiagnosticLogger.log("Browser: $text", level)
+    }
+    // What the pause is waiting on, in words (a string resource); the general line when null.
+    var pauseWhy by remember { mutableStateOf<Int?>(null) }
+    // The sentences the bar shows, read here so the log can say the same thing.
+    val pausedGeneral = stringResource(R.string.browser_paused)
+    val pausedCheck = stringResource(R.string.browser_paused_check)
+    val pausedFailed = stringResource(R.string.browser_paused_failed)
+    val pausedSlow = stringResource(R.string.browser_paused_slow)
+    fun pauseFor(why: Int?) {
+        pauseWhy = why
+        paused = true
+        val sentence = when (why) {
+            R.string.browser_paused_check -> pausedCheck
+            R.string.browser_paused_failed -> pausedFailed
+            R.string.browser_paused_slow -> pausedSlow
+            else -> pausedGeneral
+        }
+        note("Waiting on you: $sentence", DiagnosticLogger.LogEntry.LogLevel.WARN)
+    }
     // The page in front is a sign-in / link-your-phone page that an import can't read: the scrim
     // is off and the page is the user's until it changes (BrowserMission.requiresSignIn).
     var needsSignIn by remember { mutableStateOf(false) }
@@ -146,6 +186,7 @@ fun BrowserScreen(
     val mission = missions[currentIndex]
 
     fun cancel() {
+        note("You stopped the run")
         batchComplete = true
         extractionGate.finish()
         webView?.stopLoading()
@@ -198,12 +239,12 @@ fun BrowserScreen(
                 pageReady = true
                 pageLoadCount = 1
             }
-            DiagnosticLogger.log("BrowserScreen: resumed mission ${currentIndex + 1}/${missions.size} after rotation")
+            note("Picked the page up again after the screen turned (search ${currentIndex + 1} of ${missions.size})")
         } else {
             activeView.stopLoading()
             activeView.loadUrl(mission.initialUrl)
             host.loadedKey = missionKey
-            DiagnosticLogger.log("BrowserScreen: loading mission ${currentIndex + 1}/${missions.size}: ${mission.initialUrl}")
+            note("Opening ${shortUrl(mission.initialUrl)} (search ${currentIndex + 1} of ${missions.size}: ${mission.label})")
         }
     }
 
@@ -216,18 +257,25 @@ fun BrowserScreen(
             // The script dumped a sign-in page after all (a session that lapsed mid-read):
             // not data. Hand the page back to the user instead of importing "nothing"; if
             // it keeps happening while the page looks signed in, stop bouncing and pause.
-            DiagnosticLogger.log("BrowserScreen: mission ${currentIndex + 1} read a sign-in page; waiting for the user")
+            note("The page read back is a sign-in page, not data; waiting for you to sign in", DiagnosticLogger.LogEntry.LogLevel.WARN)
             if (signInBounces < MAX_SIGN_IN_BOUNCES) {
                 signInBounces += 1
                 waitForSignIn()
             } else {
-                paused = true
+                pauseFor(null)
             }
+        } else if (!force && isBarred(safe)) {
+            // The site has shut this request out: there is nothing here for anyone to complete, so
+            // the run goes on at once (and backs off, see the lookup run) instead of waiting.
+            note("The site has shut this request out (${BotWall.reason(safe)}). There is nothing on the page to complete, so this moves on", DiagnosticLogger.LogEntry.LogLevel.WARN)
+            onMissionResult(mission, MissionOutcome.Barred)
+            advance()
         } else if (!force && isBlocked(safe)) {
-            DiagnosticLogger.log("BrowserScreen: mission ${currentIndex + 1} blocked, pausing for user")
-            paused = true
+            DiagnosticLogger.log("Browser: the page carries a check (${BotWall.reason(safe)}) that the user can complete", DiagnosticLogger.LogEntry.LogLevel.WARN)
+            pauseFor(R.string.browser_paused_check)
         } else {
-            if (force) DiagnosticLogger.log("BrowserScreen: mission ${currentIndex + 1} read as it stands, at the user's word")
+            if (force) note("Reading the page as it stands, at your word")
+            note("Read ${safe.length} characters; handed to the lookup, moving to the next search")
             onMissionResult(mission, MissionOutcome.Extracted(safe))
             advance()
         }
@@ -255,11 +303,12 @@ fun BrowserScreen(
         val key = "$batchId-$currentIndex"
         val token = extractionGate.beginExtraction(key) ?: return
         automationRan = true
+        note("Reading the page's source (document.documentElement.outerHTML)")
         view.evaluateJavascript(PageSource.READ_SCRIPT) { raw ->
             if (batchComplete || !extractionGate.accept(token, key)) return@evaluateJavascript
             val html = PageSource.decode(raw)
             if (!force && !PageSource.looksDrawn(html)) {
-                DiagnosticLogger.log("BrowserScreen: mission ${currentIndex + 1} had nothing drawn to read")
+                note("Nothing is drawn on the page yet: ${html?.length ?: 0} characters of source, and ${PageSource.MIN_READABLE_CHARS} are needed", DiagnosticLogger.LogEntry.LogLevel.WARN)
                 unreadable()
             } else {
                 paused = false
@@ -291,7 +340,7 @@ fun BrowserScreen(
             if (mission.requiresSignIn) {
                 val page = probePage(webView)
                 if (page != null && mission.isSignInPage(page)) {
-                    DiagnosticLogger.log("BrowserScreen: mission ${currentIndex + 1} is on a sign-in page; waiting for the user")
+                    note("This is a sign-in page; waiting for you", DiagnosticLogger.LogEntry.LogLevel.WARN)
                     waitForSignIn()
                     return@LaunchedEffect
                 }
@@ -326,7 +375,7 @@ fun BrowserScreen(
             val view = webView ?: continue
             if (mainFrameFailed || view.progress < READY_PROGRESS) continue
             if (evaluateBoolean(view, PageSource.READY_SCRIPT)) {
-                DiagnosticLogger.log("BrowserScreen: mission ${currentIndex + 1} page drawn before its load finished; reading it")
+                note("The page has drawn before its load finished (${view.progress}% loaded); reading it now")
                 pageReady = true
                 pageLoadCount += 1
                 return@LaunchedEffect
@@ -341,6 +390,7 @@ fun BrowserScreen(
         skipCountdown = 0
         if (!paused || !stopsBatch || !mission.autoExtract || batchComplete) return@LaunchedEffect
         val pausedAt = android.os.SystemClock.uptimeMillis()
+        note("If nothing changes in ${PAUSED_AUTO_SKIP_MS / 1000} s this moves on to the next search by itself (${PAUSED_TOUCHED_MS / 1000} s after you touch the page)")
         while (!batchComplete) {
             val touched = lastTouchAt > pausedAt
             val waitMs = if (touched) PAUSED_TOUCHED_MS else PAUSED_AUTO_SKIP_MS
@@ -351,7 +401,7 @@ fun BrowserScreen(
             delay(500)
         }
         if (batchComplete) return@LaunchedEffect
-        DiagnosticLogger.log("BrowserScreen: mission ${currentIndex + 1} skipped on its own after waiting")
+        note("Waited and nothing changed; moving on without this page", DiagnosticLogger.LogEntry.LogLevel.WARN)
         skipCountdown = 0
         paused = false
         onMissionResult(mission, MissionOutcome.Blocked)
@@ -367,7 +417,7 @@ fun BrowserScreen(
             delay(SIGN_IN_POLL_MS)
             val page = probePage(webView) ?: continue
             if (!mission.isSignInPage(page)) {
-                DiagnosticLogger.log("BrowserScreen: mission ${currentIndex + 1} is past the sign-in page; carrying on")
+                note("Past the sign-in page; carrying on")
                 needsSignIn = false
                 return@LaunchedEffect
             }
@@ -385,16 +435,16 @@ fun BrowserScreen(
         if (paused || needsSignIn) return@LaunchedEffect
         delay(mission.watchdogMs)
         if (!paused && !batchComplete) {
-            DiagnosticLogger.log(
-                "BrowserScreen: mission ${currentIndex + 1} timed out (pageReady=$pageReady, automationRan=$automationRan)",
+            note(
+                "Nothing was read within ${mission.watchdogMs / 1000} s (page ready: $pageReady, loaded ${webView?.progress ?: 0}%, read started: $automationRan)",
                 DiagnosticLogger.LogEntry.LogLevel.WARN
             )
             // A lookup whose page is in front of us is read as it stands before it is given up
             // on: the load event, or the script's call, may be what never came.
             if (mission.readsPageDirectly && !mainFrameFailed) {
-                readNow(force = false, unreadable = { paused = true })
+                readNow(force = false, unreadable = { pauseFor(R.string.browser_paused_slow) })
             } else {
-                paused = true
+                pauseFor(if (mainFrameFailed) R.string.browser_paused_failed else R.string.browser_paused_slow)
             }
         }
     }
@@ -460,6 +510,10 @@ fun BrowserScreen(
             if (stopsBatch) Text(stringResource(R.string.browser_stop_lookups_body))
         }
     }
+
+    val logHeader = "CleanUnderwear ${com.hereliesaz.cleanunderwear.BuildConfig.VERSION_NAME} " +
+        "(build ${com.hereliesaz.cleanunderwear.BuildConfig.VERSION_CODE}) · search ${currentIndex + 1} of ${missions.size}: " +
+        "${mission.displayLabel()}\n${shortUrl(webView?.url ?: mission.initialUrl)}"
 
     Scaffold(
         topBar = {
@@ -553,6 +607,7 @@ fun BrowserScreen(
                                 pageReady = false
                                 navStarted = true
                                 mainFrameFailed = false
+                                note("Loading ${shortUrl(url)}")
                             }
 
                             override fun onReceivedError(
@@ -562,11 +617,11 @@ fun BrowserScreen(
                             ) {
                                 if (request?.isForMainFrame == true) {
                                     mainFrameFailed = true
-                                    DiagnosticLogger.log(
-                                        "BrowserScreen: navigation error at ${request.url}: ${error?.description}",
+                                    note(
+                                        "The page failed to load: ${shortUrl(request.url.toString())} (${error?.description})",
                                         DiagnosticLogger.LogEntry.LogLevel.WARN
                                     )
-                                    paused = true
+                                    pauseFor(R.string.browser_paused_failed)
                                 }
                             }
 
@@ -615,12 +670,12 @@ fun BrowserScreen(
                                     extractionGate.invalidate()
                                     automationRan = false
                                     paused = false
-                                    DiagnosticLogger.log("BrowserScreen: page loaded while paused; resuming extraction")
+                                    note("The page finished loading while this waited; reading it again")
                                 }
                                 // Each navigation bumps the counter so missions that
                                 // re-run after navigation extract from the new page.
                                 pageLoadCount += 1
-                                DiagnosticLogger.log("BrowserScreen: loaded $url")
+                                note("Page loaded: ${shortUrl(url)}")
                             }
                         }
                         // Do NOT loadUrl here — the LaunchedEffect(currentIndex)
@@ -666,6 +721,8 @@ fun BrowserScreen(
                                 LoadingCaption(
                                     stringResource(
                                         when {
+                                            // Between searches (or waiting out a block): the page in front is the last one's.
+                                            batchComplete -> R.string.browser_between
                                             !pageReady -> R.string.browser_loading
                                             mission.requiresSignIn && !automationRan -> R.string.browser_checking_signed_in
                                             else -> R.string.browser_reading
@@ -684,7 +741,7 @@ fun BrowserScreen(
                                         if (mission.requiresSignIn) {
                                             waitForSignIn()
                                         } else {
-                                            paused = true
+                                            pauseFor(null)
                                         }
                                     }
                                 )
@@ -695,6 +752,19 @@ fun BrowserScreen(
                 }
             }
 
+            // What it is doing, and (open) why it can or can't: on every screen that runs scripts.
+            BrowserLogBar(
+                // Between searches the run's own line (who is next, or how long it waits and why) says more
+                // than the last page's last step.
+                status = if (batchComplete && !context.isNullOrBlank()) context else status,
+                header = logHeader,
+                open = logOpen,
+                onToggle = {
+                    logOpen = !logOpen
+                    BrowserLogPreference.set(hostContext, logOpen)
+                }
+            )
+
             if (paused) {
                 Column(
                     modifier = Modifier
@@ -703,7 +773,7 @@ fun BrowserScreen(
                     verticalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
                     Text(
-                        stringResource(R.string.browser_paused),
+                        stringResource(pauseWhy ?: R.string.browser_paused),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -725,7 +795,10 @@ fun BrowserScreen(
                         if (mission.readsPageDirectly) {
                             AzButton(
                                 text = stringResource(R.string.browser_read_this),
-                                onClick = { readNow(force = true, unreadable = {}) },
+                                onClick = {
+                                    note("You tapped Read this page")
+                                    readNow(force = true, unreadable = {})
+                                },
                                 modifier = Modifier.weight(1f),
                                 shape = AzButtonShape.RECTANGLE
                             )
@@ -733,6 +806,7 @@ fun BrowserScreen(
                         AzButton(
                             text = stringResource(R.string.try_again),
                             onClick = {
+                                note("You tapped Try again")
                                 extractionGate.invalidate()
                                 automationRan = false
                                 paused = false
@@ -755,8 +829,9 @@ fun BrowserScreen(
                         AzButton(
                             text = stringResource(R.string.browser_skip),
                             onClick = {
+                                note("You tapped Skip; moving on without this page")
                                 paused = false
-                                onMissionResult(mission, MissionOutcome.Blocked)
+                                onMissionResult(mission, MissionOutcome.Skipped)
                                 advance()
                             },
                             modifier = Modifier.weight(1f),
@@ -978,5 +1053,16 @@ private suspend fun awaitRenderedContent(webView: android.webkit.WebView?) {
         } ?: return
         if (ready) return
         delay(400L)
+    }
+}
+
+/** An address as the log shows it: host and path, never a query. */
+private fun shortUrl(url: String?): String {
+    if (url.isNullOrBlank()) return "(no page)"
+    return try {
+        val uri = android.net.Uri.parse(url)
+        (uri.host ?: "") + (uri.path ?: "")
+    } catch (e: Exception) {
+        "(a page)"
     }
 }

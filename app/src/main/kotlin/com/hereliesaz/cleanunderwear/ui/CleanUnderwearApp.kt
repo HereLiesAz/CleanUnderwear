@@ -288,13 +288,17 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                         batchId = batch.id,
                         missions = batch.missions,
                         onMissionResult = { mission, outcome ->
-                            if (outcome is MissionOutcome.Extracted) {
-                                batch.onMissionExtracted(mission, outcome.html)
+                            when (outcome) {
+                                is MissionOutcome.Extracted -> batch.onMissionExtracted(mission, outcome.html)
+                                MissionOutcome.Barred -> batch.onMissionUnread(mission, UnreadWhy.BARRED)
+                                MissionOutcome.Blocked -> batch.onMissionUnread(mission, UnreadWhy.STUCK)
+                                MissionOutcome.Skipped -> batch.onMissionUnread(mission, UnreadWhy.SKIPPED)
                             }
                         },
                         onAllComplete = { viewModel.completeMissionBatch() },
                         onCancel = { viewModel.cancelMissionBatch() },
                         isBlocked = batch.isBlocked,
+                        isBarred = batch.isBarred,
                         context = operationState.description.takeIf { operationState.isRunning },
                         stopsBatch = batch.retainBrowserForResolve,
                         findings = if (operationState.isRunning) operationState.findings else emptyList(),

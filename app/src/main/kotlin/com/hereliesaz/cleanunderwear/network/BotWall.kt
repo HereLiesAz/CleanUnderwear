@@ -35,6 +35,26 @@ object BotWall {
         "unusual traffic from your computer",
     )
 
+    /**
+     * What a block page says to the visitor (Cloudflare's "Sorry, you have been blocked", a rate
+     * limit). Nothing on such a page can be completed: the site has shut the request out.
+     */
+    private val BLOCK_PHRASES = listOf(
+        "why have i been blocked",
+        "you have been blocked",
+        "you are being rate limited",
+        "you are unable to access",
+    )
+
+    /** What a wall asks of the visitor. */
+    enum class Wall {
+        /** A check the visitor can complete on the page: a CAPTCHA, "verify you are human". */
+        CHALLENGE,
+
+        /** The site has shut the request out. Nothing on the page can be completed or fixed from it. */
+        BARRED,
+    }
+
     /** Widgets that also sit on ordinary search forms; a wall only when the page is otherwise empty. */
     private val WIDGET_MARKERS = listOf("cf-turnstile", "g-recaptcha", "h-captcha", "hcaptcha", "captcha")
     private const val NEAR_EMPTY_TEXT = 1500
@@ -66,6 +86,7 @@ object BotWall {
         if (hasChallengeMarker(lower)) return true
         val text = visibleText(body)
         if (CHALLENGE_PHRASES.any { it in text.lowercase() }) return true
+        if (BLOCK_PHRASES.any { it in text.lowercase() }) return true
         if (WIDGET_MARKERS.none { it in lower }) return false
         if (NO_RESULTS.containsMatchIn(text)) return false
         return text.length < NEAR_EMPTY_TEXT
@@ -92,11 +113,35 @@ object BotWall {
         val text = doc.text()
         val textLower = text.lowercase()
         if (CHALLENGE_PHRASES.any { it in textLower }) return "challenge wording"
+        if (BLOCK_PHRASES.any { it in textLower }) return "blocked by the site"
         if (NO_RESULTS.containsMatchIn(text)) return null
         if (doc.selectFirst(WIDGET_ELEMENTS) != null) return "a CAPTCHA widget on the page"
         if ("captcha" in textLower) return "the word CAPTCHA on the page"
         if ("access denied" in textLower) return "access denied wording"
         return null
+    }
+
+    /**
+     * What kind of wall [body] is, null when it is not one (or is blank, which is a page that
+     * did not load, not a wall). A page the site has [Wall.BARRED] has nothing to complete, so
+     * waiting for the user on it is waiting for nothing; a [Wall.CHALLENGE] is the user's to
+     * solve. A block page that also carries a check (Cloudflare's older "Attention Required")
+     * is a challenge.
+     */
+    fun wallOf(body: String): Wall? {
+        if (body.isBlank() || reason(body) == null) return null
+        val lower = body.lowercase()
+        val doc = Jsoup.parse(body)
+        val text = doc.text().lowercase()
+        val solvable = CHALLENGE_SCRIPT.containsMatchIn(lower) ||
+            "cf-browser-verification" in lower ||
+            "cf_chl_" in lower ||
+            "<title>just a moment...</title>" in lower ||
+            CHALLENGE_PHRASES.any { it in text } ||
+            "complete the security check" in text ||
+            doc.selectFirst(WIDGET_ELEMENTS) != null
+        val barred = BLOCK_PHRASES.any { it in text } || "access denied" in text
+        return if (barred && !solvable) Wall.BARRED else Wall.CHALLENGE
     }
 
     /** Elements a CAPTCHA puts on the page (as opposed to a script that could show one). */
