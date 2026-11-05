@@ -710,6 +710,8 @@ fun BrowserScreen(
                                 LoadingCaption(
                                     stringResource(
                                         when {
+                                            // Between searches (or waiting out a block): the page in front is the last one's.
+                                            batchComplete -> R.string.browser_between
                                             !pageReady -> R.string.browser_loading
                                             mission.requiresSignIn && !automationRan -> R.string.browser_checking_signed_in
                                             else -> R.string.browser_reading
@@ -741,7 +743,9 @@ fun BrowserScreen(
 
             // What it is doing, and (open) why it can or can't: on every screen that runs scripts.
             BrowserLogBar(
-                status = status,
+                // Between searches the run's own line (who is next, or how long it waits and why) says more
+                // than the last page's last step.
+                status = if (batchComplete && !context.isNullOrBlank()) context else status,
                 header = logHeader,
                 open = logOpen,
                 onToggle = {

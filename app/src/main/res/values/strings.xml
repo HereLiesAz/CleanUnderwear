@@ -613,6 +613,7 @@
     <string name="browser_paused_check">A check on this page needs completing (a CAPTCHA, or \"verify you are human\"). Complete it on the page above and the lookup carries on by itself.</string>
     <string name="browser_paused_failed">The page didn\'t load: no connection, or the site isn\'t answering. Try again, or the run moves on by itself.</string>
     <string name="browser_paused_slow">The page didn\'t finish loading, or nothing was drawn. If it looks fine, tap Read this page; otherwise the run moves on by itself.</string>
+    <string name="browser_between">Between searches…</string>
     <string name="browser_log_show">Log</string>
     <string name="browser_log_hide">Hide log</string>
     <string name="browser_log_copy">Copy log</string>
