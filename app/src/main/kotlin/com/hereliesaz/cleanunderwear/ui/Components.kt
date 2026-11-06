@@ -188,7 +188,7 @@ fun AppAction(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, 
  * A secondary action: dismiss, cancel, an alternative.
  *
  * AzButton is only as wide as an item on the nav rail (and 40 dp high) unless the caller says
- * otherwise, and it shrinks its label to fit: a label like "The number is fine: keep it" came out
+ * otherwise, and it shrinks its label to fit: a label like "Add someone by hand" came out
  * as a small box of unreadable text. So it fills the width, as [AppAction] does. [fillWidth] is
  * turned off only for a short label beside other content in a row ("Try again", "Log").
  */

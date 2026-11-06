@@ -32,7 +32,7 @@ All text a person reads in the Compose screens is in `res/values/strings.xml` (`
 Plain words for the person, not the system: "Checked daily", "Possible obituary", "Fill in details", not "MONITORING" or "Resolve". Say what will happen before it does (a confirmation names how many contacts a lookup will send), and what a setting costs. A possible death or arrest is never stated as fact. One ellipsis character (`…`), never three dots. A button and the label above it never repeat each other ("Site sign-ins" above "Sign out of sites").
 
 ## Taking things back
-A verdict or a removal the user can reasonably regret is not final. "Not them" and Archive show a snackbar with **Undo**; "Show dismissed records again" on a contact's screen forgets every dismissed record (and offers Undo too); a confirmed death or custody has "This was a mistake"; "None of these is X" and "Sign out of sites" ask first. Delete everything has its own confirmation and can't be undone.
+A verdict or a removal the user can reasonably regret is not final. "Not them" and Archive show a snackbar with **Undo**; "Show dismissed" on a contact's screen forgets every dismissed record (and offers Undo too); a confirmed death or custody has "This was a mistake"; "None of these is X" and "Sign out of sites" ask first. Delete everything has its own confirmation and can't be undone.
 
 ## Navigation
 AzNavRail **11.57**. The active destination uses `primary`; focus and highlight use `onSurfaceVariant`, so the rail stays inside the monochrome palette.

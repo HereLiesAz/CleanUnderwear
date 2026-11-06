@@ -42,7 +42,7 @@ import java.util.Date
  *
  * A possible match is the reason most people open this screen, so it comes first, says plainly
  * that it may be someone else, and asks before recording anything grave. Every verdict can be
- * taken back: "Not them" offers Undo in the snackbar, and "Show dismissed records again" on this
+ * taken back: "Not them" offers Undo in the snackbar, and "Show dismissed" on this
  * screen lets records already dismissed be raised once more; a confirmed status has "This was a
  * mistake", which also stops the same record from being raised again.
  */
