@@ -81,7 +81,8 @@ internal fun BrowserLogBar(
             AppCaption(status, modifier = Modifier.weight(1f))
             AppTextAction(
                 text = stringResource(if (open) R.string.browser_log_hide else R.string.browser_log_show),
-                onClick = onToggle
+                onClick = onToggle,
+                fillWidth = false
             )
         }
         if (open) LogPanel(header)
