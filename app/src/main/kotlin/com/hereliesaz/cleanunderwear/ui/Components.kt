@@ -184,10 +184,22 @@ fun AppAction(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, 
     )
 }
 
-/** A secondary action: dismiss, cancel, an alternative. */
+/**
+ * A secondary action: dismiss, cancel, an alternative.
+ *
+ * AzButton is only as wide as an item on the nav rail (and 40 dp high) unless the caller says
+ * otherwise, and it shrinks its label to fit: a label like "Add someone by hand" came out
+ * as a small box of unreadable text. So it fills the width, as [AppAction] does. [fillWidth] is
+ * turned off only for a short label beside other content in a row ("Try again", "Log").
+ */
 @Composable
-fun AppTextAction(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    AzButton(onClick = onClick, text = text, modifier = modifier.minimumInteractiveComponentSize(), shape = AzButtonShape.NONE)
+fun AppTextAction(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, fillWidth: Boolean = true) {
+    AzButton(
+        onClick = onClick,
+        text = text,
+        modifier = modifier.minimumInteractiveComponentSize().then(if (fillWidth) Modifier.fillMaxWidth() else Modifier),
+        shape = AzButtonShape.NONE
+    )
 }
 
 /**

@@ -336,7 +336,7 @@ private fun SuspectCard(
 }
 
 /**
- * What to do and why, in two lines: "Recommended: Separate them" and the strongest reason on the
+ * What to do and why, in two lines: "Recommended: Separate" and the strongest reason on the
  * side it follows. A case too evenly balanced says so instead of guessing.
  */
 @Composable

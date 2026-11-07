@@ -310,7 +310,7 @@ private fun LoadFailedRow(message: String, onRetry: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
     ) {
         Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
-        AppTextAction(stringResource(R.string.try_again), onRetry)
+        AppTextAction(stringResource(R.string.try_again), onRetry, fillWidth = false)
     }
 }
 
