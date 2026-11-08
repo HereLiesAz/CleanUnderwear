@@ -487,6 +487,17 @@ class MainViewModel @Inject constructor(
 
     fun dismissSuspect(case: SuspectCase) = applyVerdict(case) { suspectReview.dismiss(case) }
 
+    /** Join the two entries of [case] into one contact named [displayName]. */
+    fun combineSame(case: SuspectCase, displayName: String) = applyVerdict(case, rescan = true) {
+        val other = case.otherTargetId
+        if (other == null || !deduplicateTargetsUseCase.combine(case.targetId, other, displayName)) {
+            post(str(R.string.vm_combine_failed, case.title))
+        }
+    }
+
+    /** The two entries of [case] are two people; stop asking. */
+    fun keepSeparate(case: SuspectCase) = applyVerdict(case) { suspectReview.keepSeparate(case) }
+
     /**
      * Does what each of [cases] recommends, one after another, under the busy screen; cases with no
      * recommendation (too close to call) are left alone. Merges go first: a number case on a contact
@@ -495,7 +506,7 @@ class MainViewModel @Inject constructor(
      * only marked: looking up a current one needs the browser, contact by contact.
      */
     fun applyRecommendations(cases: List<SuspectCase>) {
-        val todo = cases.filter { it.recommendation != null }
+        val todo = cases.filter { it.inBulk }
             .sortedBy { if (it.kind == com.hereliesaz.cleanunderwear.domain.SuspicionKind.BAD_MERGE) 0 else 1 }
         if (todo.isEmpty()) return
         viewModelScope.launch(failSafe) {
@@ -532,6 +543,9 @@ class MainViewModel @Inject constructor(
                             com.hereliesaz.cleanunderwear.domain.Recommendation.USE_REPLACEMENT -> suspectReview.adoptReplacement(case)
                             com.hereliesaz.cleanunderwear.domain.Recommendation.MARK_OUT_OF_DATE -> { suspectReview.markStale(case); true }
                             com.hereliesaz.cleanunderwear.domain.Recommendation.KEEP_NUMBER -> { suspectReview.dismiss(case); true }
+                            // Never in bulk (see SuspectCase.inBulk): joining two entries is the user's call.
+                            com.hereliesaz.cleanunderwear.domain.Recommendation.COMBINE,
+                            com.hereliesaz.cleanunderwear.domain.Recommendation.KEEP_SEPARATE -> false
                         }
                         if (applied) done[rec] = (done[rec] ?: 0) + 1 else notApplied++
                     }

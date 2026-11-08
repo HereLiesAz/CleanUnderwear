@@ -43,10 +43,12 @@ class RoomMergeLedger(private val dao: MergeLedgerDao) : MergeLedger {
  * and the veto no longer recognises it.
  */
 object MergeSignature {
-    fun of(t: Target): String = listOf(
-        t.displayName.trim().lowercase(),
-        StringSimilarity.normalizePhone(t.phoneNumber).orEmpty(),
-        StringSimilarity.normalizeEmail(t.email).orEmpty()
+    fun of(t: Target): String = of(t.displayName, t.phoneNumber, t.email)
+
+    fun of(displayName: String, phone: String?, email: String?): String = listOf(
+        displayName.trim().lowercase(),
+        StringSimilarity.normalizePhone(phone).orEmpty(),
+        StringSimilarity.normalizeEmail(email).orEmpty()
     ).joinToString("|")
 
     /** Order-independent key for a pair of signatures. */

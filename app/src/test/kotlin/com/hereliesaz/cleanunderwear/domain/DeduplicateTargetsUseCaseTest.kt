@@ -335,4 +335,33 @@ class DeduplicateTargetsUseCaseTest {
         assertEquals(TargetStatus.POSSIBLE_MATCH, survivor.statusBeforeIgnore)
         assertEquals("DEATH", survivor.matchKind)
     }
+
+    @Test
+    fun combine_joinsTwoEntriesUnderTheChosenName_andRecordsItAsConfirmed() = runTest {
+        val repo = FakeRepository(
+            listOf(
+                Target(id = 1, displayName = "Maria", phoneNumber = "504-555-0101"),
+                Target(id = 2, displayName = "Maria Tulane Bar", phoneNumber = "504-555-0101", email = "maria@example.com")
+            )
+        )
+        val ledger = FakeLedger()
+
+        val done = DeduplicateTargetsUseCase(repo, ledger = ledger).combine(1, 2, "Maria Tulane Bar")
+
+        assertTrue(done)
+        val survivor = repo.store.single()
+        assertEquals("Maria Tulane Bar", survivor.displayName)
+        assertEquals("maria@example.com", survivor.email)
+        val record = ledger.records.single()
+        assertEquals("USER", record.origin)
+        assertEquals(com.hereliesaz.cleanunderwear.data.MergeState.KEPT, record.state)
+    }
+
+    @Test
+    fun combine_refusesWhenAnEntryIsGone() = runTest {
+        val repo = FakeRepository(listOf(Target(id = 1, displayName = "Maria", phoneNumber = "504-555-0101")))
+
+        assertTrue(!DeduplicateTargetsUseCase(repo).combine(1, 2, "Maria"))
+        assertEquals(1, repo.store.size)
+    }
 }

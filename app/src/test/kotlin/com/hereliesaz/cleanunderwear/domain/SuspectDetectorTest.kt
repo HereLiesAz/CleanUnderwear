@@ -277,4 +277,77 @@ class SuspectDetectorTest {
         assertEquals(Lean.LIKELY_PROBLEM, hints.lean)
         assertNull(hints.recommendation)
     }
+
+    // ---- One person saved twice ----------------------------------------------------------
+
+    private fun twice(
+        aName: String, bName: String,
+        aPhone: String? = "504-555-0101", bPhone: String? = "504-555-0101",
+        aEmail: String? = null, bEmail: String? = null
+    ) = SuspectDetector.assessSamePerson(SamePersonInput(1, aName, aPhone, aEmail, 2, bName, bPhone, bEmail))
+
+    @Test
+    fun nameRelation_readsFirstNamesAndNotes() {
+        assertEquals(NameRelation.SAME, SuspectDetector.nameRelation("Maria (Tulane)", "Maria"))
+        assertEquals(NameRelation.EXTENDS, SuspectDetector.nameRelation("Maria", "Maria Gonzalez"))
+        assertEquals(NameRelation.EXTENDS, SuspectDetector.nameRelation("Maria Gonzalez", "Maria Gonzalez Tulane"))
+        assertEquals(NameRelation.SAME_FIRST, SuspectDetector.nameRelation("Maria Gonzalez", "Maria Bar"))
+        assertEquals(NameRelation.DIFFERENT, SuspectDetector.nameRelation("Bob Smith", "Alice Smith"))
+        assertEquals(NameRelation.DIFFERENT, SuspectDetector.nameRelation("Mom", "Dad"))
+    }
+
+    @Test
+    fun aFirstNameAndTheSameWithWhereYouMetThem_suggestCombining_underTheFullerName() {
+        val case = twice("Maria", "Maria Tulane Bar")
+        assertNotNull(case)
+        assertEquals(SuspicionKind.SAME_PERSON, case!!.kind)
+        assertEquals(Recommendation.COMBINE, case.recommendation)
+        assertEquals("Maria Tulane Bar", case.suggestedName)
+        assertEquals("same:1:2", case.key)
+        assertEquals(2, case.otherTargetId)
+        // Joining two entries is never done in bulk.
+        assertFalse(case.inBulk)
+    }
+
+    @Test
+    fun sameFirstNameWithDifferentRest_isLeftToTheUser() {
+        val case = twice("Maria Gonzalez", "Maria Bar")
+        assertNotNull(case)
+        assertNull(case!!.recommendation)
+        assertTrue(case.defense.any { it.text.contains("relatives or housemates") })
+    }
+
+    @Test
+    fun differentFirstNames_orNothingShared_areNotTheSamePerson() {
+        assertNull(twice("Bob Smith", "Alice Smith"))
+        assertNull(twice("Maria", "Maria Bar", aPhone = "504-555-0101", bPhone = "504-555-0909"))
+    }
+
+    @Test
+    fun differentEmails_speakForTwoPeople() {
+        val case = twice("Maria", "Maria Bar", aEmail = "a@x.com", bEmail = "b@x.com")
+        assertNotNull(case)
+        assertTrue(case!!.defense.any { it.text.contains("different email addresses") })
+    }
+
+    @Test
+    fun staleNumber_sharedWithTheSamePersonUnderAnotherName_isNotRecycled() {
+        fun stale(sharer: String) = SuspectDetector.assessStale(
+            StaleCaseInput(
+                targetId = 3, name = "Maria Gonzalez", phone = "504-555-0101", email = null,
+                lookupFailed = false, history = null, historyAvailable = true,
+                historyCoverageMillis = 3000 * day, sharers = listOf(NumberSharer(sharer)), replacement = null
+            ),
+            now
+        )
+
+        val alias = stale("Maria Gonzalez Tulane")
+        assertNotNull(alias)
+        assertTrue(alias!!.suspicion.none { it.text.contains("different surname") })
+        assertTrue(alias.defense.any { it.text.contains("Also saved as") })
+
+        val stranger = stale("Maria Okafor")
+        assertNotNull(stranger)
+        assertTrue(stranger!!.suspicion.any { it.text.contains("different surname") })
+    }
 }

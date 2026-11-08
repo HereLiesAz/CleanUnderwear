@@ -12,7 +12,13 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-enum class SuspicionKind { BAD_MERGE, STALE_NUMBER }
+enum class SuspicionKind {
+    BAD_MERGE,
+    STALE_NUMBER,
+
+    /** Two contacts that look like one person saved twice under two names. */
+    SAME_PERSON
+}
 
 /** Which way the evidence on a case tips. */
 enum class Lean { LIKELY_PROBLEM, TOSS_UP, LIKELY_FINE }
@@ -27,7 +33,9 @@ enum class Recommendation(@StringRes val labelRes: Int, @PluralsRes val doneRes:
     KEEP_COMBINED(R.string.rec_keep_combined, R.plurals.rec_done_keep_combined),
     USE_REPLACEMENT(R.string.rec_use_replacement, R.plurals.rec_done_use_replacement),
     MARK_OUT_OF_DATE(R.string.rec_mark_out_of_date, R.plurals.rec_done_mark_out_of_date),
-    KEEP_NUMBER(R.string.rec_keep_number, R.plurals.rec_done_keep_number)
+    KEEP_NUMBER(R.string.rec_keep_number, R.plurals.rec_done_keep_number),
+    COMBINE(R.string.rec_combine, R.plurals.rec_done_combine),
+    KEEP_SEPARATE(R.string.rec_keep_separate, R.plurals.rec_done_keep_separate)
 }
 
 /** One reason, in plain words, with how much it counts (roughly 1 = hint, 3+ = strong). */
@@ -59,7 +67,11 @@ data class SuspectCase(
     val suspicion: List<Evidence>,
     val defense: List<Evidence>,
     /** A number that looks like the live replacement for a stale one, if the merge ledger knows one. */
-    val replacementPhone: String? = null
+    val replacementPhone: String? = null,
+    /** The other contact, for [SuspicionKind.SAME_PERSON]; [targetId] is the first. */
+    val otherTargetId: Int? = null,
+    /** The name to offer for the combined contact, for [SuspicionKind.SAME_PERSON]. */
+    val suggestedName: String? = null
 ) {
     val suspicionScore: Double get() = suspicion.sumOf { it.weight }
     val defenseScore: Double get() = defense.sumOf { it.weight }
@@ -83,12 +95,20 @@ data class SuspectCase(
                 SuspicionKind.BAD_MERGE -> Recommendation.SEPARATE
                 SuspicionKind.STALE_NUMBER ->
                     if (replacementPhone != null) Recommendation.USE_REPLACEMENT else Recommendation.MARK_OUT_OF_DATE
+                SuspicionKind.SAME_PERSON -> Recommendation.COMBINE
             }
             Lean.LIKELY_FINE -> when (kind) {
                 SuspicionKind.BAD_MERGE -> Recommendation.KEEP_COMBINED
                 SuspicionKind.STALE_NUMBER -> Recommendation.KEEP_NUMBER
+                SuspicionKind.SAME_PERSON -> Recommendation.KEEP_SEPARATE
             }
         }
+
+    /**
+     * Whether "Apply recommendations" may act on this case. Joining two contacts into one is only
+     * ever suggested; the user does it, one at a time, and picks the name.
+     */
+    val inBulk: Boolean get() = kind != SuspicionKind.SAME_PERSON && recommendation != null
 
     /** The strongest reason on the side the recommendation follows, to say why in one line. */
     val mainReason: Evidence?
@@ -157,6 +177,33 @@ data class StaleCaseInput(
     val otherHolder: String? = null
 )
 
+/** Everything the detector needs to judge whether two contacts are one person saved twice. */
+data class SamePersonInput(
+    val aId: Int,
+    val aName: String,
+    val aPhone: String?,
+    val aEmail: String?,
+    val bId: Int,
+    val bName: String,
+    val bPhone: String?,
+    val bEmail: String?
+)
+
+/** How two contact names relate, once notes in brackets, titles and suffixes are set aside. */
+enum class NameRelation {
+    /** The same words. */
+    SAME,
+
+    /** One is the start of the other: a first name, and the same with a note of where you know them from. */
+    EXTENDS,
+
+    /** The first names agree and the rest does not: could be relatives as easily as one person. */
+    SAME_FIRST,
+
+    /** Different first names, or too little to tell. */
+    DIFFERENT
+}
+
 /**
  * Judges merges and phone numbers. Pure: no I/O, so every rule can be tested and tuned in
  * isolation. Each rule adds a reason to the suspicion or the defense list; a case surfaces only
@@ -186,6 +233,7 @@ object SuspectDetector {
     private const val SPARSE_EVENTS = 3
     private const val MIN_COVERAGE_MS = 24L * MONTH_MS
     private const val SURNAME_DIFFERS_BELOW = 0.85
+    private const val FIRST_NAME_AGREES_FROM = 0.92
 
     private val monthYear: DateTimeFormatter =
         DateTimeFormatter.ofPattern("MMM yyyy", Locale.US).withZone(ZoneOffset.UTC)
@@ -216,6 +264,104 @@ object SuspectDetector {
             ta.size == 1 && tb.size == 1 -> true
             else -> false
         }
+    }
+
+    /** How [a] and [b] relate as names; [NameRelation.DIFFERENT] when they plainly aren't one person's. */
+    internal fun nameRelation(a: String, b: String): NameRelation {
+        val ta = com.hereliesaz.cleanunderwear.network.NameValidator.tokenize(a).map { it.lowercase() }
+        val tb = com.hereliesaz.cleanunderwear.network.NameValidator.tokenize(b).map { it.lowercase() }
+        if (ta.isEmpty() || tb.isEmpty()) return NameRelation.DIFFERENT
+        if (ta.first().length < 2 || tb.first().length < 2) return NameRelation.DIFFERENT
+        if (StringSimilarity.jaroWinkler(ta.first(), tb.first()) < FIRST_NAME_AGREES_FROM) return NameRelation.DIFFERENT
+        val shorter = if (ta.size <= tb.size) ta else tb
+        val longer = if (ta.size <= tb.size) tb else ta
+        return when {
+            ta == tb -> NameRelation.SAME
+            shorter.size == 1 -> NameRelation.EXTENDS
+            shorter.indices.all { StringSimilarity.jaroWinkler(shorter[it], longer[it]) >= FIRST_NAME_AGREES_FROM } -> NameRelation.EXTENDS
+            else -> NameRelation.SAME_FIRST
+        }
+    }
+
+    /** The name with more in it: more words, then more letters; the first when they tie. */
+    internal fun fullerName(a: String, b: String): String {
+        val wordsA = com.hereliesaz.cleanunderwear.network.NameValidator.tokenize(a).size
+        val wordsB = com.hereliesaz.cleanunderwear.network.NameValidator.tokenize(b).size
+        return when {
+            wordsB > wordsA -> b
+            wordsA > wordsB -> a
+            b.trim().length > a.trim().length -> b
+            else -> a
+        }
+    }
+
+    fun samePersonKey(idA: Int, idB: Int) = "same:${minOf(idA, idB)}:${maxOf(idA, idB)}"
+
+    /**
+     * Two contacts that share a number or an email and carry names that could be one person's: a
+     * first name alone and the same with where you met them, say. Only ever a suggestion; the
+     * names differing is exactly why the dedup pass leaves them apart.
+     */
+    fun assessSamePerson(i: SamePersonInput): SuspectCase? {
+        val relation = nameRelation(i.aName, i.bName)
+        if (relation == NameRelation.DIFFERENT) return null
+        val phoneA = StringSimilarity.normalizePhone(i.aPhone)
+        val phoneB = StringSimilarity.normalizePhone(i.bPhone)
+        val emailA = StringSimilarity.normalizeEmail(i.aEmail)
+        val emailB = StringSimilarity.normalizeEmail(i.bEmail)
+        val samePhone = phoneA != null && phoneA == phoneB
+        val sameEmail = emailA != null && emailA == emailB
+        if (!samePhone && !sameEmail) return null
+
+        val suspicion = mutableListOf<Evidence>()
+        val defense = mutableListOf<Evidence>()
+        if (samePhone) suspicion += Evidence("Both entries have the number ${i.aPhone}.", 2.5)
+        if (sameEmail) suspicion += Evidence("Both entries have the email address ${i.aEmail}.", 3.0)
+        when (relation) {
+            NameRelation.SAME -> suspicion += Evidence(
+                "The names read the same once the notes are set aside (\"${i.aName}\", \"${i.bName}\").", 1.5
+            )
+            NameRelation.EXTENDS -> {
+                val short = fullerName(i.aName, i.bName).let { if (it == i.aName) i.bName else i.aName }
+                suspicion += Evidence(
+                    "\"$short\" is the start of \"${fullerName(i.aName, i.bName)}\": one reads like a first name, " +
+                        "the other the same with a note on where you know them from.",
+                    2.0
+                )
+            }
+            NameRelation.SAME_FIRST -> {
+                suspicion += Evidence("Both start with the same first name.", 1.0)
+                defense += Evidence(
+                    "The rest of the names differ (\"${i.aName}\", \"${i.bName}\"): relatives or housemates can share a line.", 3.0
+                )
+            }
+            NameRelation.DIFFERENT -> Unit
+        }
+        if (samePhone && !sameEmail && emailA != null && emailB != null) {
+            defense += Evidence("They have different email addresses (${i.aEmail}, ${i.bEmail}).", 2.5)
+        }
+        if (sameEmail && !samePhone && phoneA != null && phoneB != null) {
+            defense += Evidence("They have different numbers (${i.aPhone}, ${i.bPhone}).", 1.5)
+        }
+
+        if (suspicion.sumOf { it.weight } < MIN_SUSPICION) return null
+        val keep = fullerName(i.aName, i.bName)
+        return SuspectCase(
+            key = samePersonKey(i.aId, i.bId),
+            kind = SuspicionKind.SAME_PERSON,
+            targetId = i.aId,
+            ledgerId = null,
+            title = keep,
+            headline = "\"${i.aName}\" and \"${i.bName}\" may be one person saved twice.",
+            identities = listOf(
+                IdentityLine("One entry", i.aName, i.aPhone, i.aEmail, null),
+                IdentityLine("The other", i.bName, i.bPhone, i.bEmail, null)
+            ),
+            suspicion = suspicion.sortedByDescending { it.weight },
+            defense = defense.sortedByDescending { it.weight },
+            otherTargetId = i.bId,
+            suggestedName = keep
+        )
     }
 
     fun assessMerge(i: MergeCaseInput, now: Long): SuspectCase? {
@@ -441,8 +587,19 @@ object SuspectDetector {
             }
         }
 
-        val different = i.sharers.filter { surnameDiffers(i.name, it.name) }
-        val same = i.sharers.filter { surnameSame(i.name, it.name) }
+        // A sharer whose name reads as this contact's own ("Maria", "Maria Gonzalez") is the same
+        // person saved twice, not a stranger the number was handed to.
+        val alias = i.sharers.filter {
+            val relation = nameRelation(i.name, it.name)
+            relation == NameRelation.SAME || relation == NameRelation.EXTENDS
+        }
+        val different = (i.sharers - alias.toSet()).filter { surnameDiffers(i.name, it.name) }
+        val same = (i.sharers - alias.toSet()).filter { surnameSame(i.name, it.name) }
+        if (alias.isNotEmpty()) {
+            defense += Evidence(
+                "Also saved as ${list(alias)}, which reads as the same person. The number is shared, not recycled.", 1.5
+            )
+        }
         if (different.isNotEmpty()) {
             suspicion += Evidence(
                 "${i.phone} is also on ${list(different)} with a different surname. Either the number was recycled or one entry is out of date.",
