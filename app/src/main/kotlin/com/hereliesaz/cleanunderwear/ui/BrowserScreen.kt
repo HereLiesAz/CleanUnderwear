@@ -5,10 +5,14 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.MutableContextWrapper
+import android.net.http.SslError
+import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceError
+import android.webkit.SslErrorHandler
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -169,6 +173,8 @@ fun BrowserScreen(
     // How often a dump has turned out to be a sign-in page; past a few, stop bouncing and pause.
     var signInBounces by remember { mutableIntStateOf(0) }
     var mainFrameFailed by remember { mutableStateOf(false) }
+    // How many of the page's own script errors this load has put in the log (a few are enough).
+    var consoleErrors by remember { mutableIntStateOf(0) }
     // This mission's own load has begun (onPageStarted): until then the page in the browser is the
     // previous mission's, and must not be taken for this one's.
     var navStarted by remember { mutableStateOf(false) }
@@ -340,7 +346,19 @@ fun BrowserScreen(
             if (mission.requiresSignIn) {
                 val page = probePage(webView)
                 if (page != null && mission.isSignInPage(page)) {
-                    note("This is a sign-in page; waiting for you", DiagnosticLogger.LogEntry.LogLevel.WARN)
+                    val seen = describePage(webView)
+                    note(
+                        "This is a sign-in page (${shortUrl(page.url)}); waiting for you" +
+                            (seen?.let { " · ${it.characters} characters of text, title \"${it.title}\", ${it.state}" } ?: ""),
+                        DiagnosticLogger.LogEntry.LogLevel.WARN
+                    )
+                    if (seen != null && seen.blank) {
+                        note(
+                            "The page is blank: nothing is drawn on it, so there is nothing to sign in to. " +
+                                "The site may not support this browser (${seen.browser})",
+                            DiagnosticLogger.LogEntry.LogLevel.WARN
+                        )
+                    }
                     waitForSignIn()
                     return@LaunchedEffect
                 }
@@ -413,6 +431,8 @@ fun BrowserScreen(
     // turns into the chat list in place) and then no page-finished event says so.
     LaunchedEffect(batchId, currentIndex, needsSignIn) {
         if (!needsSignIn) return@LaunchedEffect
+        var polls = 0
+        var blankReports = 0
         while (!batchComplete) {
             delay(SIGN_IN_POLL_MS)
             val page = probePage(webView) ?: continue
@@ -420,6 +440,19 @@ fun BrowserScreen(
                 note("Past the sign-in page; carrying on")
                 needsSignIn = false
                 return@LaunchedEffect
+            }
+            // Still a sign-in page: if it is still blank, say so (about every 15 s, three times).
+            polls += 1
+            if (polls % BLANK_REPORT_EVERY_POLLS == 0 && blankReports < MAX_BLANK_REPORTS) {
+                val seen = describePage(webView)
+                if (seen != null && seen.blank) {
+                    blankReports += 1
+                    note(
+                        "Still blank after ${polls * SIGN_IN_POLL_MS / 1000} s: ${seen.characters} characters of text, " +
+                            "title \"${seen.title}\", ${seen.state}, at ${shortUrl(page.url)}",
+                        DiagnosticLogger.LogEntry.LogLevel.WARN
+                    )
+                }
             }
         }
     }
@@ -600,6 +633,23 @@ fun BrowserScreen(
                         }
                     }
                     view.apply {
+                        // The page's own script errors (a few per load): when a page is blank, they are
+                        // usually why.
+                        webChromeClient = object : WebChromeClient() {
+                            override fun onConsoleMessage(message: ConsoleMessage?): Boolean {
+                                if (message != null && message.messageLevel() == ConsoleMessage.MessageLevel.ERROR &&
+                                    consoleErrors < MAX_CONSOLE_ERRORS
+                                ) {
+                                    consoleErrors += 1
+                                    note(
+                                        "Page script error: ${message.message().take(160)} " +
+                                            "(${shortUrl(message.sourceId())}:${message.lineNumber()})",
+                                        DiagnosticLogger.LogEntry.LogLevel.WARN
+                                    )
+                                }
+                                return false
+                            }
+                        }
                         webViewClient = object : WebViewClient() {
                             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                                 if (batchComplete) return
@@ -607,7 +657,31 @@ fun BrowserScreen(
                                 pageReady = false
                                 navStarted = true
                                 mainFrameFailed = false
+                                consoleErrors = 0
                                 note("Loading ${shortUrl(url)}")
+                            }
+
+                            override fun onReceivedHttpError(
+                                view: WebView?,
+                                request: WebResourceRequest?,
+                                errorResponse: WebResourceResponse?
+                            ) {
+                                // Only the page itself: a failed tracker or image is not why a page is blank.
+                                if (request?.isForMainFrame == true && errorResponse != null) {
+                                    note(
+                                        "The site answered ${errorResponse.statusCode} ${errorResponse.reasonPhrase.orEmpty()} " +
+                                            "for ${shortUrl(request.url.toString())}",
+                                        DiagnosticLogger.LogEntry.LogLevel.WARN
+                                    )
+                                }
+                            }
+
+                            override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler?, error: SslError?) {
+                                note(
+                                    "The connection to ${shortUrl(error?.url)} is not secure (${error?.primaryError}); not loaded",
+                                    DiagnosticLogger.LogEntry.LogLevel.ERROR
+                                )
+                                handler?.cancel()
                             }
 
                             override fun onReceivedError(
@@ -1000,6 +1074,15 @@ private fun Context.findActivity(): Activity? {
 /** How often the page is looked at while the user signs in. */
 private const val SIGN_IN_POLL_MS = 1_500L
 
+/** While the user signs in, a page that is still blank is said so every this many polls (about 15 s)... */
+private const val BLANK_REPORT_EVERY_POLLS = 10
+
+/** ...at most this many times. */
+private const val MAX_BLANK_REPORTS = 3
+
+/** How many of a page's own script errors a load puts in the log. */
+private const val MAX_CONSOLE_ERRORS = 8
+
 /** How often a lookup page is checked for having drawn, while its load event is awaited. */
 private const val READY_POLL_MS = 1_000L
 
@@ -1025,6 +1108,22 @@ private suspend fun probePage(webView: android.webkit.WebView?): PageProbe? {
         kotlinx.coroutines.suspendCancellableCoroutine<PageProbe?> { cont ->
             view.evaluateJavascript(PageProbe.SCRIPT) { raw ->
                 if (cont.isActive) cont.resumeWith(Result.success(PageProbe.parse(raw)))
+            }
+        }
+    }
+}
+
+/**
+ * What the page in front looks like from inside: how much text is drawn, its title, whether it
+ * has finished, and which browser it thinks it is in. For the log, when a page is blank. Null
+ * when the page doesn't answer in time.
+ */
+private suspend fun describePage(webView: android.webkit.WebView?): PageSource.Described? {
+    val view = webView ?: return null
+    return withTimeoutOrNull(3_000L) {
+        kotlinx.coroutines.suspendCancellableCoroutine<PageSource.Described?> { cont ->
+            view.evaluateJavascript(PageSource.DESCRIBE_SCRIPT) { raw ->
+                if (cont.isActive) cont.resumeWith(Result.success(PageSource.describe(raw)))
             }
         }
     }
