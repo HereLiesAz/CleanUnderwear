@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -23,6 +24,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -109,9 +111,10 @@ fun ReviewScreen(
                     total = report?.cases?.size ?: 0,
                     merges = report?.cases?.count { it.kind == SuspicionKind.BAD_MERGE } ?: 0,
                     stale = report?.cases?.count { it.kind == SuspicionKind.STALE_NUMBER } ?: 0,
+                    same = report?.cases?.count { it.kind == SuspicionKind.SAME_PERSON } ?: 0,
                     filter = kindFilter,
                     onFilter = { kindFilter = if (kindFilter == it) null else it },
-                    recommended = cases.count { it.recommendation != null },
+                    recommended = cases.count { it.inBulk },
                     onApplyAll = { confirmAll = true }
                 )
             }
@@ -144,6 +147,7 @@ private fun Header(
     total: Int,
     merges: Int,
     stale: Int,
+    same: Int,
     filter: SuspicionKind?,
     onFilter: (SuspicionKind) -> Unit,
     recommended: Int,
@@ -172,6 +176,11 @@ private fun Header(
                 onClick = { onFilter(SuspicionKind.STALE_NUMBER) },
                 label = { Text(stringResource(R.string.review_filter_old, stale)) }
             )
+            FilterChip(
+                selected = filter == SuspicionKind.SAME_PERSON,
+                onClick = { onFilter(SuspicionKind.SAME_PERSON) },
+                label = { Text(stringResource(R.string.review_filter_same, same)) }
+            )
         }
         if (recommended > 0) {
             AppAction(stringResource(R.string.review_apply_recommendations, recommended), onApplyAll)
@@ -183,8 +192,8 @@ private fun Header(
 /** The confirmation before applying every recommendation: exactly what will happen, by kind. */
 @Composable
 private fun ApplyAllDialog(cases: List<SuspectCase>, onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    val byRec = cases.mapNotNull { it.recommendation }.groupingBy { it }.eachCount()
-    val left = cases.count { it.recommendation == null }
+    val byRec = cases.filter { it.inBulk }.mapNotNull { it.recommendation }.groupingBy { it }.eachCount()
+    val left = cases.count { !it.inBulk }
     val total = byRec.values.sum()
     AppDialog(
         title = pluralStringResource(R.plurals.review_apply_title, total, total),
@@ -213,6 +222,8 @@ private fun whatItDoes(rec: Recommendation, bulk: Boolean = false): Int = when (
     Recommendation.USE_REPLACEMENT -> R.string.review_does_use_replacement
     Recommendation.MARK_OUT_OF_DATE -> if (bulk) R.string.review_does_mark_stale_bulk else R.string.review_does_mark_stale
     Recommendation.KEEP_NUMBER -> R.string.review_does_keep_number
+    Recommendation.COMBINE -> R.string.review_does_combine
+    Recommendation.KEEP_SEPARATE -> R.string.review_does_keep_apart
 }
 
 @Composable
@@ -228,7 +239,7 @@ private fun EmptyState(filtered: Boolean) {
     }
 }
 
-private enum class Pending { SPLIT, KEEP, ADOPT, STALE, LOOK_UP, FINE }
+private enum class Pending { SPLIT, KEEP, ADOPT, STALE, LOOK_UP, FINE, COMBINE, APART }
 
 @Composable
 private fun SuspectCard(
@@ -259,6 +270,7 @@ private fun SuspectCard(
                             when (case.kind) {
                                 SuspicionKind.BAD_MERGE -> R.string.review_kind_merge
                                 SuspicionKind.STALE_NUMBER -> R.string.review_kind_stale
+                                SuspicionKind.SAME_PERSON -> R.string.review_kind_same
                             }
                         )
                     )
@@ -294,6 +306,10 @@ private fun SuspectCard(
                     if (rec != Recommendation.MARK_OUT_OF_DATE) AppTextAction(stringResource(R.string.review_mark_stale), { pending = Pending.STALE })
                     AppTextAction(stringResource(R.string.review_look_for_current), { pending = Pending.LOOK_UP })
                     if (rec != Recommendation.KEEP_NUMBER) AppTextAction(stringResource(R.string.review_number_fine), { pending = Pending.FINE })
+                }
+                SuspicionKind.SAME_PERSON -> {
+                    if (rec != Recommendation.COMBINE) AppTextAction(stringResource(R.string.review_combine), { pending = Pending.COMBINE })
+                    if (rec != Recommendation.KEEP_SEPARATE) AppTextAction(stringResource(R.string.review_keep_apart), { pending = Pending.APART })
                 }
             }
         }
@@ -331,7 +347,43 @@ private fun SuspectCard(
                 else stringResource(R.string.review_fine_body_no_number, name)
             )
         }
+        Pending.COMBINE -> CombineDialog(
+            case = case,
+            onConfirm = { chosen -> pending = null; viewModel.combineSame(case, chosen) },
+            onDismiss = { pending = null }
+        )
+        Pending.APART -> AppDialog(stringResource(R.string.review_apart_title), stringResource(R.string.review_apart_confirm), { pending = null; viewModel.keepSeparate(case) }, { pending = null }) {
+            Text(stringResource(R.string.review_apart_body, case.identities.getOrNull(0)?.name.orEmpty(), case.identities.getOrNull(1)?.name.orEmpty()))
+        }
         null -> Unit
+    }
+}
+
+/** Joining two entries: the name is the user's to pick; the fuller one is offered first. */
+@Composable
+private fun CombineDialog(case: SuspectCase, onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
+    val names = case.identities.mapNotNull { it.name }.distinct()
+    var chosen by rememberSaveable(case.key) { mutableStateOf(case.suggestedName ?: names.firstOrNull().orEmpty()) }
+    AppDialog(
+        title = stringResource(R.string.review_combine_title),
+        confirm = stringResource(R.string.review_combine_confirm),
+        onConfirm = { onConfirm(chosen) },
+        onDismiss = onDismiss
+    ) {
+        AppCaption(stringResource(R.string.review_combine_name))
+        names.forEach { name ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .selectable(selected = chosen == name, onClick = { chosen = name }, role = Role.RadioButton),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+            ) {
+                RadioButton(selected = chosen == name, onClick = null)
+                Text(name, style = MaterialTheme.typography.titleMedium)
+            }
+        }
+        Text(stringResource(R.string.review_combine_body), style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -360,6 +412,8 @@ private fun Recommendation.toPending(): Pending = when (this) {
     Recommendation.USE_REPLACEMENT -> Pending.ADOPT
     Recommendation.MARK_OUT_OF_DATE -> Pending.STALE
     Recommendation.KEEP_NUMBER -> Pending.FINE
+    Recommendation.COMBINE -> Pending.COMBINE
+    Recommendation.KEEP_SEPARATE -> Pending.APART
 }
 
 /** The weight of the reasons against (solid) and for (outlined), with the counts in words. */

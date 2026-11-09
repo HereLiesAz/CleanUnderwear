@@ -4,6 +4,7 @@ import com.hereliesaz.cleanunderwear.data.ContributionCodec
 import com.hereliesaz.cleanunderwear.data.MergeLedger
 import com.hereliesaz.cleanunderwear.data.MergeRecord
 import com.hereliesaz.cleanunderwear.data.MergeSignature
+import com.hereliesaz.cleanunderwear.data.MergeState
 import com.hereliesaz.cleanunderwear.data.Target
 import com.hereliesaz.cleanunderwear.data.TargetStatus
 import com.hereliesaz.cleanunderwear.data.TargetLite
@@ -181,6 +182,46 @@ class DeduplicateTargetsUseCase(
                 if (ambiguousSkipped > 0) "; left $ambiguousSkipped row(s) in oversized blocks for review" else ""
         )
         return merged
+    }
+
+    /**
+     * Joins two contacts the user has said are one person, under [displayName]. The usual merge
+     * rules apply to what is kept (see [mergeFields]); the ledger records it as the user's own
+     * doing, already confirmed, so it is never raised for review as a bad merge. Refused (false)
+     * when either row is gone or has changed since the user was shown it.
+     */
+    suspend fun combine(idA: Int, idB: Int, displayName: String): Boolean {
+        if (idA == idB) return false
+        val rows = repository.getTargetsByIds(listOf(idA, idB))
+        if (rows.size != 2) return false
+        val winner = pickWinnerFull(rows)
+        val loser = rows.first { it.id != winner.id }
+        return repository.inTransaction {
+            val now = repository.getTargetsByIds(rows.map { it.id }).associateBy { it.id }
+            if (rows.any { now[it.id] != it }) return@inTransaction false
+            val joined = mergeFields(winner, loser).copy(displayName = displayName.trim().ifBlank { winner.displayName })
+            ledger?.record(
+                MergeRecord(
+                    survivorId = winner.id,
+                    absorbedJson = TargetSnapshot.toJson(loser),
+                    changesJson = TargetSnapshot.changes(winner, joined),
+                    absorbedName = loser.displayName,
+                    absorbedPhone = loser.phoneNumber,
+                    absorbedEmail = loser.email,
+                    probability = 1.0,
+                    weightBits = 0.0,
+                    bestCaseBits = 0.0,
+                    contributions = "",
+                    origin = "USER",
+                    mergedAt = System.currentTimeMillis(),
+                    state = MergeState.KEPT
+                )
+            )
+            repository.updateTarget(joined)
+            ledger?.reassignSurvivor(loser.id, winner.id)
+            repository.deleteTarget(loser)
+            true
+        }
     }
 
     /**

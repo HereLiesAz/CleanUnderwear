@@ -13,7 +13,7 @@ A single-module Android app: Kotlin, Jetpack Compose, Hilt, Room, WorkManager, O
 - **Use cases**: `HarvestContactsUseCase` → `DeduplicateTargetsUseCase` → `TriageTargetsUseCase` → `ScrapeTargetsUseCase`, run in order by `RunPipelineUseCase`. Enrichment (CyberBackgroundChecks) is not part of the pipeline; it runs only when the user starts it.
 - **`PipelineCoordinator`** serializes the pipeline, sweeps and enrichment, so two never write the Registry at once.
 - **Matching** (`match/`): `RecordExtractor` turns record text into `CandidateRecord`s, `MatchVerifier` scores them, `ProbabilisticScorer` scores duplicate pairs.
-- **Review**: `SuspectDetector` (pure) finds suspect merges and stale numbers; `SuspectReview` applies the user's verdicts.
+- **Review**: `SuspectDetector` (pure) finds suspect merges, stale numbers and people saved twice under two names; `SuspectReview` applies the user's verdicts.
 
 ### Data (`data/`, `network/`, `util/`)
 - **Room** (`CleanUnderwearDatabase`, version 15): `Target` (the Registry) and `MergeRecord` (the merge ledger). Schemas are exported to `app/schemas` (only 15 so far); `MigrationTest` rebuilds versions 13 and 14 from 15's schema, less the columns later migrations added, and upgrades them. Migrations 1-12 are untested. `TargetRepository` wraps the DAO and runs multi-step writes in transactions.

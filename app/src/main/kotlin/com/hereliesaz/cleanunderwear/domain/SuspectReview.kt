@@ -25,7 +25,8 @@ data class SuspectReport(
 /**
  * The correction step: finds contacts that look wrongly merged or carry a stale number, and
  * applies the user's verdict. Nothing is changed by [find]; every change is a deliberate call to
- * [split], [keepMerged], [markStale], [adoptReplacement] or [dismiss].
+ * [split], [keepMerged], [markStale], [adoptReplacement], [dismiss] or [keepSeparate] (joining two
+ * entries is [DeduplicateTargetsUseCase.combine], at the user's say).
  *
  * Callers run the mutating calls inside [PipelineCoordinator.runExclusive] so they never interleave
  * with a dedup pass.
@@ -48,6 +49,7 @@ class SuspectReview @Inject constructor(
         // One pass over the registry: enough to name every contact and group them by number.
         val byId = HashMap<Int, TargetWorkInfo>()
         val byNumber = HashMap<String, MutableList<TargetWorkInfo>>()
+        val byEmail = HashMap<String, MutableList<TargetWorkInfo>>()
         var offset = 0
         while (true) {
             val chunk = repository.getTargetWorkInfoPaged(CHUNK, offset)
@@ -55,6 +57,7 @@ class SuspectReview @Inject constructor(
             for (t in chunk) {
                 byId[t.id] = t
                 StringSimilarity.normalizePhone(t.phoneNumber)?.let { byNumber.getOrPut(it) { mutableListOf() } += t }
+                StringSimilarity.normalizeEmail(t.email)?.let { byEmail.getOrPut(it) { mutableListOf() } += t }
             }
             offset += CHUNK
             onProgress(0.3f, "Scanning registry ($offset)…")
@@ -146,6 +149,34 @@ class SuspectReview @Inject constructor(
             )?.let { cases += it }
         }
 
+        // One person saved twice under two names, found by the number or email they share.
+        onProgress(0.9f, "Looking for people saved twice…")
+        val apart = ledger.getVetoes().mapTo(HashSet()) { MergeSignature.vetoKey(it.a, it.b) }
+        val paired = HashSet<String>()
+        for (group in byNumber.values + byEmail.values) {
+            val live = group.filter { it.status != TargetStatus.IGNORED }
+            // A number shared by many is an office or a family line, not one person saved twice.
+            if (live.size !in 2..MAX_SAME_PERSON_GROUP) continue
+            for (x in live.indices) for (y in x + 1 until live.size) {
+                val a = live[x]
+                val b = live[y]
+                val key = SuspectDetector.samePersonKey(a.id, b.id)
+                if (!paired.add(key)) continue
+                val signatures = MergeSignature.vetoKey(
+                    MergeSignature.of(a.displayName, a.phoneNumber, a.email),
+                    MergeSignature.of(b.displayName, b.phoneNumber, b.email)
+                )
+                if (signatures in apart) continue
+                // A number marked out of date can't tie two entries together.
+                SuspectDetector.assessSamePerson(
+                    SamePersonInput(
+                        a.id, a.displayName, a.phoneNumber.takeUnless { a.phoneIsStale }, a.email,
+                        b.id, b.displayName, b.phoneNumber.takeUnless { b.phoneIsStale }, b.email
+                    )
+                )?.let { cases += it }
+            }
+        }
+
         val open = cases.filter { it.key !in decided }
             .sortedWith(compareByDescending<SuspectCase> { it.net }.thenBy { it.title.lowercase() })
         onProgress(1f, "${open.size} to review.")
@@ -215,6 +246,9 @@ class SuspectReview @Inject constructor(
         return true
     }
 
+    /** Two entries, two people. Stop asking about the pair. */
+    suspend fun keepSeparate(case: SuspectCase) = decide(case, "APART")
+
     /** The number is fine. Stop asking about it. */
     suspend fun dismiss(case: SuspectCase) = decide(case, "FINE")
 
@@ -223,6 +257,7 @@ class SuspectReview @Inject constructor(
 
     internal companion object {
         private const val CHUNK = 1000
+        private const val MAX_SAME_PERSON_GROUP = 4
 
         /**
          * Name on a people-search card that Resolve rejected for not being this contact, when a

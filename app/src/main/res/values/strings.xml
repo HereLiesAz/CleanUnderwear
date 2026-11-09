@@ -276,9 +276,10 @@
         <item quantity="other">%d to review</item>
     </plurals>
     <string name="review_checking_again">Checking the list again…</string>
-    <string name="review_intro">When the app finds two entries for one person it combines them. Here are the ones that may be two different people, or a number that\'s out of date. Tap one to see why, and why it might be fine.</string>
+    <string name="review_intro">When the app finds two entries for one person it combines them. Here are the ones that may be two different people, one person saved twice under two names, or a number that\'s out of date. Tap one to see why, and why it might be fine.</string>
     <string name="review_filter_merged">Combined wrongly (%1$d)</string>
     <string name="review_filter_old">Old numbers (%1$d)</string>
+    <string name="review_filter_same">Saved twice (%1$d)</string>
     <string name="review_apply_recommendations">Apply recommendations (%1$d)</string>
     <string name="review_apply_caption">Does what each case below recommends. You see the list first. Cases too close to call are left for you.</string>
     <string name="review_apply_caption_group">Does what each case below recommends, in this group. You see the list first. Cases too close to call are left for you.</string>
@@ -299,6 +300,8 @@
     <string name="review_does_mark_stale_bulk">The number stops being used to check or look the contact up. Searching for a current one is done from each card, afterwards.</string>
     <string name="review_does_mark_stale">The number stops being used to check or look the contact up, and CyberBackgroundChecks is searched for a current one.</string>
     <string name="review_does_keep_number">The number stays in use and isn\'t raised here again.</string>
+    <string name="review_does_combine">The two entries become one contact, under the name you pick. The fuller name is offered first.</string>
+    <string name="review_does_keep_apart">They stay two contacts and aren\'t raised here again.</string>
     <string name="review_empty_group">Nothing in this group.</string>
     <string name="review_empty_all">Nothing looks wrong.</string>
     <string name="review_empty_caption">Combined entries are recorded from now on. Ones combined by earlier versions weren\'t, so they can\'t be reviewed or separated; old numbers are checked across everything.</string>
@@ -308,6 +311,7 @@
     <string name="review_collapsed">Collapsed</string>
     <string name="review_kind_merge">May be two people combined</string>
     <string name="review_kind_stale">Number may be out of date</string>
+    <string name="review_kind_same">May be one person saved twice</string>
     <string name="review_why_wrong">Why it looks wrong</string>
     <string name="review_nothing_wrong">Nothing.</string>
     <string name="review_why_fine">Why it might be fine</string>
@@ -320,6 +324,15 @@
     <string name="review_mark_stale">Mark out of date</string>
     <string name="review_look_for_current">Find current number</string>
     <string name="review_number_fine">Keep number</string>
+    <string name="review_combine">Combine</string>
+    <string name="review_keep_apart">Keep apart</string>
+    <string name="review_combine_title">Combine these entries?</string>
+    <string name="review_combine_confirm">Combine</string>
+    <string name="review_combine_name">Name to keep</string>
+    <string name="review_combine_body">They become one contact in this app, keeping what each had. Your phone\'s contacts aren\'t changed.</string>
+    <string name="review_apart_title">Keep them apart?</string>
+    <string name="review_apart_confirm">Keep apart</string>
+    <string name="review_apart_body">%1$s and %2$s stay two contacts and won\'t be raised here again.</string>
     <string name="review_split_title">Separate these entries?</string>
     <string name="review_split_confirm">Separate</string>
     <string name="review_split_body">The entry that was combined into %1$s comes back as its own contact in this app, and the two won\'t be combined again. Your phone\'s contacts aren\'t changed.</string>
@@ -446,6 +459,8 @@
     <string name="rec_use_replacement">Use newer number</string>
     <string name="rec_mark_out_of_date">Mark out of date</string>
     <string name="rec_keep_number">Keep number</string>
+    <string name="rec_combine">Combine</string>
+    <string name="rec_keep_separate">Keep apart</string>
     <plurals name="rec_done_separate">
         <item quantity="one">%d separated</item>
         <item quantity="other">%d separated</item>
@@ -465,6 +480,14 @@
     <plurals name="rec_done_keep_number">
         <item quantity="one">%d number kept</item>
         <item quantity="other">%d numbers kept</item>
+    </plurals>
+    <plurals name="rec_done_combine">
+        <item quantity="one">%d combined</item>
+        <item quantity="other">%d combined</item>
+    </plurals>
+    <plurals name="rec_done_keep_separate">
+        <item quantity="one">%d kept apart</item>
+        <item quantity="other">%d kept apart</item>
     </plurals>
 
     <!-- What the lookup for a replacement number found (domain/AlternateFinder.kt AlternateInfo) -->
@@ -489,6 +512,7 @@
     <string name="vm_source_whatsapp">WhatsApp chats</string>
     <string name="vm_source_instagram">Instagram followers</string>
     <string name="vm_source_google">Google Contacts</string>
+    <string name="vm_combine_failed">Couldn\'t combine %1$s: an entry changed since the list was made. The list was refreshed.</string>
     <string name="vm_split_failed">Couldn\'t separate %1$s: that entry changed since the list was made. The list was refreshed.</string>
     <string name="vm_applying_recs">Applying recommendations…</string>
     <string name="vm_applying_rec_item">%1$s: %2$s (%3$d of %4$d)</string>

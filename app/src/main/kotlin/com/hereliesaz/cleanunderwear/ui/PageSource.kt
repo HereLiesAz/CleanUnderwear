@@ -14,6 +14,14 @@ internal object PageSource {
     const val READY_SCRIPT =
         "(document.readyState !== 'loading' && !!document.body && document.body.innerText.length > 200)"
 
+    /**
+     * What a page looks like from inside, for the log: `characters|state|title|browser`. The title
+     * has its bars taken out, so the four parts split cleanly.
+     */
+    const val DESCRIBE_SCRIPT =
+        "(function(){var b=document.body;return (b?b.innerText.length:-1)+'|'+document.readyState+'|'+" +
+            "(document.title||'').replace(/\\|/g,'/').slice(0,60)+'|'+navigator.userAgent;})()"
+
     /** A page source shorter than this has drawn nothing worth reading yet. */
     const val MIN_READABLE_CHARS = 2_000
 
@@ -28,6 +36,22 @@ internal object PageSource {
         } catch (e: Exception) {
             null
         }
+    }
+
+    /** What [DESCRIBE_SCRIPT] says of a page. */
+    data class Described(val characters: Int, val state: String, val title: String, val browser: String) {
+        /** Nothing worth reading is drawn: no body, or hardly any text. */
+        val blank: Boolean get() = characters < BLANK_BELOW
+    }
+
+    /** Fewer characters of visible text than this is a page that has drawn nothing. */
+    const val BLANK_BELOW = 50
+
+    /** Reads what [DESCRIBE_SCRIPT] handed back; null when it isn't in that shape. */
+    fun describe(raw: String?): Described? {
+        val parts = decode(raw)?.split('|', limit = 4) ?: return null
+        if (parts.size < 4) return null
+        return Described(parts[0].toIntOrNull() ?: return null, parts[1], parts[2], parts[3])
     }
 
     /** Whether [html] has enough in it to be a page someone was shown, not a blank one. */
