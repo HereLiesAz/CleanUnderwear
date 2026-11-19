@@ -22,6 +22,7 @@ class DeduplicateTargetsUseCaseTest {
     /** In-memory repository exercising only the reads/mutations the use case touches. */
     private class FakeRepository(initial: List<Target>) : TargetRepository {
         val store = initial.toMutableList()
+        var fullRowFetches = 0
 
         private fun lite(t: Target) = TargetLite(
             id = t.id,
@@ -37,8 +38,10 @@ class DeduplicateTargetsUseCaseTest {
         override suspend fun getTargetsPaged(limit: Int, offset: Int): List<TargetLite> =
             store.drop(offset).take(limit).map(::lite)
 
-        override suspend fun getTargetsByIds(ids: List<Int>): List<Target> =
-            store.filter { it.id in ids }
+        override suspend fun getTargetsByIds(ids: List<Int>): List<Target> {
+            fullRowFetches++
+            return store.filter { it.id in ids }
+        }
 
         override suspend fun updateTarget(target: Target) {
             val idx = store.indexOfFirst { it.id == target.id }
@@ -184,6 +187,17 @@ class DeduplicateTargetsUseCaseTest {
 
         assertEquals(0, merged)
         assertEquals(3, repo.store.size)
+        assertEquals(0, repo.fullRowFetches)
+    }
+
+    @Test
+    fun maxPairwiseGroupMustPermitAtLeastOnePair() {
+        try {
+            DeduplicateTargetsUseCase(FakeRepository(emptyList()), maxPairwiseGroup = 1)
+            org.junit.Assert.fail("A one-item pairwise limit must be rejected")
+        } catch (expected: IllegalArgumentException) {
+            assertTrue(expected.message.orEmpty().contains("at least 2"))
+        }
     }
 
     @Test
