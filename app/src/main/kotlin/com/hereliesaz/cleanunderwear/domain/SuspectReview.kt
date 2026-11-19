@@ -142,7 +142,10 @@ class SuspectReview @Inject constructor(
                     sharers = sharers,
                     replacement = replacements[t.id],
                     apps = presence.appsFor(phone),
-                    appsOnDevice = presence.appsOnDevice,
+                    // Missing from the phonebook is unknown, not unregistered.
+                    appsOnDevice = if (presence.isSavedPhone(phone) || presence.appsFor(phone).isNotEmpty()) {
+                        presence.appsOnDevice
+                    } else emptySet(),
                     otherHolder = otherHolder(t.enrichmentProvenance)
                 ),
                 now
