@@ -34,6 +34,7 @@ class PageSourceTest {
         assertFalse(PageSource.sameDocumentUrl(current, "https://www.cyberbackgroundchecks.com/phone/5045550199?sort=recent"))
         assertFalse(PageSource.sameDocumentUrl(current, "https://www.cyberbackgroundchecks.com/phone/5045550101?sort=oldest"))
         assertFalse(PageSource.sameDocumentUrl(current, null))
+        assertFalse(PageSource.sameDocumentUrl(current, "https://some host/invalid path"))
     }
 
     @Test
