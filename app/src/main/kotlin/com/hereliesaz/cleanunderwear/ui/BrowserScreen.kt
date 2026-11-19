@@ -194,6 +194,9 @@ fun BrowserScreen(
     val mission = missions[currentIndex]
     // The retained WebViewClient must not keep the first mission after the queue advances.
     val currentMission by rememberUpdatedState(mission)
+    // The same WebViewClient survives not only the next mission, but the next contact batch.
+    val callbackMissionKey by rememberUpdatedState("$batchId-$currentIndex")
+    val callbackBatchComplete by rememberUpdatedState(batchComplete)
 
     fun cancel() {
         note("You stopped the run")
@@ -665,8 +668,8 @@ fun BrowserScreen(
                         }
                         webViewClient = object : WebViewClient() {
                             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
-                                val key = "$batchId-$currentIndex"
-                                if (batchComplete || host.loadedKey != key) return
+                                val key = callbackMissionKey
+                                if (callbackBatchComplete || host.loadedKey != key) return
                                 val initial = PageSource.sameDocumentUrl(currentMission.initialUrl, url)
                                 // Only the new lookup's first requested URL may start a navigation
                                 // chain; redirects within that chain (including sign-in hosts) are valid.
@@ -683,8 +686,8 @@ fun BrowserScreen(
                             }
 
                             override fun onPageCommitVisible(view: WebView?, url: String?) {
-                                val key = "$batchId-$currentIndex"
-                                if (!batchComplete && host.loadedKey == key &&
+                                val key = callbackMissionKey
+                                if (!callbackBatchComplete && host.loadedKey == key &&
                                     host.startedKey == key && url != null &&
                                     PageSource.sameDocumentUrl(host.startedUrl.orEmpty(), url)) {
                                     host.committedKey = key
@@ -720,7 +723,10 @@ fun BrowserScreen(
                                 request: WebResourceRequest?,
                                 error: WebResourceError?
                             ) {
-                                if (request?.isForMainFrame == true) {
+                                if (request?.isForMainFrame == true &&
+                                    host.loadedKey == callbackMissionKey &&
+                                    (PageSource.sameDocumentUrl(host.startedUrl.orEmpty(), request.url.toString()) ||
+                                        PageSource.sameDocumentUrl(currentMission.initialUrl, request.url.toString()))) {
                                     mainFrameFailed = true
                                     note(
                                         "The page failed to load: ${shortUrl(request.url.toString())} (${error?.description})",
@@ -749,8 +755,8 @@ fun BrowserScreen(
                             }
 
                             override fun onPageFinished(view: WebView?, url: String?) {
-                                val key = "$batchId-$currentIndex"
-                                if (batchComplete || host.loadedKey != key) return
+                                val key = callbackMissionKey
+                                if (callbackBatchComplete || host.loadedKey != key) return
                                 if (host.startedKey != key || url == null ||
                                     !PageSource.sameDocumentUrl(view?.url.orEmpty(), url)) return
                                 // Remove blank ad slots as well as blocking ad traffic.
