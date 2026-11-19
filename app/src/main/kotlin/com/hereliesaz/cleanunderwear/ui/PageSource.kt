@@ -71,7 +71,7 @@ internal object PageSource {
                 a.host.equals(b.host, ignoreCase = true) &&
                 a.path.trimEnd('/') == b.path.trimEnd('/') &&
                 a.rawQuery == b.rawQuery
-        } catch (e: IllegalArgumentException) { false }
+        } catch (e: Exception) { false }
     }
 
     /** Ignore a loading shell until a person card, detail, no-results page or wall is present. */
