@@ -9,6 +9,13 @@ import org.junit.Test
 class PageSourceTest {
 
     @Test
+    fun readinessAllowsInteractiveDocumentsWithoutWaitingForImagesOrAds() {
+        assertTrue(PageSource.READY_SCRIPT.contains("readyState !== 'loading'"))
+        assertTrue(PageSource.READY_SCRIPT.contains("document.body.innerText.length > 200"))
+        assertFalse(PageSource.READY_SCRIPT.contains("readyState === 'complete'"))
+    }
+
+    @Test
     fun decodesTheJsonStringTheBrowserReturns() {
         assertEquals("<html lang=\"en\">\n<body>café \"quoted\"</body></html>",
             PageSource.decode("\"<html lang=\\\"en\\\">\\n<body>caf\\u00e9 \\\"quoted\\\"</body></html>\""))
