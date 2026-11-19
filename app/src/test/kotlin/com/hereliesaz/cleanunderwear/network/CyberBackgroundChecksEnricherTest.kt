@@ -52,6 +52,22 @@ class CyberBackgroundChecksEnricherTest {
     }
 
     @Test
+    fun partialGivenNameRequiresASurnameBeforeItCanBecomeAContactName() {
+        val withSurname = """
+            <html><body><div class="person-card">
+              <span class="name-given">Jane</span><span class="name-family">Roe</span>
+            </div></body></html>
+        """.trimIndent()
+        assertEquals("Jane Roe", enricher.parseFindings(withSurname)?.name)
+        val givenOnly = """
+            <html><body><div class="person-card">
+              <span class="name-given">Jane</span>
+            </div></body></html>
+        """.trimIndent()
+        assertNull(enricher.parseFindings(givenOnly))
+    }
+
+    @Test
     fun structuredPersonCannotFillACardWithAnAnonymousUnrelatedPhone() {
         val html = """
             <html><head><script type="application/ld+json">[
