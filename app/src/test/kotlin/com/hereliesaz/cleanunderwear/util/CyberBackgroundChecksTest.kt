@@ -141,6 +141,26 @@ class CyberBackgroundChecksTest {
     }
 
     @Test
+    fun address_commaLessStreetCityStateZipKeepsSegments() {
+        assertEquals(
+            "https://www.cyberbackgroundchecks.com/address/123-main-st/new-orleans/la",
+            CyberBackgroundChecks.getAddressSearchUrl("123 Main St New Orleans LA 70130")
+        )
+    }
+
+    @Test
+    fun address_territoriesKeepRegion() {
+        assertEquals(
+            "https://www.cyberbackgroundchecks.com/address/hagatna/gu",
+            CyberBackgroundChecks.getAddressSearchUrl("Hagatna, GU")
+        )
+        assertEquals(
+            "https://www.cyberbackgroundchecks.com/address/123-main-st/pago-pago/as",
+            CyberBackgroundChecks.getAddressSearchUrl("123 Main St Pago Pago AS 96799")
+        )
+    }
+
+    @Test
     fun address_empty_fallsBackToBasePath() {
         assertEquals(
             "https://www.cyberbackgroundchecks.com/address",
