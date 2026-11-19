@@ -17,6 +17,14 @@ class PageSourceTest {
         assertTrue(PageSource.looksCbcContent("<h1>No Results Found</h1>", detail = false))
         assertTrue(PageSource.looksCbcContent("<h1 class=\"full-name\">Jane Roe</h1>", detail = true))
         assertFalse(PageSource.looksCbcContent(shell, detail = true))
+        val jsonLd = """<html><head><script type="application/ld+json">
+            {"@type":"Person","name":"Jane Roe","telephone":"2125550100"}
+            </script></head><body><p>Results are listed in structured data</p></body></html>"""
+        assertTrue(PageSource.looksCbcContent(jsonLd, detail = false))
+        val microdata = """<html><body><div itemscope itemtype="https://schema.org/Person">
+            <span itemprop="name">Jane Roe</span>
+            </div></body></html>"""
+        assertTrue(PageSource.looksCbcContent(microdata, detail = false))
     }
 
     @Test

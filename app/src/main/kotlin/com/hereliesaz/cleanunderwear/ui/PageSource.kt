@@ -87,7 +87,10 @@ internal object PageSource {
                 ".card-person .name, .card-person h2, .card-person .name-given, " +
                 "[data-result-card] .name, [data-result-card] h2, .card-hover .name-given"
         }
-        return doc.selectFirst(selectors) != null ||
-            BotWall.saysNoResults(html) || BotWall.suspected(html)
+        if (doc.selectFirst(selectors) != null || BotWall.saysNoResults(html) || BotWall.suspected(html)) return true
+        // CBC also publishes records as JSON-LD and schema.org microdata. Use the
+        // actual parser rather than guessing which CSS classes must exist.
+        return com.hereliesaz.cleanunderwear.network.CyberBackgroundChecksEnricher()
+            .parsePeople(html).isNotEmpty()
     }
 }

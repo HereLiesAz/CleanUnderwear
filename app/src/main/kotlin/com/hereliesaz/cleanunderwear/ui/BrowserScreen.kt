@@ -192,6 +192,8 @@ fun BrowserScreen(
     var webView: WebView? by remember { mutableStateOf(null) }
 
     val mission = missions[currentIndex]
+    // The retained WebViewClient must not keep the first mission after the queue advances.
+    val currentMission by rememberUpdatedState(mission)
 
     fun cancel() {
         note("You stopped the run")
@@ -254,6 +256,8 @@ fun BrowserScreen(
             activeView.stopLoading()
             host.loadedKey = missionKey
             host.committedKey = null
+            host.startedKey = null
+            host.startedUrl = null
             activeView.loadUrl(mission.initialUrl)
             note("Opening ${shortUrl(mission.initialUrl)} (search ${currentIndex + 1} of ${missions.size}: ${mission.label})")
         }
@@ -663,8 +667,12 @@ fun BrowserScreen(
                             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                                 val key = "$batchId-$currentIndex"
                                 if (batchComplete || host.loadedKey != key) return
-                                if (!PageSource.sameDocumentUrl(mission.initialUrl, url) &&
-                                    (host.committedKey != key || view?.url != url)) return
+                                val initial = PageSource.sameDocumentUrl(currentMission.initialUrl, url)
+                                // Only the new lookup's first requested URL may start a navigation
+                                // chain; redirects within that chain (including sign-in hosts) are valid.
+                                if (!initial && host.startedKey != key) return
+                                host.startedKey = key
+                                host.startedUrl = url
                                 extractionGate.invalidate()
                                 pageReady = false
                                 navStarted = true
@@ -677,7 +685,8 @@ fun BrowserScreen(
                             override fun onPageCommitVisible(view: WebView?, url: String?) {
                                 val key = "$batchId-$currentIndex"
                                 if (!batchComplete && host.loadedKey == key &&
-                                    PageSource.sameDocumentUrl(mission.initialUrl, url)) {
+                                    host.startedKey == key && url != null &&
+                                    PageSource.sameDocumentUrl(host.startedUrl.orEmpty(), url)) {
                                     host.committedKey = key
                                     mainFrameCommitted = true
                                 }
@@ -742,8 +751,8 @@ fun BrowserScreen(
                             override fun onPageFinished(view: WebView?, url: String?) {
                                 val key = "$batchId-$currentIndex"
                                 if (batchComplete || host.loadedKey != key) return
-                                if (!PageSource.sameDocumentUrl(mission.initialUrl, url) &&
-                                    (host.committedKey != key || view?.url != url)) return
+                                if (host.startedKey != key || url == null ||
+                                    !PageSource.sameDocumentUrl(view?.url.orEmpty(), url)) return
                                 // Remove blank ad slots as well as blocking ad traffic.
                                 // Conservative selectors avoid hiding page content,
                                 // contact details, authentication or CAPTCHA controls.
@@ -1037,6 +1046,9 @@ private class BrowserHost {
 
     /** The mission ("batch-index") whose URL [view] was last told to load. */
     var loadedKey: String? = null
+    /** Main navigation chain and most recent redirect, retained through rotation. */
+    var startedKey: String? = null
+    var startedUrl: String? = null
     /** Mission whose own main document has committed, persisted through rotation. */
     var committedKey: String? = null
 }
