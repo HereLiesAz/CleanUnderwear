@@ -133,9 +133,9 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
         val cardName = name?.let { naturalOrder(it) }
         val people = structuredPeople(doc)
         val structured = if (cardName != null) {
-            people.firstOrNull { it.name == null || nameConsistent(NameValidator.tokenize(cardName), it.name) }
+            people.firstOrNull { it.name != null && nameConsistent(NameValidator.tokenize(cardName), it.name) }
         } else {
-            people.firstOrNull()
+            people.singleOrNull()
         }
         // "Last, First" is written back to the contact and split for the middle name, so store it
         // in natural order.
