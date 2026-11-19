@@ -1153,11 +1153,7 @@ private suspend fun describePage(webView: android.webkit.WebView?): PageSource.D
     }
 }
 
-/**
- * Gives a committed document time to draw text without waiting for images, ads or load events.
- * Returns after a bounded number of polls; the watchdog handles truly unresponsive pages.
- */
-/** Runs [script] in the page and says whether it answered `true`; false if it didn't answer. */
+/** Runs a single readiness probe in the current main document. */
 private suspend fun evaluateBoolean(webView: android.webkit.WebView, script: String): Boolean =
     kotlinx.coroutines.suspendCancellableCoroutine { cont ->
         webView.evaluateJavascript(script) { result -> if (cont.isActive) cont.resumeWith(Result.success(result == "true")) }
