@@ -318,7 +318,8 @@ fun BrowserScreen(
         view.evaluateJavascript(PageSource.READ_SCRIPT) { raw ->
             if (batchComplete || !extractionGate.accept(token, key)) return@evaluateJavascript
             val html = PageSource.decode(raw)
-            if (!force && !PageSource.looksDrawn(html)) {
+            if (!force && !PageSource.looksDrawn(html) &&
+                !(mission.readsPageDirectly && PageSource.looksCbcContent(html, detail = mission is BrowserMission.CbcDetail))) {
                 note("Nothing is drawn on the page yet: ${html?.length ?: 0} characters of source, and ${PageSource.MIN_READABLE_CHARS} are needed", DiagnosticLogger.LogEntry.LogLevel.WARN)
                 unreadable()
             } else if (!force && mission.readsPageDirectly &&
