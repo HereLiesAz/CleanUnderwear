@@ -9,10 +9,23 @@ import org.junit.Test
 class PageSourceTest {
 
     @Test
-    fun readinessAllowsInteractiveDocumentsWithoutWaitingForImagesOrAds() {
-        assertTrue(PageSource.READY_SCRIPT.contains("readyState !== 'loading'"))
-        assertTrue(PageSource.READY_SCRIPT.contains("document.body.innerText.length > 200"))
-        assertFalse(PageSource.READY_SCRIPT.contains("readyState === 'complete'"))
+    fun resultsAreRequiredBeforeTheLookupAdvances() {
+        val shell = "<html><body><nav>" + "Loading search ".repeat(90) + "</nav></body></html>"
+        assertFalse(PageSource.looksCbcContent(shell, detail = false))
+        val results = shell.replace("</body>", "<div class=\"person-card\"><h2>Jane Roe</h2></div></body>")
+        assertTrue(PageSource.looksCbcContent(results, detail = false))
+        assertTrue(PageSource.looksCbcContent("<h1>No Results Found</h1>", detail = false))
+        assertTrue(PageSource.looksCbcContent("<h1 class=\"full-name\">Jane Roe</h1>", detail = true))
+        assertFalse(PageSource.looksCbcContent(shell, detail = true))
+    }
+
+    @Test
+    fun matchingTheMainDocumentRejectsPreviousContactsAndQueries() {
+        val current = "https://www.cyberbackgroundchecks.com/phone/5045550101?sort=recent"
+        assertTrue(PageSource.sameDocumentUrl(current, current + "#people"))
+        assertFalse(PageSource.sameDocumentUrl(current, "https://www.cyberbackgroundchecks.com/phone/5045550199?sort=recent"))
+        assertFalse(PageSource.sameDocumentUrl(current, "https://www.cyberbackgroundchecks.com/phone/5045550101?sort=oldest"))
+        assertFalse(PageSource.sameDocumentUrl(current, null))
     }
 
     @Test
