@@ -107,9 +107,17 @@ class CyberBackgroundChecksEnricher @Inject constructor() {
         // headers are page chrome — capturing them would falsely rename the
         // contact, and because CBC lookups are unique-id the bad name can pass
         // verify-before-merge. So restrict the generic fallback to non-body root.
-        val name = (root.selectFirst(NAME_SELECTORS)
-            ?: if (root !== doc.body()) root.selectFirst("h1, h2, h3") else null)
-            ?.text()?.trim()?.takeIf { it.isNotBlank() }
+        val nameElement = root.selectFirst(NAME_SELECTORS)
+            ?: if (root !== doc.body()) root.selectFirst("h1, h2, h3") else null
+        val textName = nameElement?.text()?.trim()?.takeIf { it.isNotBlank() }
+        // CBC sometimes uses .name-given for just the first name and renders the
+        // family name separately. Do not treat "Jane" as the full name "Jane Roe".
+        val name = if (nameElement?.hasClass("name-given") == true &&
+            textName != null && NameValidator.tokenize(textName).size < 2) {
+            val family = root.selectFirst(".name-family, .family-name, .name-last, [itemprop=familyName]")
+                ?.text()?.trim()?.takeIf { it.isNotBlank() }
+            family?.let { "$textName $it" }
+        } else textName
 
         val address = (root.selectFirst("a.address") ?: root.selectFirst(ADDRESS_SELECTORS))
             ?.text()?.let(::cleanAddress)?.takeIf { it.isNotBlank() }
