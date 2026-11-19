@@ -244,16 +244,17 @@ fun BrowserScreen(
             // it up where it is rather than reloading it over a half-finished sign-in or CAPTCHA.
             // If it is still loading, onPageFinished takes it from here.
             navStarted = true
-            mainFrameCommitted = true
-            if (activeView.progress >= 100) {
+            mainFrameCommitted = host.committedKey == missionKey
+            if (mainFrameCommitted && activeView.progress >= 100) {
                 pageReady = true
                 pageLoadCount = 1
             }
             note("Picked the page up again after the screen turned (search ${currentIndex + 1} of ${missions.size})")
         } else {
             activeView.stopLoading()
-            activeView.loadUrl(mission.initialUrl)
             host.loadedKey = missionKey
+            host.committedKey = null
+            activeView.loadUrl(mission.initialUrl)
             note("Opening ${shortUrl(mission.initialUrl)} (search ${currentIndex + 1} of ${missions.size}: ${mission.label})")
         }
     }
@@ -319,6 +320,10 @@ fun BrowserScreen(
             val html = PageSource.decode(raw)
             if (!force && !PageSource.looksDrawn(html)) {
                 note("Nothing is drawn on the page yet: ${html?.length ?: 0} characters of source, and ${PageSource.MIN_READABLE_CHARS} are needed", DiagnosticLogger.LogEntry.LogLevel.WARN)
+                unreadable()
+            } else if (!force && mission.readsPageDirectly &&
+                !PageSource.looksCbcContent(html, detail = mission is BrowserMission.CbcDetail)) {
+                note("CBC results have not appeared yet; checking the page again")
                 unreadable()
             } else {
                 paused = false
@@ -655,7 +660,10 @@ fun BrowserScreen(
                         }
                         webViewClient = object : WebViewClient() {
                             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
-                                if (batchComplete) return
+                                val key = "$batchId-$currentIndex"
+                                if (batchComplete || host.loadedKey != key) return
+                                if (!PageSource.sameDocumentUrl(mission.initialUrl, url) &&
+                                    (host.committedKey != key || view?.url != url)) return
                                 extractionGate.invalidate()
                                 pageReady = false
                                 navStarted = true
@@ -666,7 +674,12 @@ fun BrowserScreen(
                             }
 
                             override fun onPageCommitVisible(view: WebView?, url: String?) {
-                                if (!batchComplete) mainFrameCommitted = true
+                                val key = "$batchId-$currentIndex"
+                                if (!batchComplete && host.loadedKey == key &&
+                                    PageSource.sameDocumentUrl(mission.initialUrl, url)) {
+                                    host.committedKey = key
+                                    mainFrameCommitted = true
+                                }
                             }
 
                             override fun onReceivedHttpError(
@@ -726,7 +739,10 @@ fun BrowserScreen(
                             }
 
                             override fun onPageFinished(view: WebView?, url: String?) {
-                                if (batchComplete) return
+                                val key = "$batchId-$currentIndex"
+                                if (batchComplete || host.loadedKey != key) return
+                                if (!PageSource.sameDocumentUrl(mission.initialUrl, url) &&
+                                    (host.committedKey != key || view?.url != url)) return
                                 // Remove blank ad slots as well as blocking ad traffic.
                                 // Conservative selectors avoid hiding page content,
                                 // contact details, authentication or CAPTCHA controls.
@@ -1020,6 +1036,8 @@ private class BrowserHost {
 
     /** The mission ("batch-index") whose URL [view] was last told to load. */
     var loadedKey: String? = null
+    /** Mission whose own main document has committed, persisted through rotation. */
+    var committedKey: String? = null
 }
 
 /**
@@ -1144,6 +1162,7 @@ private suspend fun evaluateBoolean(webView: android.webkit.WebView, script: Str
         webView.evaluateJavascript(script) { result -> if (cont.isActive) cont.resumeWith(Result.success(result == "true")) }
     }
 
+/** Polls briefly for content without waiting for images or complete load events. */
 private suspend fun awaitRenderedContent(webView: android.webkit.WebView?) {
     delay(350L)
     repeat(10) {
