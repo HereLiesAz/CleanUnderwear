@@ -76,7 +76,7 @@ object CyberBackgroundChecks {
             "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH",
             "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI",
             "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI",
-            "WY", "PR"
+            "WY", "PR", "AS", "GU", "MP", "VI"
         )
         fun isState(w: String) = w.uppercase() in stateCodes
 
@@ -93,9 +93,15 @@ object CyberBackgroundChecks {
 
         // Peel a trailing 2-letter STATE the same way.
         var state = ""
-        // A single component starting with a house number is a street-only
-        // address, even when its suffix ("Ct", "Hi", "In") matches a state code.
-        val streetOnly = parts.size == 1 && parts[0].firstOrNull()?.isDigit() == true
+        // A comma-less address can be a lone street ("123 Oak Ct") or a full
+        // street, city and state. Require a street suffix followed by city words.
+        val streetSuffixes = setOf("st", "street", "rd", "road", "ave", "avenue", "blvd",
+            "boulevard", "dr", "drive", "ln", "lane", "ct", "court", "pl", "place", "way", "pkwy", "parkway")
+        val singleNumeric = parts.size == 1 && parts[0].firstOrNull()?.isDigit() == true
+        val words = if (singleNumeric) parts[0].split(Regex("\\s+")) else emptyList()
+        val suffixIndex = words.dropLast(1).indexOfFirst { it.trimEnd('.').lowercase() in streetSuffixes }
+        val hasCityAndState = suffixIndex >= 2 && suffixIndex < words.lastIndex - 1 && isState(words.last())
+        val streetOnly = singleNumeric && !hasCityAndState
         if (parts.isNotEmpty() && !streetOnly) {
             val words = parts.last().split(Regex("\\s+")).filter { it.isNotBlank() }
             when {
@@ -110,6 +116,11 @@ object CyberBackgroundChecks {
             }
         }
         parts.removeAll { it.isBlank() }
+        if (hasCityAndState && state.isNotEmpty() && parts.size == 1) {
+            val remainder = parts[0].split(Regex("\\s+"))
+            parts[0] = remainder.take(suffixIndex + 1).joinToString(" ")
+            parts += remainder.drop(suffixIndex + 1).joinToString(" ")
+        }
 
         // What survives is street (optional) + city. A leading numeric token
         // marks a street; otherwise the lone remaining part is the city.

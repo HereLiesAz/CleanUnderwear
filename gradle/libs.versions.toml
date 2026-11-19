@@ -21,7 +21,7 @@ mockk = "1.14.11"
 robolectric = "4.16"
 androidxTestCore = "1.6.1"
 hiltWork = "1.3.0"
-aznavrail = "11.57"
+aznavrail = "12.4"
 paging = "3.5.0"
 
 [libraries]

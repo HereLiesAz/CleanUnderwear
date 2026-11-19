@@ -22,6 +22,18 @@ class MessagingPresenceTest {
         assertEquals(setOf("WhatsApp", "Signal"), p.appsFor("504-555-0101"))
         assertTrue(p.appsFor("504-555-0202").isEmpty())
         assertEquals(setOf("WhatsApp", "Signal"), p.appsOnDevice)
+        assertTrue(!p.isSavedPhone("504-555-0202"))
+    }
+
+    @Test
+    fun unsavedNumbersHaveNoNegativeRegistrationEvidence() {
+        val presence = MessagingPresence.Builder().apply {
+            add("com.whatsapp", "5045550101")
+            addSavedPhone("504-555-0101")
+        }.build()
+        assertTrue(presence.isSavedPhone("+1 504 555 0101"))
+        assertTrue(!presence.isSavedPhone("504-555-9999"))
+        assertTrue(presence.appsFor("504-555-9999").isEmpty())
     }
 
     private fun merge(survivorApps: Set<String>, absorbedApps: Set<String>) = SuspectDetector.assessMerge(

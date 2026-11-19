@@ -9,6 +9,35 @@ import org.junit.Test
 class PageSourceTest {
 
     @Test
+    fun resultsAreRequiredBeforeTheLookupAdvances() {
+        val shell = "<html><body><nav>" + "Loading search ".repeat(90) + "</nav></body></html>"
+        assertFalse(PageSource.looksCbcContent(shell, detail = false))
+        val results = shell.replace("</body>", "<div class=\"person-card\"><h2>Jane Roe</h2></div></body>")
+        assertTrue(PageSource.looksCbcContent(results, detail = false))
+        assertTrue(PageSource.looksCbcContent("<h1>No Results Found</h1>", detail = false))
+        assertTrue(PageSource.looksCbcContent("<h1 class=\"full-name\">Jane Roe</h1>", detail = true))
+        assertFalse(PageSource.looksCbcContent(shell, detail = true))
+        val jsonLd = """<html><head><script type="application/ld+json">
+            {"@type":"Person","name":"Jane Roe","telephone":"2125550100"}
+            </script></head><body><p>Results are listed in structured data</p></body></html>"""
+        assertTrue(PageSource.looksCbcContent(jsonLd, detail = false))
+        val microdata = """<html><body><div itemscope itemtype="https://schema.org/Person">
+            <span itemprop="name">Jane Roe</span>
+            </div></body></html>"""
+        assertTrue(PageSource.looksCbcContent(microdata, detail = false))
+    }
+
+    @Test
+    fun matchingTheMainDocumentRejectsPreviousContactsAndQueries() {
+        val current = "https://www.cyberbackgroundchecks.com/phone/5045550101?sort=recent"
+        assertTrue(PageSource.sameDocumentUrl(current, current + "#people"))
+        assertFalse(PageSource.sameDocumentUrl(current, "https://www.cyberbackgroundchecks.com/phone/5045550199?sort=recent"))
+        assertFalse(PageSource.sameDocumentUrl(current, "https://www.cyberbackgroundchecks.com/phone/5045550101?sort=oldest"))
+        assertFalse(PageSource.sameDocumentUrl(current, null))
+        assertFalse(PageSource.sameDocumentUrl(current, "https://some host/invalid path"))
+    }
+
+    @Test
     fun decodesTheJsonStringTheBrowserReturns() {
         assertEquals("<html lang=\"en\">\n<body>café \"quoted\"</body></html>",
             PageSource.decode("\"<html lang=\\\"en\\\">\\n<body>caf\\u00e9 \\\"quoted\\\"</body></html>\""))

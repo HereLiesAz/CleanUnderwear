@@ -35,7 +35,7 @@ Plain words for the person, not the system: "Checked daily", "Possible obituary"
 A verdict or a removal the user can reasonably regret is not final. "Not them" and Archive show a snackbar with **Undo**; "Show dismissed" on a contact's screen forgets every dismissed record (and offers Undo too); a confirmed death or custody has "This was a mistake"; "None of these is X" and "Sign out of sites" ask first. Delete everything has its own confirmation and can't be undone.
 
 ## Navigation
-AzNavRail **11.57**. The active destination uses `primary`; focus and highlight use `onSurfaceVariant`, so the rail stays inside the monochrome palette.
+AzNavRail **12.4**. The active destination uses `primary`; focus and highlight use `onSurfaceVariant`, so the rail stays inside the monochrome palette.
 
 ## Launcher icon
 The manifest uses `@mipmap/ic_launcher` and `@mipmap/ic_launcher_round`: adaptive icons with a white `@color/ic_launcher_background` plate, the black vector foreground, and a monochrome layer for themed icons. The black-and-white artwork is unchanged.
@@ -44,7 +44,7 @@ The manifest uses `@mipmap/ic_launcher` and `@mipmap/ic_launcher_round`: adaptiv
 The app draws edge to edge. Scaffold screens take `screenInsets()` (bars and cut-out); the contact list pads for the status bar and the cut-out itself. Content is capped at 640 dp wide and centred (`contentWidth()`), so a tablet or a phone on its side does not stretch lines across the screen. Dialog bodies scroll. The activity log panel is a third of the screen's height, within 140 to 280 dp.
 
 ## Accessibility
-- Touch targets at least 48 dp: `AppAction` and `AppTextAction` enforce it with `minimumInteractiveComponentSize`; Material chips, icon buttons and list items already meet it. The AzNavRail components in Settings (the `AzToggle` and `AzRoller`) draw their own size, which this app can't change.
+- Touch targets at least 48 dp: `AppAction` and `AppTextAction` enforce it with `minimumInteractiveComponentSize`; Material chips, icon buttons and list items already meet it. The Settings `AzToggle` renders at 56 dp instead of the library's fixed 72 dp by locally scaling density; the entire settings row is still the interactive switch. `AzRoller` retains its library size.
 - A settings switch is one control: the row is the toggle, and TalkBack reads its title, caption and state together. A radio card (`Who is it?`) is `selectable`, so its selected state is announced. A status badge is announced once ("Status: Checked daily").
 - Icons that carry meaning have a `contentDescription`; `null` only where a label beside the icon already says it.
 - Long-press actions carry an `onLongClickLabel` for TalkBack.

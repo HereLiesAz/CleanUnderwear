@@ -15,6 +15,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -210,12 +212,20 @@ private fun SettingToggle(title: String, caption: String, checked: Boolean, onCh
     ) {
         Column(modifier = Modifier.weight(1f)) { SettingLabel(title, caption) }
         Box(Modifier.clearAndSetSemantics { }) {
-            AzToggle(
-                isChecked = checked,
-                onToggle = onChange,
-                toggleOnText = stringResource(R.string.on),
-                toggleOffText = stringResource(R.string.off)
-            )
+            // The standalone AzToggle is fixed at 72 dp and ignores its modifier in 12.4.
+            // Restrict the density change to this control for a 56 dp circle; the whole row
+            // remains the touch target and the single accessibility switch.
+            val density = LocalDensity.current
+            CompositionLocalProvider(
+                LocalDensity provides Density(density.density * (56f / 72f), density.fontScale)
+            ) {
+                AzToggle(
+                    isChecked = checked,
+                    onToggle = onChange,
+                    toggleOnText = stringResource(R.string.on),
+                    toggleOffText = stringResource(R.string.off)
+                )
+            }
         }
     }
 }

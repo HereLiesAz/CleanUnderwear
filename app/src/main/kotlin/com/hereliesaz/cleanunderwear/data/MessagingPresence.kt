@@ -25,9 +25,14 @@ import javax.inject.Singleton
  */
 class MessagingPresence(
     private val byPhone: Map<String, Set<String>>,
-    val appsOnDevice: Set<String>
+    val appsOnDevice: Set<String>,
+    private val savedPhones: Set<String> = emptySet()
 ) {
     val available: Boolean get() = appsOnDevice.isNotEmpty()
+
+    /** Absence is meaningful only for numbers found in the phonebook. */
+    fun isSavedPhone(phone: String?): Boolean =
+        StringSimilarity.normalizePhone(phone)?.let { it in savedPhones } == true
 
     /** Messaging apps this number is registered with, by display name; empty when none. */
     fun appsFor(phone: String?): Set<String> =
@@ -36,6 +41,11 @@ class MessagingPresence(
     class Builder {
         private val byPhone = HashMap<String, MutableSet<String>>()
         private val apps = HashSet<String>()
+        private val savedPhones = HashSet<String>()
+
+        fun addSavedPhone(raw: String?) {
+            StringSimilarity.normalizePhone(raw)?.let { savedPhones += it }
+        }
 
         /** [raw] is any text holding the number: a phone row, or a WhatsApp JID like "1504…@s.whatsapp.net". */
         fun add(accountType: String?, raw: String?) {
@@ -46,7 +56,7 @@ class MessagingPresence(
             byPhone.getOrPut(key) { mutableSetOf() } += app
         }
 
-        fun build() = MessagingPresence(byPhone, apps)
+        fun build() = MessagingPresence(byPhone, apps, savedPhones)
     }
 
     companion object {
@@ -74,6 +84,20 @@ class DeviceMessagingPresence @Inject constructor(
 
     override suspend fun load(): MessagingPresence = withContext(Dispatchers.IO) {
         val builder = MessagingPresence.Builder()
+        // The registry also includes manually entered numbers. Only phonebook rows allow
+        // a missing messaging-app entry to count as evidence against registration.
+        try {
+            context.contentResolver.query(
+                ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                arrayOf(ContactsContract.CommonDataKinds.Phone.NUMBER),
+                null, null, null
+            )?.use { cursor ->
+                val idx = cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                while (cursor.moveToNext()) builder.addSavedPhone(cursor.getString(idx))
+            }
+        } catch (e: Exception) {
+            DiagnosticLogger.log("System phone scan failed: ${e.javaClass.simpleName}")
+        }
         val types = MessagingPresence.ACCOUNT_TYPES.keys.toList()
         val selection = "${ContactsContract.RawContacts.ACCOUNT_TYPE} IN (${types.joinToString(",") { "?" }})"
         try {

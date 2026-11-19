@@ -173,6 +173,8 @@ fun BrowserScreen(
     // How often a dump has turned out to be a sign-in page; past a few, stop bouncing and pause.
     var signInBounces by remember { mutableIntStateOf(0) }
     var mainFrameFailed by remember { mutableStateOf(false) }
+    // Guard early extraction against JavaScript still reading the previous main document.
+    var mainFrameCommitted by remember { mutableStateOf(false) }
     // How many of the page's own script errors this load has put in the log (a few are enough).
     var consoleErrors by remember { mutableIntStateOf(0) }
     // This mission's own load has begun (onPageStarted): until then the page in the browser is the
@@ -190,6 +192,11 @@ fun BrowserScreen(
     var webView: WebView? by remember { mutableStateOf(null) }
 
     val mission = missions[currentIndex]
+    // The retained WebViewClient must not keep the first mission after the queue advances.
+    val currentMission by rememberUpdatedState(mission)
+    // The same WebViewClient survives not only the next mission, but the next contact batch.
+    val callbackMissionKey by rememberUpdatedState("$batchId-$currentIndex")
+    val callbackBatchComplete by rememberUpdatedState(batchComplete)
 
     fun cancel() {
         note("You stopped the run")
@@ -234,6 +241,7 @@ fun BrowserScreen(
         needsSignIn = false
         signInBounces = 0
         mainFrameFailed = false
+        mainFrameCommitted = false
         navStarted = false
         pageLoadCount = 0
         if (host.loadedKey == missionKey && !activeView.url.isNullOrEmpty()) {
@@ -241,15 +249,19 @@ fun BrowserScreen(
             // it up where it is rather than reloading it over a half-finished sign-in or CAPTCHA.
             // If it is still loading, onPageFinished takes it from here.
             navStarted = true
-            if (activeView.progress >= 100) {
+            mainFrameCommitted = host.committedKey == missionKey
+            if (mainFrameCommitted && activeView.progress >= 100) {
                 pageReady = true
                 pageLoadCount = 1
             }
             note("Picked the page up again after the screen turned (search ${currentIndex + 1} of ${missions.size})")
         } else {
             activeView.stopLoading()
-            activeView.loadUrl(mission.initialUrl)
             host.loadedKey = missionKey
+            host.committedKey = null
+            host.startedKey = null
+            host.startedUrl = null
+            activeView.loadUrl(mission.initialUrl)
             note("Opening ${shortUrl(mission.initialUrl)} (search ${currentIndex + 1} of ${missions.size}: ${mission.label})")
         }
     }
@@ -313,8 +325,13 @@ fun BrowserScreen(
         view.evaluateJavascript(PageSource.READ_SCRIPT) { raw ->
             if (batchComplete || !extractionGate.accept(token, key)) return@evaluateJavascript
             val html = PageSource.decode(raw)
-            if (!force && !PageSource.looksDrawn(html)) {
+            if (!force && !PageSource.looksDrawn(html) &&
+                !(mission.readsPageDirectly && PageSource.looksCbcContent(html, detail = mission is BrowserMission.CbcDetail))) {
                 note("Nothing is drawn on the page yet: ${html?.length ?: 0} characters of source, and ${PageSource.MIN_READABLE_CHARS} are needed", DiagnosticLogger.LogEntry.LogLevel.WARN)
+                unreadable()
+            } else if (!force && mission.readsPageDirectly &&
+                !PageSource.looksCbcContent(html, detail = mission is BrowserMission.CbcDetail)) {
+                note("CBC results have not appeared yet; checking the page again")
                 unreadable()
             } else {
                 paused = false
@@ -382,16 +399,15 @@ fun BrowserScreen(
         }
     }
 
-    // A page's "finished" event can be a long time coming: ads and trackers keep a lookup page
-    // loading well after it has drawn what it will show. Once this mission's own load is well under
-    // way and the document has text on it, the page is taken as ready, as it would be on finishing.
-    LaunchedEffect(batchId, currentIndex, pageReady, paused, needsSignIn, navStarted) {
-        if (pageReady || paused || needsSignIn || batchComplete || !navStarted) return@LaunchedEffect
+    // Ads and images can keep a lookup's load event and progress bar pending long after the
+    // new main document is usable. Wait for its commit and readable DOM, not subresources.
+    LaunchedEffect(batchId, currentIndex, pageReady, paused, needsSignIn, navStarted, mainFrameCommitted) {
+        if (pageReady || paused || needsSignIn || batchComplete || !navStarted || !mainFrameCommitted) return@LaunchedEffect
         if (!mission.autoExtract || !mission.readsPageDirectly) return@LaunchedEffect
         while (true) {
             delay(READY_POLL_MS)
             val view = webView ?: continue
-            if (mainFrameFailed || view.progress < READY_PROGRESS) continue
+            if (mainFrameFailed) continue
             if (evaluateBoolean(view, PageSource.READY_SCRIPT)) {
                 note("The page has drawn before its load finished (${view.progress}% loaded); reading it now")
                 pageReady = true
@@ -652,13 +668,31 @@ fun BrowserScreen(
                         }
                         webViewClient = object : WebViewClient() {
                             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
-                                if (batchComplete) return
+                                val key = callbackMissionKey
+                                if (callbackBatchComplete || host.loadedKey != key) return
+                                val initial = PageSource.sameDocumentUrl(currentMission.initialUrl, url)
+                                // Only the new lookup's first requested URL may start a navigation
+                                // chain; redirects within that chain (including sign-in hosts) are valid.
+                                if (!initial && host.startedKey != key) return
+                                host.startedKey = key
+                                host.startedUrl = url
                                 extractionGate.invalidate()
                                 pageReady = false
                                 navStarted = true
+                                mainFrameCommitted = false
                                 mainFrameFailed = false
                                 consoleErrors = 0
                                 note("Loading ${shortUrl(url)}")
+                            }
+
+                            override fun onPageCommitVisible(view: WebView?, url: String?) {
+                                val key = callbackMissionKey
+                                if (!callbackBatchComplete && host.loadedKey == key &&
+                                    host.startedKey == key && url != null &&
+                                    PageSource.sameDocumentUrl(host.startedUrl.orEmpty(), url)) {
+                                    host.committedKey = key
+                                    mainFrameCommitted = true
+                                }
                             }
 
                             override fun onReceivedHttpError(
@@ -689,7 +723,10 @@ fun BrowserScreen(
                                 request: WebResourceRequest?,
                                 error: WebResourceError?
                             ) {
-                                if (request?.isForMainFrame == true) {
+                                if (request?.isForMainFrame == true &&
+                                    host.loadedKey == callbackMissionKey &&
+                                    (PageSource.sameDocumentUrl(host.startedUrl.orEmpty(), request.url.toString()) ||
+                                        PageSource.sameDocumentUrl(currentMission.initialUrl, request.url.toString()))) {
                                     mainFrameFailed = true
                                     note(
                                         "The page failed to load: ${shortUrl(request.url.toString())} (${error?.description})",
@@ -718,7 +755,10 @@ fun BrowserScreen(
                             }
 
                             override fun onPageFinished(view: WebView?, url: String?) {
-                                if (batchComplete) return
+                                val key = callbackMissionKey
+                                if (callbackBatchComplete || host.loadedKey != key) return
+                                if (host.startedKey != key || url == null ||
+                                    !PageSource.sameDocumentUrl(view?.url.orEmpty(), url)) return
                                 // Remove blank ad slots as well as blocking ad traffic.
                                 // Conservative selectors avoid hiding page content,
                                 // contact details, authentication or CAPTCHA controls.
@@ -1012,6 +1052,11 @@ private class BrowserHost {
 
     /** The mission ("batch-index") whose URL [view] was last told to load. */
     var loadedKey: String? = null
+    /** Main navigation chain and most recent redirect, retained through rotation. */
+    var startedKey: String? = null
+    var startedUrl: String? = null
+    /** Mission whose own main document has committed, persisted through rotation. */
+    var committedKey: String? = null
 }
 
 /**
@@ -1084,10 +1129,7 @@ private const val MAX_BLANK_REPORTS = 3
 private const val MAX_CONSOLE_ERRORS = 8
 
 /** How often a lookup page is checked for having drawn, while its load event is awaited. */
-private const val READY_POLL_MS = 1_000L
-
-/** How far (percent) a page's own load must be before its content is trusted to be this page's. */
-private const val READY_PROGRESS = 70
+private const val READY_POLL_MS = 400L
 
 /** A paused lookup in a run is skipped after this long without a touch on the page... */
 private const val PAUSED_AUTO_SKIP_MS = 20_000L
@@ -1129,25 +1171,21 @@ private suspend fun describePage(webView: android.webkit.WebView?): PageSource.D
     }
 }
 
-/**
- * Suspends until [webView]'s page has finished loading and holds some text, polling every
- * 400 ms, for at most about six seconds; then returns either way (the extraction script and
- * the parser cope with a thin page, and the watchdog covers a dead one).
- */
-/** Runs [script] in the page and says whether it answered `true`; false if it didn't answer. */
+/** Runs a single readiness probe in the current main document. */
 private suspend fun evaluateBoolean(webView: android.webkit.WebView, script: String): Boolean =
     kotlinx.coroutines.suspendCancellableCoroutine { cont ->
         webView.evaluateJavascript(script) { result -> if (cont.isActive) cont.resumeWith(Result.success(result == "true")) }
     }
 
+/** Polls briefly for content without waiting for images or complete load events. */
 private suspend fun awaitRenderedContent(webView: android.webkit.WebView?) {
-    delay(600L)
-    repeat(14) {
+    delay(350L)
+    repeat(10) {
         val ready = webView?.let { wv ->
             kotlinx.coroutines.suspendCancellableCoroutine<Boolean> { cont ->
-                wv.evaluateJavascript(
-                    "(document.readyState === 'complete' && document.body && document.body.innerText.length > 200)"
-                ) { result -> if (cont.isActive) cont.resumeWith(Result.success(result == "true")) }
+                wv.evaluateJavascript(PageSource.READY_SCRIPT) { result ->
+                    if (cont.isActive) cont.resumeWith(Result.success(result == "true"))
+                }
             }
         } ?: return
         if (ready) return

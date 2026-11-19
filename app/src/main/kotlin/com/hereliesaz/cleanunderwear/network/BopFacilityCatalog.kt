@@ -151,14 +151,14 @@ object BopFacilityCatalog {
      */
     fun stateFor(faclCode: String?, faclName: String?): String? {
         // 1. Stable facility code — format-invariant, most reliable.
-        faclCode?.trim()?.uppercase()?.takeIf { it.isNotBlank() }?.let { code ->
+        faclCode?.trim()?.uppercase(java.util.Locale.ROOT)?.takeIf { it.isNotBlank() }?.let { code ->
             codeToState[code]?.let { return it }
         }
 
         // Normalize the display name: uppercase, every non-alphanumeric run to a
         // single space, trimmed. Makes matching punctuation- and order-agnostic.
         val norm = faclName
-            ?.uppercase()
+            ?.uppercase(java.util.Locale.ROOT)
             ?.replace(Regex("[^A-Z0-9]+"), " ")
             ?.trim()
             ?.takeIf { it.isNotBlank() }

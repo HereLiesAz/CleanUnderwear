@@ -75,6 +75,10 @@ class DeduplicateTargetsUseCase(
         ledger: MergeLedger
     ) : this(repository, nicknames = researchAgent::getNicknames, ledger = ledger)
 
+    init {
+        require(maxPairwiseGroup >= 2) { "maxPairwiseGroup must be at least 2" }
+    }
+
     suspend operator fun invoke(onProgress: (Float, String) -> Unit = { _, _ -> }): Int {
         val groups = mutableMapOf<String, MutableList<Int>>() // identityKey -> list of IDs
 
@@ -128,18 +132,17 @@ class DeduplicateTargetsUseCase(
 
         // 2. Resolve collisions (only hydrating full rows for actual candidates)
         for (idGroup in collisions) {
-            val fullGroup = repository.getTargetsByIds(idGroup)
-            if (fullGroup.size < 2) continue
-
-            if (fullGroup.size > maxPairwiseGroup) {
+            if (idGroup.size > maxPairwiseGroup) {
                 // A block this large is a low-quality collision (a recycled value or a very
                 // common name shared by many rows). Pairwise scoring would be O(n^2) and these
                 // are exactly the rows we must not blindly fuse — leave them for manual review.
-                ambiguousSkipped += fullGroup.size
+                ambiguousSkipped += idGroup.size
                 processed++
-                onProgress(processed.toFloat() / totalSteps, "Skipping ambiguous block (${fullGroup.size} rows)…")
+                onProgress(processed.toFloat() / totalSteps, "Skipping ambiguous block (${idGroup.size} rows)…")
                 continue
             }
+            val fullGroup = repository.getTargetsByIds(idGroup)
+            if (fullGroup.size < 2) continue
 
             for (component in confidentMatchComponents(fullGroup, scorer, vetoes)) {
                 if (component.size < 2) continue
