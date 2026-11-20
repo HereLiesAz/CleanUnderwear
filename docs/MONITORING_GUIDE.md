@@ -90,9 +90,9 @@ Dedup is automatic, so its mistakes are silent. The correction step makes them v
 | No contact with a number in 18 / 36 months | stale suspicion (2.0 / 3.0) |
 | Contact in the last 18 months | stale defense (4.0) |
 | History window shorter than 24 months | defense (1.5): silence proves little |
-| Number shared with a different surname / the same surname | stale suspicion (2.5) / defense (1.5) |
+| Number shared by contacts | identity/merge review, never stale-number evidence |
 | Merged-in number with fresher traffic | stale suspicion (3.0), offers **Use that number** |
-| Two contacts share a number / an email | saved-twice suspicion (2.5 / 3.0) |
+| Two contacts share a number / an email | identity-review suspicion (2.5 / 3.0); different names sharing a phone still require review, without an automatic recommendation |
 | Names: one is the start of the other ("Maria", "Maria Tulane Bar") / read the same once bracketed notes are dropped / same first name, rest differs | saved-twice suspicion (2.0 / 1.5 / 1.0); the last also defense (3.0): relatives share lines |
 | Same number but different emails / same email but different numbers | saved-twice defense (2.5 / 1.5) |
 | Number shared with a contact whose name reads as the same person | stale defense (1.5), not the recycled-number suspicion |
