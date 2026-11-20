@@ -230,7 +230,7 @@ class BrowserMissionSignInTest {
         val script = BrowserMission.HarvestFacebookFriends.extractionScript
         // It checks for the login form before anything is collected...
         val guard = script.indexOf("input[name=pass]")
-        val collect = script.indexOf("var collected")
+        val collect = script.indexOf("function collect()")
         assertTrue(guard in 0 until collect)
         // ...and goes to the friends list from anywhere else.
         assertTrue(script.contains("/me/friends"))

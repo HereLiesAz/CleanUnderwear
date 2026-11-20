@@ -3,6 +3,9 @@ package com.hereliesaz.cleanunderwear.ui
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.provider.ContactsContract
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -55,6 +58,11 @@ fun TargetDetailScreen(
     onLookUp: (Int) -> Unit,
     onArchive: (Int) -> Unit,
     onRestore: (Int) -> Unit,
+    photoLinked: Boolean,
+    onLinkFacebookPhoto: (Target, Uri) -> Unit,
+    onRefreshFacebookPhoto: (Int) -> Unit,
+    onRestoreFacebookPhoto: (Int) -> Unit,
+    onUnlinkFacebookPhoto: (Int) -> Unit,
     onNavigateBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -62,6 +70,10 @@ fun TargetDetailScreen(
     val name = target.displayName
     val snackbars = LocalAppSnackbars.current
     val bottomBar = LocalBottomBarHeight.current
+    var chosenPhotoContact by remember { mutableStateOf<Uri?>(null) }
+    val contactPicker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) chosenPhotoContact = result.data?.data
+    }
 
     // "Not them" is undoable from the snackbar. The snackbar waits until the contact has really
     // changed (a verdict is refused if the match moved meanwhile) and lives in the app's scope,
@@ -76,6 +88,27 @@ fun TargetDetailScreen(
         undoDismissal = null
         if (changed != null) {
             snackbars?.show(dismissedMessage, undoLabel) { onUpdateTarget(after) { restoreDismissal(it, before) } }
+        }
+    }
+
+    chosenPhotoContact?.let { uri ->
+        val chosenName = remember(uri) {
+            try {
+                context.contentResolver.query(
+                    uri, arrayOf(ContactsContract.Contacts.DISPLAY_NAME_PRIMARY), null, null, null
+                )?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+            } catch (_: Exception) { null }
+        } ?: stringResource(R.string.facebook_photo_selected_contact)
+        AppDialog(
+            title = stringResource(R.string.facebook_photo_confirm_title),
+            confirm = stringResource(R.string.facebook_photo_confirm),
+            onConfirm = {
+                chosenPhotoContact = null
+                onLinkFacebookPhoto(target, uri)
+            },
+            onDismiss = { chosenPhotoContact = null }
+        ) {
+            Text(stringResource(R.string.facebook_photo_confirm_body, target.displayName, chosenName))
         }
     }
 
@@ -190,6 +223,21 @@ fun TargetDetailScreen(
                 )
             }
             DetailRow(stringResource(R.string.detail_from), target.sourceAccount ?: stringResource(R.string.detail_unknown))
+            if (target.facebookProfileUrl != null) {
+                AppSection(stringResource(R.string.facebook_photo_section))
+                AppCaption(stringResource(R.string.facebook_photo_caption))
+                if (photoLinked) {
+                    AppAction(stringResource(R.string.facebook_photo_refresh), { onRefreshFacebookPhoto(target.id) })
+                    AppTextAction(stringResource(R.string.facebook_photo_restore), { onRestoreFacebookPhoto(target.id) })
+                    AppTextAction(stringResource(R.string.facebook_photo_unlink), { onUnlinkFacebookPhoto(target.id) })
+                } else if (target.facebookPhotoUrl != null) {
+                    AppAction(stringResource(R.string.facebook_photo_link), {
+                        contactPicker.launch(Intent(Intent.ACTION_PICK, ContactsContract.Contacts.CONTENT_URI))
+                    })
+                } else {
+                    AppCaption(stringResource(R.string.facebook_photo_missing))
+                }
+            }
 
             AppSection(stringResource(R.string.detail_section_checks))
             DetailRow(

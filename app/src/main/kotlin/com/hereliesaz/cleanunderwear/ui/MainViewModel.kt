@@ -84,12 +84,72 @@ class MainViewModel @Inject constructor(
     private val alternateFinder: AlternateFinder,
     private val updateChecker: com.hereliesaz.cleanunderwear.update.UpdateChecker,
     private val contactSyncer: com.hereliesaz.cleanunderwear.util.SystemContactSyncer,
-    private val lookupChoices: com.hereliesaz.cleanunderwear.domain.LookupChoiceStore
+    private val lookupChoices: com.hereliesaz.cleanunderwear.domain.LookupChoiceStore,
+    private val facebookPhotos: com.hereliesaz.cleanunderwear.util.FacebookPhotoSync
 ) : AndroidViewModel(application) {
 
     enum class SortOrder { NAME, STATUS, DATE }
 
     private val workManager = WorkManager.getInstance(application)
+    private val _facebookPhotoLinks = MutableStateFlow(facebookPhotos.linkedIds())
+    val facebookPhotoLinks: StateFlow<Set<Int>> = _facebookPhotoLinks
+
+    init {
+        if (_facebookPhotoLinks.value.isNotEmpty()) scheduleFacebookPhotoRefresh()
+    }
+
+    private fun scheduleFacebookPhotoRefresh() {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .setRequiresBatteryNotLow(true)
+            .build()
+        val work = PeriodicWorkRequestBuilder<com.hereliesaz.cleanunderwear.worker.FacebookPhotoWorker>(24, TimeUnit.HOURS)
+            .setConstraints(constraints)
+            .build()
+        workManager.enqueueUniquePeriodicWork(
+            "facebook_photo_refresh", ExistingPeriodicWorkPolicy.KEEP, work
+        )
+    }
+
+    fun linkFacebookPhoto(target: Target, contactUri: android.net.Uri) {
+        viewModelScope.launch(failSafe) {
+            val result = facebookPhotos.link(target, contactUri)
+            if (result is com.hereliesaz.cleanunderwear.util.FacebookPhotoSync.Outcome.Updated) {
+                _facebookPhotoLinks.value = facebookPhotos.linkedIds()
+                scheduleFacebookPhotoRefresh()
+            }
+            post(result.describe())
+        }
+    }
+
+    fun refreshFacebookPhoto(targetId: Int) {
+        viewModelScope.launch(failSafe) { post(facebookPhotos.refresh(targetId).describe()) }
+    }
+
+    fun restoreFacebookPhoto(targetId: Int) {
+        viewModelScope.launch(failSafe) {
+            val result = facebookPhotos.restore(targetId)
+            if (result is com.hereliesaz.cleanunderwear.util.FacebookPhotoSync.Outcome.Updated) {
+                _facebookPhotoLinks.value = facebookPhotos.linkedIds()
+                if (_facebookPhotoLinks.value.isEmpty()) workManager.cancelUniqueWork("facebook_photo_refresh")
+            }
+            post(result.describe())
+        }
+    }
+
+    fun unlinkFacebookPhoto(targetId: Int) {
+        if (facebookPhotos.unlink(targetId)) {
+            _facebookPhotoLinks.value = facebookPhotos.linkedIds()
+            if (_facebookPhotoLinks.value.isEmpty()) workManager.cancelUniqueWork("facebook_photo_refresh")
+            post(str(R.string.facebook_photo_unlinked))
+        }
+    }
+
+    private fun com.hereliesaz.cleanunderwear.util.FacebookPhotoSync.Outcome.describe(): String = when (this) {
+        is com.hereliesaz.cleanunderwear.util.FacebookPhotoSync.Outcome.Updated -> str(R.string.facebook_photo_updated, contactName)
+        is com.hereliesaz.cleanunderwear.util.FacebookPhotoSync.Outcome.Unchanged -> str(R.string.facebook_photo_unchanged, contactName)
+        is com.hereliesaz.cleanunderwear.util.FacebookPhotoSync.Outcome.Failed -> str(R.string.facebook_photo_failed, reason)
+    }
 
     // The words the user reads (messages, the busy screen) are resources, resolved here as they are
     // posted. Log lines passed to DiagnosticLogger stay in English: that log is for the developer.
@@ -859,7 +919,17 @@ class MainViewModel @Inject constructor(
                 // Half a deletion is worse than none; it's quick, so it runs to the end.
                 begin(OperationState(description = str(R.string.vm_deleting), progress = -1f, cancellable = false))
                 val notes = withContext(Dispatchers.IO) { contactSyncer.removeAllBlocks() }
+                // Restore untouched linked photos before removing their backups. A contact edited
+                // elsewhere keeps its current photo and is never overwritten just for deletion.
+                val links = facebookPhotos.linkedIds()
+                val unrestored = withContext(Dispatchers.IO) {
+                    links.count { facebookPhotos.restore(it) is com.hereliesaz.cleanunderwear.util.FacebookPhotoSync.Outcome.Failed }
+                }
+                facebookPhotos.clearRecords()
+                _facebookPhotoLinks.value = emptySet()
+                workManager.cancelUniqueWork("facebook_photo_refresh")
                 repository.wipeAll()
+                if (unrestored > 0) post(str(R.string.facebook_photo_delete_notice, unrestored))
                 // What the app holds in memory goes too: the activity log names contacts, and the
                 // Review list and any lookup offer are about the list just deleted.
                 com.hereliesaz.cleanunderwear.util.DiagnosticLogger.clear()

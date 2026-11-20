@@ -36,6 +36,25 @@ class HarvestContactsUseCase @Inject constructor(
 
     suspend fun processManualTargets(manualTargets: List<Target>) {
         val processed = processIntelligence(manualTargets)
+        // A second Facebook import refreshes the image URL for an existing linked identity,
+        // rather than adding a duplicate row or leaving an expired CDN URL forever.
+        val incoming = processed.filter { it.facebookProfileUrl != null && it.facebookPhotoUrl != null }
+            .associateBy { it.facebookProfileUrl }
+        if (incoming.isNotEmpty()) {
+            var offset = 0
+            while (true) {
+                val page = repository.getTargetWorkInfoPaged(limit = 500, offset = offset)
+                if (page.isEmpty()) break
+                val candidates = page.filter { it.sourceAccount?.contains("Facebook:") == true }
+                repository.getTargetsByIds(candidates.map { it.id }).forEach { existing ->
+                    val changed = incoming[existing.facebookProfileUrl]?.facebookPhotoUrl
+                    if (changed != null && changed != existing.facebookPhotoUrl) {
+                        repository.updateTarget(existing.copy(facebookPhotoUrl = changed))
+                    }
+                }
+                offset += page.size
+            }
+        }
         repository.insertTargets(withoutKnownRows(processed))
     }
 

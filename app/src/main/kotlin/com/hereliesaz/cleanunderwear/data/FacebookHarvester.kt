@@ -70,15 +70,35 @@ class FacebookHarvester @Inject constructor() {
             if (name.length < 3 || name.length > 120 || ' ' !in name) continue
             val profile = if (path == "profile.php") "https://www.facebook.com/profile.php?id=$id"
                 else "https://www.facebook.com/$id"
+            val photo = link.attr("data-cu-photo").ifBlank {
+                link.selectFirst("img[src]")?.attr("src").orEmpty()
+            }.ifBlank {
+                link.parent()?.selectFirst("img[src]")?.attr("src").orEmpty()
+            }
+            val validPhoto = facebookPhotoUrl(photo)
             friends.putIfAbsent(profile, Target(
                 displayName = name,
                 sourceAccount = "Meta (Facebook: $profile)",
+                facebookProfileUrl = profile,
+                facebookPhotoUrl = validPhoto,
                 status = TargetStatus.UNKNOWN
             ))
         }
         DiagnosticLogger.log("Facebook saved-page import: parsed ${friends.size} friend profile(s).")
         return friends.values.toList()
     }
+
+    /** Only explicit HTTPS Facebook CDN images may become phone-contact photos. */
+    internal fun facebookPhotoUrl(raw: String): String? = try {
+        val u = java.net.URI(raw)
+        val host = u.host?.lowercase().orEmpty()
+        raw.takeIf {
+            u.scheme.equals("https", ignoreCase = true) &&
+                (host == "fbcdn.net" || host.endsWith(".fbcdn.net") ||
+                    host == "facebook.com" || host.endsWith(".facebook.com")) &&
+                u.userInfo == null && u.port == -1
+        }
+    } catch (_: Exception) { null }
 
     private fun looksLikeLoginWall(doc: Document): Boolean {
         // mbasic's login page exposes a literal #login_form or input[name=pass]
