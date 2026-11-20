@@ -71,7 +71,9 @@ data class SuspectCase(
     /** The other contact, for [SuspicionKind.SAME_PERSON]; [targetId] is the first. */
     val otherTargetId: Int? = null,
     /** The name to offer for the combined contact, for [SuspicionKind.SAME_PERSON]. */
-    val suggestedName: String? = null
+    val suggestedName: String? = null,
+    /** Shared phone with different names: requires a human verdict, not a merge recommendation. */
+    val manualReviewOnly: Boolean = false
 ) {
     val suspicionScore: Double get() = suspicion.sumOf { it.weight }
     val defenseScore: Double get() = defense.sumOf { it.weight }
@@ -89,7 +91,7 @@ data class SuspectCase(
      * a case to look at, not one to act on in bulk.
      */
     val recommendation: Recommendation?
-        get() = if ((mainReason?.weight ?: 0.0) < SuspectDetector.RECOMMEND_MIN_REASON) null else when (lean) {
+        get() = if (manualReviewOnly || (mainReason?.weight ?: 0.0) < SuspectDetector.RECOMMEND_MIN_REASON) null else when (lean) {
             Lean.TOSS_UP -> null
             Lean.LIKELY_PROBLEM -> when (kind) {
                 SuspicionKind.BAD_MERGE -> Recommendation.SEPARATE
@@ -365,7 +367,8 @@ object SuspectDetector {
             suspicion = suspicion.sortedByDescending { it.weight },
             defense = defense.sortedByDescending { it.weight },
             otherTargetId = i.bId,
-            suggestedName = keep
+            suggestedName = keep,
+            manualReviewOnly = relation == NameRelation.DIFFERENT
         )
     }
 
