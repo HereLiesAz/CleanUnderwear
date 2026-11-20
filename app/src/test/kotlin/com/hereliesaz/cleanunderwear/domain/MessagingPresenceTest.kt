@@ -86,8 +86,12 @@ class MessagingPresenceTest {
     }
 
     @Test
-    fun liveMergedInNumber_isOfferedAsReplacement() {
-        val case = stale(emptySet(), replacement = ReplacementCandidate("504-555-0909", "Dana R", null, setOf("WhatsApp")))!!
+    fun liveMergedInNumberAloneDoesNotProveStaleOwnership() {
+        assertNull(stale(emptySet(), replacement = ReplacementCandidate("504-555-0909", "Dana R", null, setOf("WhatsApp"))))
+        val case = stale(
+            emptySet(), otherHolder = "Pat Okafor",
+            replacement = ReplacementCandidate("504-555-0909", "Dana R", null, setOf("WhatsApp"))
+        )!!
         assertEquals("504-555-0909", case.replacementPhone)
         assertTrue(case.suspicion.any { it.text.contains("live line") })
     }

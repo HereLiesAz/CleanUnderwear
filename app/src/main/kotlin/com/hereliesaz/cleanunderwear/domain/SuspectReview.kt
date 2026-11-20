@@ -126,6 +126,14 @@ class SuspectReview @Inject constructor(
             val number = StringSimilarity.normalizePhone(phone) ?: continue
             if (t.status == TargetStatus.IGNORED || t.phoneIsStale) continue
             val sharers = byNumber[number].orEmpty().filter { it.id != t.id }.map { NumberSharer(it.displayName) }
+            // Shared numbers belong in identity/merge review, regardless of either name.
+            if (sharers.isNotEmpty()) continue
+            val holder = otherHolder(t.enrichmentProvenance) ?: continue
+            // A lookup that names another saved contact is a contact-identity issue, not staleness.
+            if (byId.values.any { saved ->
+                    saved.id != t.id && SuspectDetector.nameRelation(saved.displayName, holder) in
+                        setOf(NameRelation.SAME, NameRelation.EXTENDS)
+                }) continue
 
             SuspectDetector.assessStale(
                 StaleCaseInput(
@@ -146,7 +154,7 @@ class SuspectReview @Inject constructor(
                     appsOnDevice = if (presence.isSavedPhone(phone) || presence.appsFor(phone).isNotEmpty()) {
                         presence.appsOnDevice
                     } else emptySet(),
-                    otherHolder = otherHolder(t.enrichmentProvenance)
+                    otherHolder = holder
                 ),
                 now
             )?.let { cases += it }
