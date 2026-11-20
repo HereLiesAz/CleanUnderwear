@@ -304,7 +304,7 @@ object SuspectDetector {
      */
     fun assessSamePerson(i: SamePersonInput): SuspectCase? {
         val relation = nameRelation(i.aName, i.bName)
-        if (relation == NameRelation.DIFFERENT) return null
+        // A shared number needs review even when names differ; never infer a stale number.
         val phoneA = StringSimilarity.normalizePhone(i.aPhone)
         val phoneB = StringSimilarity.normalizePhone(i.bPhone)
         val emailA = StringSimilarity.normalizeEmail(i.aEmail)
@@ -335,7 +335,9 @@ object SuspectDetector {
                     "The rest of the names differ (\"${i.aName}\", \"${i.bName}\"): relatives or housemates can share a line.", 3.0
                 )
             }
-            NameRelation.DIFFERENT -> Unit
+            NameRelation.DIFFERENT -> defense += Evidence(
+                "The names differ (\"${i.aName}\", \"${i.bName}\"): verify whether these contacts should be combined.", 3.0
+            )
         }
         if (samePhone && !sameEmail && emailA != null && emailB != null) {
             defense += Evidence("They have different email addresses (${i.aEmail}, ${i.bEmail}).", 2.5)
@@ -352,7 +354,9 @@ object SuspectDetector {
             targetId = i.aId,
             ledgerId = null,
             title = keep,
-            headline = "\"${i.aName}\" and \"${i.bName}\" may be one person saved twice.",
+            headline = if (relation == NameRelation.DIFFERENT)
+                "\"${i.aName}\" and \"${i.bName}\" share a number; review the contact records."
+            else "\"${i.aName}\" and \"${i.bName}\" may be one person saved twice.",
             identities = listOf(
                 IdentityLine("One entry", i.aName, i.aPhone, i.aEmail, null),
                 IdentityLine("The other", i.bName, i.bPhone, i.bEmail, null)
@@ -587,28 +591,8 @@ object SuspectDetector {
             }
         }
 
-        // A sharer whose name reads as this contact's own ("Maria", "Maria Gonzalez") is the same
-        // person saved twice, not a stranger the number was handed to.
-        val alias = i.sharers.filter {
-            val relation = nameRelation(i.name, it.name)
-            relation == NameRelation.SAME || relation == NameRelation.EXTENDS
-        }
-        val different = (i.sharers - alias.toSet()).filter { surnameDiffers(i.name, it.name) }
-        val same = (i.sharers - alias.toSet()).filter { surnameSame(i.name, it.name) }
-        if (alias.isNotEmpty()) {
-            defense += Evidence(
-                "Also saved as ${list(alias)}, which reads as the same person. The number is shared, not recycled.", 1.5
-            )
-        }
-        if (different.isNotEmpty()) {
-            suspicion += Evidence(
-                "${i.phone} is also on ${list(different)} with a different surname. Either the number was recycled or one entry is out of date.",
-                2.5
-            )
-        }
-        if (same.isNotEmpty()) {
-            defense += Evidence("Shared with ${list(same)}, same surname: probably a household line.", 1.5)
-        }
+        // Duplicate phone numbers concern contact identity and merges, never number age.
+        // Review the pair separately through assessSamePerson, not as stale evidence.
 
         if (i.appsOnDevice.isNotEmpty()) {
             if (i.apps.isNotEmpty()) {
