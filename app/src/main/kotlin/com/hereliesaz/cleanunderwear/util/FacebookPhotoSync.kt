@@ -198,7 +198,9 @@ class FacebookPhotoSync @Inject constructor(
             ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
 
     private fun readPickedContact(uri: Uri): Triple<Long, String, String>? {
-        val resolved = ContactsContract.Contacts.lookupContact(context.contentResolver, uri) ?: uri
+        val resolved = try {
+            ContactsContract.Contacts.lookupContact(context.contentResolver, uri)
+        } catch (_: IllegalArgumentException) { null } ?: uri
         context.contentResolver.query(
             resolved,
             arrayOf(ContactsContract.Contacts._ID, ContactsContract.Contacts.LOOKUP_KEY, ContactsContract.Contacts.DISPLAY_NAME_PRIMARY),
@@ -222,7 +224,7 @@ class FacebookPhotoSync @Inject constructor(
             arrayOf(ContactsContract.Data._ID, ContactsContract.CommonDataKinds.Photo.PHOTO),
             "${ContactsContract.Data.CONTACT_ID}=? AND ${ContactsContract.Data.MIMETYPE}=?",
             arrayOf(contactId.toString(), ContactsContract.CommonDataKinds.Photo.CONTENT_ITEM_TYPE),
-            null
+            "${ContactsContract.Data.IS_SUPER_PRIMARY} DESC"
         )?.use { c ->
             if (c.moveToFirst()) return c.getLong(0) to (c.getBlob(1) ?: ByteArray(0))
         }
