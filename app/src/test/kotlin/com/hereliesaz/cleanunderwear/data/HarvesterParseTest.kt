@@ -33,6 +33,46 @@ class HarvesterParseTest {
     }
 
     @Test
+    fun facebook_modernFriendsPage_extractsDistinctProfilesAndKeepsLinks() {
+        val html = """
+            <html><body><div data-pagelet="Friends">
+                <a href="https://www.facebook.com/alice.smith"><span>Alice Smith</span></a>
+                <a href="https://www.facebook.com/profile.php?id=42"><span>Bob Jones</span></a>
+                <a href="https://www.facebook.com/alice.smith"><span>Alice Smith</span></a>
+                <a href="https://www.facebook.com/friends"><span>Friends list</span></a>
+                <a href="https://attacker.example/malicious"><span>Fake Person</span></a>
+            </div></body></html>
+        """.trimIndent()
+
+        val parsed = FacebookHarvester().parseFriendsHtml(html)
+
+        assertEquals(2, parsed.size)
+        assertEquals(
+            setOf(
+                "Meta (Facebook: https://www.facebook.com/alice.smith)",
+                "Meta (Facebook: https://www.facebook.com/profile.php?id=42)"
+            ),
+            parsed.map { it.sourceAccount }.toSet()
+        )
+        assertEquals(setOf("Alice Smith", "Bob Jones"), parsed.map { it.displayName }.toSet())
+    }
+
+    @Test
+    fun facebook_savedFriendsHtml_rejectsNavigationAndUnrelatedPages() {
+        val html = """
+            <html><body>
+              <a href="https://www.facebook.com/alice.smith"><span>Alice Smith</span></a>
+              <div data-pagelet="Friends">
+                <a href="https://www.facebook.com/jane.doe"><span>Jane Doe</span></a>
+                <a href="https://www.facebook.com/groups"><span>Some Group</span></a>
+              </div>
+            </body></html>
+        """.trimIndent()
+        val parsed = FacebookHarvester().parseSavedFriendsHtml(html)
+        assertEquals(listOf("Jane Doe"), parsed.map { it.displayName })
+    }
+
+    @Test
     fun whatsapp_chatList_extractsTitlesIncludingPhoneOnlyEntries() {
         val html = """
             <html><body>
