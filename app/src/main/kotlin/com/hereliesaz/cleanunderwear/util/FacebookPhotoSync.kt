@@ -77,6 +77,7 @@ class FacebookPhotoSync @Inject constructor(
     suspend fun link(target: Target, contactUri: Uri): Outcome = withContext(Dispatchers.IO) {
         if (!canWrite()) return@withContext Outcome.Failed("Contacts permission is required")
         val profile = target.facebookProfileUrl ?: return@withContext Outcome.Failed("No Facebook profile")
+        if (repository.getTargetById(target.id)?.facebookProfileUrl != profile) return@withContext Outcome.Failed("Facebook profile changed")
         val url = target.facebookPhotoUrl ?: return@withContext Outcome.Failed("No Facebook photo was available in the import")
         if (!approved(url)) return@withContext Outcome.Failed("Untrusted Facebook photo URL")
         val picked = readPickedContact(contactUri) ?: return@withContext Outcome.Failed("Could not read the selected phone contact")
@@ -98,7 +99,9 @@ class FacebookPhotoSync @Inject constructor(
             save(Link(target.id, profile, picked.second, picked.third, digest(downloaded)))
             Outcome.Updated(picked.third)
         } catch (e: Exception) {
-            // Preserve backup for recovery when the provider reports a partial write.
+            // If no change occurred, the backup is safe to discard and link can be retried.
+            val after = findPhotoRow(picked.first)?.second
+            if (after?.contentEquals(original ?: ByteArray(0)) == true || (after == null && original == null)) backup.delete()
             Outcome.Failed("Contacts could not save the photo: ${e.javaClass.simpleName}")
         }
     }
@@ -217,7 +220,7 @@ class FacebookPhotoSync @Inject constructor(
                 .withValue(ContactsContract.Data.RAW_CONTACT_ID, rawId)
                 .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Photo.CONTENT_ITEM_TYPE)
                 .withValue(ContactsContract.CommonDataKinds.Photo.PHOTO, bytes)
-                .withValue(ContactsContract.CommonDataKinds.Photo.IS_SUPER_PRIMARY, 1)
+                .withValue(ContactsContract.Data.IS_SUPER_PRIMARY, 1)
                 .build()
         }
         resolver.applyBatch(ContactsContract.AUTHORITY, arrayListOf(operation))
