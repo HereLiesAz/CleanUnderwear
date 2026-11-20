@@ -51,6 +51,9 @@ class FacebookPhotoSync @Inject constructor(
         data class Failed(val reason: String) : Outcome()
     }
 
+    fun linkedIds(): Set<Int> = prefs.all.keys.filter { it.startsWith("target_") }
+        .mapNotNull { it.removePrefix("target_").toIntOrNull() }.toSet()
+
     fun linked(targetId: Int): Link? = prefs.getString("target_$targetId", null)?.let {
         try {
             val obj = JSONObject(it)
@@ -164,6 +167,12 @@ class FacebookPhotoSync @Inject constructor(
         } catch (e: Exception) {
             Outcome.Failed("Could not restore the original photo: ${e.javaClass.simpleName}")
         }
+    }
+
+    /** Called when the user explicitly deletes the app's entire private registry. */
+    fun clearRecords() {
+        prefs.edit().clear().apply()
+        photoDir.listFiles()?.forEach { it.delete() }
     }
 
     private fun canWrite() =
