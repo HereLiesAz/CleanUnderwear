@@ -70,6 +70,17 @@ class MigrationTest {
     }
 
     @Test
+    fun from15_keepsRowsAndAddsFacebookPhotoProvenance() = runBlocking {
+        createAt(15, emptyList())
+        db = openCurrent()
+        val row = db!!.targetDao().getTargetsPaged(10, 0).single()
+        val full = db!!.targetDao().getTargetById(row.id)!!
+        assertEquals("Jane Doe", full.displayName)
+        assertNull(full.facebookProfileUrl)
+        assertNull(full.facebookPhotoUrl)
+    }
+
+    @Test
     fun from14_keepsRowsAndMatchesTheSchema() = runBlocking {
         createAt(14, listOf("status_before_ignore", "unread_sources", "match_record_key"))
         db = openCurrent()
