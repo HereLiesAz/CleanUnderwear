@@ -1025,6 +1025,45 @@ class MainViewModel @Inject constructor(
         com.hereliesaz.cleanunderwear.util.WebSessions.FACEBOOK
     ) { fbHarvester.parseFriendsHtml(it) }
 
+    /** Imports a user-saved Facebook friends HTML file without touching Facebook login cookies. */
+    fun importFacebookFriendsFile(uri: android.net.Uri) {
+        viewModelScope.launch(failSafe) {
+            exclusive("facebook-file-import", str(R.string.vm_what_importing, str(R.string.vm_source_facebook))) {
+                try {
+                    begin(OperationState(description = str(R.string.vm_reading_found, str(R.string.vm_source_facebook)), progress = -1f))
+                    val html = withContext(Dispatchers.IO) {
+                        application.contentResolver.openInputStream(uri)?.use { input ->
+                            val out = java.io.ByteArrayOutputStream()
+                            val buffer = ByteArray(8192)
+                            while (true) {
+                                val n = input.read(buffer)
+                                if (n < 0) break
+                                if (out.size() + n > 16 * 1024 * 1024) throw IllegalArgumentException("Facebook HTML is larger than 16 MB")
+                                out.write(buffer, 0, n)
+                            }
+                            out.toString(Charsets.UTF_8.name())
+                        } ?: throw java.io.IOException("Unable to read selected file")
+                    }
+                    val found = withContext(Dispatchers.Default) { fbHarvester.parseSavedFriendsHtml(html) }
+                    if (found.isEmpty()) {
+                        post(str(R.string.settings_facebook_file_no_results))
+                    } else {
+                        harvestContactsUseCase.processManualTargets(found)
+                        post(str(R.string.vm_import_read, found.size, str(R.string.vm_source_facebook)))
+                    }
+                } catch (e: Exception) {
+                    com.hereliesaz.cleanunderwear.util.DiagnosticLogger.log(
+                        "Facebook HTML import failed: ${e.javaClass.simpleName}",
+                        com.hereliesaz.cleanunderwear.util.DiagnosticLogger.LogEntry.LogLevel.WARN
+                    )
+                    post(str(R.string.settings_facebook_file_failed))
+                } finally {
+                    _operationState.value = OperationState(isRunning = false)
+                }
+            }
+        }
+    }
+
     /** How many contacts "Fill in details" would look up, for the confirmation before it starts. */
     suspend fun resolveCandidateCount(): Int = resolveCandidates().size
 
