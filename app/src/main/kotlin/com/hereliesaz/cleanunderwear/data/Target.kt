@@ -101,7 +101,13 @@ data class Target(
      * not every future result from the source.
      */
     @ColumnInfo(name = "match_record_key")
-    val matchRecordKey: String? = null
+    val matchRecordKey: String? = null,
+    /** Facebook identity is provenance, never an automatic match to a phone contact. */
+    @ColumnInfo(name = "facebook_profile_url")
+    val facebookProfileUrl: String? = null,
+    /** Latest observed CDN image; usable only after the user links a phone contact. */
+    @ColumnInfo(name = "facebook_photo_url")
+    val facebookPhotoUrl: String? = null
 ) {
     /** True while [phoneNumber] is still the number the user marked stale. */
     val phoneIsStale: Boolean
