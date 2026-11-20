@@ -190,6 +190,9 @@
     <string name="facebook_photo_link">Choose phone contact for photo</string>
     <string name="facebook_photo_refresh">Refresh photo now</string>
     <string name="facebook_photo_restore">Restore original photo and unlink</string>
+    <string name="facebook_photo_unlink">Stop syncing, keep current photo</string>
+    <string name="facebook_photo_unlinked">Facebook photo sync disabled for this contact.</string>
+    <string name="facebook_photo_delete_notice">%1$d original contact photos could not be restored; their current photos were left unchanged.</string>
     <string name="facebook_photo_confirm_title">Use Facebook photo?</string>
     <string name="facebook_photo_confirm">Use this photo</string>
     <string name="facebook_photo_confirm_body">Apply the Facebook profile photo for %1$s to the phone contact you selected? Its current picture will be backed up. You can restore it later, and future updates will stop if you change it yourself.</string>
