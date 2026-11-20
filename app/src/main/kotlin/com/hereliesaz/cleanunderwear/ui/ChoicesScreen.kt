@@ -130,9 +130,9 @@ private fun ChoiceFor(
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                 AppAction(
                     picked?.let { stringResource(R.string.choices_thats, name) } ?: stringResource(R.string.choices_pick_one),
-                    { picked?.let { viewModel.chooseLookup(choice.targetId, choice.options[it]) } },
+                    { picked?.let { index -> choice.options.getOrNull(index)?.let { option -> viewModel.chooseLookup(choice.targetId, option) } } },
                     Modifier.fillMaxWidth(),
-                    enabled = picked != null
+                    enabled = picked != null && picked in choice.options.indices
                 )
                 if (choice.hasMore) {
                     // None of these: the next run goes on to the next ones, from what the searches
