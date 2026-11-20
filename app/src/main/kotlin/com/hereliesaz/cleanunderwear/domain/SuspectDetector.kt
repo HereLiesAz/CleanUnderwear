@@ -550,6 +550,9 @@ object SuspectDetector {
     // ---------------------------------------------------------------------------------------
 
     fun assessStale(i: StaleCaseInput, now: Long): SuspectCase? {
+        // Silence, failed searches, app registration and shared numbers cannot establish ownership.
+        // Only a phone lookup naming someone outside the contacts can open a stale-number case.
+        val outsideHolder = i.otherHolder?.takeIf { it.isNotBlank() } ?: return null
         val suspicion = mutableListOf<Evidence>()
         val defense = mutableListOf<Evidence>()
 
@@ -609,12 +612,10 @@ object SuspectDetector {
                 )
             }
         }
-        i.otherHolder?.let {
-            suspicion += Evidence(
-                "A people-search lookup on this number came back to \"$it\", not this contact: it has likely been reassigned.",
-                3.0
-            )
-        }
+        suspicion += Evidence(
+            "CyberBackgroundChecks identifies \"$outsideHolder\" as the holder of ${i.phone}; that person is not in your contacts.",
+            3.0
+        )
 
         if (i.lookupFailed) suspicion += Evidence("A people-search lookup found no one at this number.", 1.0)
         if (!i.email.isNullOrBlank()) {
@@ -647,7 +648,7 @@ object SuspectDetector {
             targetId = i.targetId,
             ledgerId = null,
             title = i.name,
-            headline = "The number ${i.phone} may be out of date.",
+            headline = "CyberBackgroundChecks lists ${outsideHolder}, who is not in your contacts, for ${i.phone}. This number may be out of date.",
             identities = listOf(
                 IdentityLine(
                     "On file", i.name, i.phone, i.email,
