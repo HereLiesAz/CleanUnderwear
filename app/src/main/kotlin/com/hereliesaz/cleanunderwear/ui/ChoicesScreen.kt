@@ -157,7 +157,7 @@ private fun ChoiceFor(
 
 /** A restored selection is valid only for the candidate list that currently exists. */
 internal fun selectedLookupOption(options: List<LookupOption>, picked: Int?): LookupOption? =
-    picked?.let(options::getOrNull)
+    picked?.let { options.getOrNull(it) }
 
 @Composable
 private fun OptionCard(option: LookupOption, selected: Boolean, onSelect: () -> Unit) {
