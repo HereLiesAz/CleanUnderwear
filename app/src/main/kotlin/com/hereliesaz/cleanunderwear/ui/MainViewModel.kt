@@ -145,7 +145,7 @@ class MainViewModel @Inject constructor(
     private val _isDarkTheme = MutableStateFlow(ThemePreference.isDark(prefs, application))
     val isDarkTheme: StateFlow<Boolean> = _isDarkTheme
     
-    private val _showDiagnosticLog = MutableStateFlow(prefs.getBoolean("show_diagnostic_log", false))
+    private val _showDiagnosticLog = MutableStateFlow(prefs.getBoolean("show_diagnostic_log", true))
     val showDiagnosticLog: StateFlow<Boolean> = _showDiagnosticLog
 
     val diagnosticLogs = com.hereliesaz.cleanunderwear.util.DiagnosticLogger.logs
