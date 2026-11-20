@@ -393,6 +393,8 @@ class DeduplicateTargetsUseCase(
             residenceInfo = into.residenceInfo ?: from.residenceInfo,
             middleName = into.middleName ?: from.middleName,
             dateOfBirth = into.dateOfBirth ?: from.dateOfBirth,
+            facebookProfileUrl = into.facebookProfileUrl ?: from.facebookProfileUrl,
+            facebookPhotoUrl = into.facebookPhotoUrl ?: from.facebookPhotoUrl,
             // A user's confirmed CBC choice beats an unconfirmed lookup note on either row.
             // Otherwise a merge can erase the decision and make Resolve ask again.
             enrichmentProvenance = when {
