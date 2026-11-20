@@ -1063,8 +1063,12 @@ class MainViewModel @Inject constructor(
 
     fun resolveUnverifiedBatch() = resolveContacts { resolveCandidates() }
 
-    /** Looks up one contact's missing details, from its detail screen. */
-    fun resolveOne(id: Int) = resolveContacts { listOfNotNull(repository.getTargetById(id)) }
+    /** Looks up one contact unless the user has already identified their CBC person. */
+    fun resolveOne(id: Int) = resolveContacts {
+        listOfNotNull(repository.getTargetById(id)).filterNot {
+            it.enrichmentProvenance?.contains(CyberBackgroundChecksEnricher.CHOSEN_PREFIX) == true
+        }
+    }
 
     @Volatile private var resolvePending = false
 
@@ -1182,6 +1186,9 @@ class MainViewModel @Inject constructor(
                         if (!waitOut(waitMs)) { finish(str(R.string.vm_lookup_stopped, position, total)); return@runExclusive }
                     }
                     val target = repository.getTargetById(lite.id) ?: continue
+                    // The user may have chosen this person after the queue was assembled.
+                    // Never reopen their identity decision, even in a retry pass.
+                    if (target.enrichmentProvenance?.contains(CyberBackgroundChecksEnricher.CHOSEN_PREFIX) == true) continue
                     // A contact whose last batch was ruled out goes on to the next batch, from what
                     // its searches already found: nothing is searched again.
                     val waiting = _choices.value.firstOrNull { it.targetId == target.id && it.wantsMore }
