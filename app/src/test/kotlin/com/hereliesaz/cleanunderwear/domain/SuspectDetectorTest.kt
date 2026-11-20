@@ -185,7 +185,7 @@ class SuspectDetectorTest {
     }
 
     @Test
-    fun sharedNumber_differentSurname_isStale_sameSurname_isHousehold() {
+    fun sharingANumberNeverMakesEitherContactStale() {
         fun withSharer(name: String) = SuspectDetector.assessStale(
             StaleCaseInput(
                 targetId = 3, name = "Dana Reyes", phone = "504-555-0303", email = null,
@@ -194,13 +194,9 @@ class SuspectDetectorTest {
             ),
             now
         )
-
-        val recycled = withSharer("Pat Okafor")
-        assertNotNull(recycled)
-        assertTrue(recycled!!.suspicion.any { it.text.contains("different surname") })
-
-        // Same surname: no recycled-number suspicion; lookup failure alone (1.0) is below the bar.
+        assertNull(withSharer("Pat Okafor"))
         assertNull(withSharer("Luis Reyes"))
+        assertNull(withSharer("Dana Reyes"))
     }
 
     @Test
@@ -318,8 +314,13 @@ class SuspectDetectorTest {
     }
 
     @Test
-    fun differentFirstNames_orNothingShared_areNotTheSamePerson() {
-        assertNull(twice("Bob Smith", "Alice Smith"))
+    fun differentNamesSharingPhoneNeedIdentityReviewButNoAutomaticMerge() {
+        val case = twice("Bob Smith", "Alice Smith")
+        assertNotNull(case)
+        assertEquals(SuspicionKind.SAME_PERSON, case!!.kind)
+        assertNull(case.recommendation)
+        assertFalse(case.inBulk)
+        assertTrue(case.headline.contains("share a number"))
         assertNull(twice("Maria", "Maria Bar", aPhone = "504-555-0101", bPhone = "504-555-0909"))
     }
 
@@ -331,7 +332,7 @@ class SuspectDetectorTest {
     }
 
     @Test
-    fun staleNumber_sharedWithTheSamePersonUnderAnotherName_isNotRecycled() {
+    fun independentStaleEvidenceIsUnaffectedByWhoSharesTheNumber() {
         fun stale(sharer: String) = SuspectDetector.assessStale(
             StaleCaseInput(
                 targetId = 3, name = "Maria Gonzalez", phone = "504-555-0101", email = null,
@@ -342,12 +343,11 @@ class SuspectDetectorTest {
         )
 
         val alias = stale("Maria Gonzalez Tulane")
-        assertNotNull(alias)
-        assertTrue(alias!!.suspicion.none { it.text.contains("different surname") })
-        assertTrue(alias.defense.any { it.text.contains("Also saved as") })
-
         val stranger = stale("Maria Okafor")
+        assertNotNull(alias)
         assertNotNull(stranger)
-        assertTrue(stranger!!.suspicion.any { it.text.contains("different surname") })
+        assertEquals(alias!!.suspicion, stranger!!.suspicion)
+        assertEquals(alias.defense, stranger.defense)
+        assertTrue(alias.suspicion.any { it.text.contains("No call or text") })
     }
 }
