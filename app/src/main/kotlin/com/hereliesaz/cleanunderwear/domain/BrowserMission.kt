@@ -263,7 +263,8 @@ private val FACEBOOK_HARVEST_SCRIPT = """
         if (name.length < 3 || name.length > 120 || name.indexOf(' ') < 0) continue;
         var photo = '';
         var card = a.parentElement;
-        for (var depth = 0; depth < 3 && card; depth++, card = card.parentElement) {
+        // Never climb into the list container: that risks assigning the next friend's image.
+        for (var depth = 0; depth < 2 && card; depth++, card = card.parentElement) {
           var img = card.querySelector('img[src]');
           if (img && img.src && /^https:\/\/[^/]+\.(fbcdn\.net|facebook\.com)\//i.test(img.src)) {
             photo = img.src;
