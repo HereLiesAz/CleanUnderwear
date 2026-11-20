@@ -137,6 +137,14 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    fun unlinkFacebookPhoto(targetId: Int) {
+        if (facebookPhotos.unlink(targetId)) {
+            _facebookPhotoLinks.value = facebookPhotos.linkedIds()
+            if (_facebookPhotoLinks.value.isEmpty()) workManager.cancelUniqueWork("facebook_photo_refresh")
+            post(str(R.string.facebook_photo_unlinked))
+        }
+    }
+
     private fun com.hereliesaz.cleanunderwear.util.FacebookPhotoSync.Outcome.describe(): String = when (this) {
         is com.hereliesaz.cleanunderwear.util.FacebookPhotoSync.Outcome.Updated -> str(R.string.facebook_photo_updated, contactName)
         is com.hereliesaz.cleanunderwear.util.FacebookPhotoSync.Outcome.Unchanged -> str(R.string.facebook_photo_unchanged, contactName)
@@ -911,7 +919,17 @@ class MainViewModel @Inject constructor(
                 // Half a deletion is worse than none; it's quick, so it runs to the end.
                 begin(OperationState(description = str(R.string.vm_deleting), progress = -1f, cancellable = false))
                 val notes = withContext(Dispatchers.IO) { contactSyncer.removeAllBlocks() }
+                // Restore untouched linked photos before removing their backups. A contact edited
+                // elsewhere keeps its current photo and is never overwritten just for deletion.
+                val links = facebookPhotos.linkedIds()
+                val unrestored = withContext(Dispatchers.IO) {
+                    links.count { facebookPhotos.restore(it) is com.hereliesaz.cleanunderwear.util.FacebookPhotoSync.Outcome.Failed }
+                }
+                facebookPhotos.clearRecords()
+                _facebookPhotoLinks.value = emptySet()
+                workManager.cancelUniqueWork("facebook_photo_refresh")
                 repository.wipeAll()
+                if (unrestored > 0) post(str(R.string.facebook_photo_delete_notice, unrestored))
                 // What the app holds in memory goes too: the activity log names contacts, and the
                 // Review list and any lookup offer are about the list just deleted.
                 com.hereliesaz.cleanunderwear.util.DiagnosticLogger.clear()
