@@ -138,7 +138,7 @@ class SuspectDetectorTest {
     }
 
     @Test
-    fun staleNumber_silentForYears_isSuspect_butRecentContactClearsIt() {
+    fun staleNumber_requiresOutsideHolderEvenWithOldHistory() {
         fun stale(history: HistoryStats?, coverageDays: Long = 3000) = SuspectDetector.assessStale(
             StaleCaseInput(
                 targetId = 3, name = "Dana Reyes", phone = "504-555-0303", email = null,
@@ -148,10 +148,7 @@ class SuspectDetectorTest {
             now
         )
 
-        val old = stale(stats(12, 2500, 1500))
-        assertNotNull(old)
-        assertEquals(Lean.LIKELY_PROBLEM, old!!.lean)
-
+        assertNull(stale(stats(12, 2500, 1500)))
         assertNull(stale(stats(12, 2500, 20)))
     }
 
@@ -165,10 +162,7 @@ class SuspectDetectorTest {
             ),
             now
         )
-        assertNotNull(case)
-        assertTrue(case!!.defense.any { it.text.contains("proves little") })
-        assertTrue(case.defense.any { it.text.contains("email") })
-        assertEquals(Lean.TOSS_UP, case.lean)
+        assertNull(case)
     }
 
     @Test
@@ -182,6 +176,24 @@ class SuspectDetectorTest {
             now
         )
         assertNull(silent)
+    }
+
+    @Test
+    fun outsideHolderIsRequiredAndExplicitInTheStaleReview() {
+        val result = SuspectDetector.assessStale(
+            StaleCaseInput(
+                targetId = 3, name = "Dana Reyes", phone = "504-555-0303", email = null,
+                lookupFailed = false, history = null, historyAvailable = false,
+                historyCoverageMillis = null, sharers = emptyList(), replacement = null,
+                otherHolder = "Pat Okafor"
+            ),
+            now
+        )
+        assertNotNull(result)
+        assertEquals(SuspicionKind.STALE_NUMBER, result!!.kind)
+        assertTrue(result.headline.contains("Pat Okafor"))
+        assertTrue(result.headline.contains("not in your contacts"))
+        assertTrue(result.suspicion.any { it.text.contains("not in your contacts") })
     }
 
     @Test
@@ -210,9 +222,7 @@ class SuspectDetectorTest {
             ),
             now
         )
-        assertNotNull(case)
-        assertEquals("504-555-0909", case!!.replacementPhone)
-        assertTrue(case.suspicion.any { it.text.contains("live line") })
+        assertNull(case)
     }
 
     @Test
@@ -344,10 +354,7 @@ class SuspectDetectorTest {
 
         val alias = stale("Maria Gonzalez Tulane")
         val stranger = stale("Maria Okafor")
-        assertNotNull(alias)
-        assertNotNull(stranger)
-        assertEquals(alias!!.suspicion, stranger!!.suspicion)
-        assertEquals(alias.defense, stranger.defense)
-        assertTrue(alias.suspicion.any { it.text.contains("No call or text") })
+        assertNull(alias)
+        assertNull(stranger)
     }
 }
