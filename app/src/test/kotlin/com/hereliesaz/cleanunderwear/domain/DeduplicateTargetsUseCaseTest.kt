@@ -128,6 +128,27 @@ class DeduplicateTargetsUseCaseTest {
     }
 
     @Test
+    fun chosenCbcIdentitySurvivesMergeWithUnconfirmedLookupNote() = runTest {
+        val confirmed = "phone · chosen by you: Jane Doe"
+        val repo = FakeRepository(
+            listOf(
+                Target(
+                    id = 1, displayName = "Jane Doe", phoneNumber = "555-123-4567",
+                    enrichmentProvenance = "name · no results parsed",
+                    residenceInfo = "Austin, TX", email = "jane@example.com"
+                ),
+                Target(
+                    id = 2, displayName = "Jane Doe", phoneNumber = "555-123-4567",
+                    enrichmentProvenance = confirmed
+                )
+            )
+        )
+
+        assertEquals(1, DeduplicateTargetsUseCase(repo).invoke())
+        assertEquals(confirmed, repo.store.single().enrichmentProvenance)
+    }
+
+    @Test
     fun countryCodeFormatting_landsInOneBlock() = runTest {
         val repo = FakeRepository(
             listOf(

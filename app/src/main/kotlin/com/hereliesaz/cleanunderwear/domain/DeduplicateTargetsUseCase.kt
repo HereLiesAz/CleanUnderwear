@@ -393,7 +393,13 @@ class DeduplicateTargetsUseCase(
             residenceInfo = into.residenceInfo ?: from.residenceInfo,
             middleName = into.middleName ?: from.middleName,
             dateOfBirth = into.dateOfBirth ?: from.dateOfBirth,
-            enrichmentProvenance = into.enrichmentProvenance ?: from.enrichmentProvenance,
+            // A user's confirmed CBC choice beats an unconfirmed lookup note on either row.
+            // Otherwise a merge can erase the decision and make Resolve ask again.
+            enrichmentProvenance = when {
+                into.enrichmentProvenance?.contains(com.hereliesaz.cleanunderwear.network.CyberBackgroundChecksEnricher.CHOSEN_PREFIX) == true -> into.enrichmentProvenance
+                from.enrichmentProvenance?.contains(com.hereliesaz.cleanunderwear.network.CyberBackgroundChecksEnricher.CHOSEN_PREFIX) == true -> from.enrichmentProvenance
+                else -> into.enrichmentProvenance ?: from.enrichmentProvenance
+            },
             status = statusFrom.status,
             // An archived result keeps what it was before archiving, so "Bring back" restores it;
             // if the archive came from the other copy, this copy's own status is that answer.
