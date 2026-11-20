@@ -273,6 +273,7 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                             onLinkFacebookPhoto = { target, uri -> viewModel.linkFacebookPhoto(target, uri) },
                             onRefreshFacebookPhoto = { viewModel.refreshFacebookPhoto(it) },
                             onRestoreFacebookPhoto = { viewModel.restoreFacebookPhoto(it) },
+                            onUnlinkFacebookPhoto = { viewModel.unlinkFacebookPhoto(it) },
                             onNavigateBack = { navController.popBackStack() }
                         )
                     }
