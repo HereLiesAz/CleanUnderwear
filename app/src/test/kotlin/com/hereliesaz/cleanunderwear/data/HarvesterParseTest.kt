@@ -73,6 +73,30 @@ class HarvesterParseTest {
     }
 
     @Test
+    fun facebook_savedFriendsPhotos_requireFacebookHostedHttpsAndRemainBoundToProfile() {
+        val html = """
+            <html><body><div data-pagelet="Friends">
+                <a href="https://www.facebook.com/alice.smith"
+                   data-cu-photo="https://scontent.xx.fbcdn.net/v/t1.0-1/photo.jpg?token=abc">
+                   <span>Alice Smith</span></a>
+                <a href="https://www.facebook.com/bob.jones"
+                   data-cu-photo="https://fbcdn.net.attacker.example/malicious.jpg">
+                   <span>Bob Jones</span></a>
+                <a href="https://www.facebook.com/carol.lee">
+                   <img src="http://scontent.xx.fbcdn.net/image.jpg"/><span>Carol Lee</span></a>
+            </div></body></html>
+        """.trimIndent()
+
+        val targets = FacebookHarvester().parseSavedFriendsHtml(html)
+        assertEquals(3, targets.size)
+        val alice = targets.single { it.displayName == "Alice Smith" }
+        assertEquals("https://www.facebook.com/alice.smith", alice.facebookProfileUrl)
+        assertEquals("https://scontent.xx.fbcdn.net/v/t1.0-1/photo.jpg?token=abc", alice.facebookPhotoUrl)
+        assertEquals(null, targets.single { it.displayName == "Bob Jones" }.facebookPhotoUrl)
+        assertEquals(null, targets.single { it.displayName == "Carol Lee" }.facebookPhotoUrl)
+    }
+
+    @Test
     fun whatsapp_chatList_extractsTitlesIncludingPhoneOnlyEntries() {
         val html = """
             <html><body>
