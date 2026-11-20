@@ -179,7 +179,11 @@
     <string name="settings_section_import">Import</string>
     <string name="settings_import_caption">Each opens the service in the app\'s browser, where you sign in if asked. Only names are read; messages are not.</string>
     <string name="settings_import_facebook">Import Facebook friends</string>
-    <string name="settings_import_facebook_caption">Reads your friends list.</string>
+    <string name="settings_import_facebook_caption">Reads the friends list in Facebook\'s website, scrolling to collect profiles.</string>
+    <string name="settings_facebook_file_import">Import saved Facebook friends page</string>
+    <string name="settings_facebook_file_import_caption">Alternative when Facebook blocks the in-app browser: save your Facebook friends page as HTML in a browser, then select the file here. Profile links are kept for future photo matching.</string>
+    <string name="settings_facebook_file_no_results">No Facebook friend profiles were found in that saved page.</string>
+    <string name="settings_facebook_file_failed">Could not read the saved Facebook friends page.</string>
     <string name="settings_import_whatsapp">Import WhatsApp chats</string>
     <string name="settings_import_whatsapp_caption">Reads the names on your chat list. When WhatsApp Web asks you to link a device, choose Link with phone number: its QR code can\'t be scanned from this phone.</string>
     <string name="settings_import_instagram">Import Instagram followers</string>

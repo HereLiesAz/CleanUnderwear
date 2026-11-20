@@ -32,7 +32,52 @@ class FacebookHarvester @Inject constructor() {
             )
             return emptyList()
         }
-        return parseFriendsDocument(doc)
+        // Modern Facebook renders friends as dynamically loaded profile links; the in-app
+        // collector supplies a compact HTML document with that shape. Keep mbasic parsing
+        // for older fixtures and site variants.
+        val modern = parseSavedFriendsHtml(html)
+        return if (modern.isNotEmpty()) modern else parseFriendsDocument(doc)
+    }
+
+    /**
+     * CoSy-style import of a Facebook friends page saved by the user in desktop Chrome.
+     * The file is parsed locally; profile URLs are retained for later explicit photo links.
+     * Only anchors associated with the friends list are accepted, not the page's navigation.
+     */
+    fun parseSavedFriendsHtml(html: String): List<Target> {
+        if (html.isBlank()) return emptyList()
+        val doc = Jsoup.parse(html)
+        val friends = linkedMapOf<String, Target>()
+        val links = doc.select(
+            "[role=list] a[href], [data-pagelet*=Friends] a[href], " +
+                "[data-pagelet*=friends] a[href], [aria-label*=Friends] a[href], " +
+                "[aria-label*=friends] a[href]"
+        )
+        for (link in links) {
+            val href = link.absUrl("href").ifBlank { link.attr("href") }
+            val url = try { java.net.URI("https://www.facebook.com/").resolve(href) } catch (_: Exception) { continue }
+            if (url.scheme != "https" || url.host?.lowercase() !in setOf("www.facebook.com", "facebook.com", "m.facebook.com")) continue
+            val path = url.path?.trim('/').orEmpty()
+            val id = if (path == "profile.php") {
+                url.rawQuery?.split('&')?.firstOrNull { it.startsWith("id=") }?.substringAfter("id=")
+                    ?.takeIf { it.matches(Regex("[0-9]+")) }
+            } else path.takeIf {
+                it.matches(Regex("[A-Za-z0-9._-]+")) &&
+                    it.lowercase() !in setOf("friends", "profile", "home", "watch", "groups", "marketplace", "messages", "notifications", "settings", "search", "login", "help", "pages", "reels", "events", "photo", "photos")
+            }
+            if (id == null) continue
+            val name = link.text().trim().replace(Regex("\\s+"), " ")
+            if (name.length < 3 || name.length > 120 || ' ' !in name) continue
+            val profile = if (path == "profile.php") "https://www.facebook.com/profile.php?id=$id"
+                else "https://www.facebook.com/$id"
+            friends.putIfAbsent(profile, Target(
+                displayName = name,
+                sourceAccount = "Meta (Facebook: $profile)",
+                status = TargetStatus.UNKNOWN
+            ))
+        }
+        DiagnosticLogger.log("Facebook saved-page import: parsed ${friends.size} friend profile(s).")
+        return friends.values.toList()
     }
 
     private fun looksLikeLoginWall(doc: Document): Boolean {

@@ -12,6 +12,12 @@ This document details the internal logic of the CleanUnderwear daily records-che
 ### Visible browser (imports and people-search)
 Imports (Facebook, WhatsApp, Instagram, Google Contacts) and every CyberBackgroundChecks lookup run in the app's own visible `BrowserScreen`, where the user can sign in or solve a challenge. Each mission has a watchdog; a page that never settles offers retry, skip or abort. A page that says it found nobody ("0 results", "we did not find any results") is an answer, not a wall: the search is noted on the contact ("nobody found by email, name") and the lookup moves on. Only a CAPTCHA the user can see pauses it; a CAPTCHA script that a page merely loads does not.
 
+### Facebook friends import
+
+The in-app Facebook importer opens the desktop Facebook friends page in the visible WebView, collects rendered one-segment profile links as it scrolls and gives the list to `FacebookHarvester`. The previous `mbasic.facebook.com` paging script was no longer suitable for Facebook's modern DOM. The extraction pattern was checked against the open-source MIT-licensed Friend Focus Chrome extension; CleanUnderwear owns its independent script and parser.
+
+An alternate Settings action accepts a user-saved friends HTML file through Android's document picker. It is parsed locally with no account login or filesystem permission. The import preserves a canonical Facebook profile URL in each target's source provenance and rejects links outside Facebook or unrelated navigation. The profile URL is a candidate identifier, **not** permission to overwrite the phone contact's photo. Photo matching and periodic refresh still require an explicit linking and restore workflow, which this import does not implement.
+
 ### Visible Resolve browser (user-initiated)
 
 - **Lifetime**: `MainViewModel.completeMissionBatch()` retains the active batch between contacts while Resolve parses results. `CleanUnderwearApp` therefore keeps the same `BrowserScreen` and WebView mounted until Resolve completes or is cancelled. The ordinary one-off browser flows are not retained.
