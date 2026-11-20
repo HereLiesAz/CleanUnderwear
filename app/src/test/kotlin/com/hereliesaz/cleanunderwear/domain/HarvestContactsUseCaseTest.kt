@@ -28,7 +28,9 @@ class HarvestContactsUseCaseTest {
         val names = mockk<OnDeviceResearchAgent>()
         every { names.validatePersonName(any()) } returns true
         val repo = mockk<TargetRepository>(relaxed = true)
-        coEvery { repo.getTargetWorkInfoPaged(any(), any()) } returns registry
+        coEvery { repo.getTargetWorkInfoPaged(any(), any()) } answers {
+            registry.drop(secondArg<Int>()).take(firstArg<Int>())
+        }
         val batch = slot<List<Target>>()
         coEvery { repo.insertTargets(capture(batch)) } answers { inserted += batch.captured }
         coEvery { repo.getTargetsByIds(any()) } answers {
@@ -40,6 +42,35 @@ class HarvestContactsUseCaseTest {
     }
 
     private fun contact(name: String, phone: String) = Target(displayName = name, phoneNumber = phone, sourceAccount = "Google")
+
+    @Test
+    fun reimportingFacebookPhotoUpdatesKnownProfileWithoutAddingAnotherContact() = runBlocking {
+        val profile = "https://www.facebook.com/alice.smith"
+        val old = Target(
+            id = 7, displayName = "Alice Smith", sourceAccount = "Meta (Facebook: $profile)",
+            facebookProfileUrl = profile, facebookPhotoUrl = "https://scontent.xx.fbcdn.net/old.jpg"
+        )
+        val updated = mutableListOf<Target>()
+        val inserted = mutableListOf<Target>()
+        val harvester = mockk<ContactHarvester>()
+        val names = mockk<OnDeviceResearchAgent>()
+        every { names.validatePersonName(any()) } returns true
+        val repo = mockk<TargetRepository>(relaxed = true)
+        coEvery { repo.getTargetWorkInfoPaged(any(), any()) } answers {
+            listOf(row(7, old.displayName, null, source = old.sourceAccount!!))
+                .drop(secondArg<Int>()).take(firstArg<Int>())
+        }
+        coEvery { repo.getTargetsByIds(any()) } returns listOf(old)
+        coEvery { repo.updateTarget(any()) } answers { updated += firstArg<Target>() }
+        coEvery { repo.insertTargets(any()) } answers { inserted += firstArg<List<Target>>() }
+        val newer = old.copy(id = 0, facebookPhotoUrl = "https://scontent.xx.fbcdn.net/new.jpg")
+
+        HarvestContactsUseCase(harvester, repo, names).processManualTargets(listOf(newer))
+
+        assertEquals(1, updated.size)
+        assertEquals("https://scontent.xx.fbcdn.net/new.jpg", updated.single().facebookPhotoUrl)
+        assertTrue(inserted.isEmpty())
+    }
 
     @Test
     fun aReplacedNumberIsNotReadBackAsANewContact() = runBlocking {
