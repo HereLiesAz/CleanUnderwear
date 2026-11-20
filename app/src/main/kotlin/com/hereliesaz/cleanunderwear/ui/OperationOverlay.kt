@@ -63,7 +63,10 @@ fun OperationOverlay(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(Spacing.md)
                 ) {
-                    LoadingCaption(state.description.ifBlank { stringResource(R.string.op_working) })
+                    LoadingCaption(
+                        state.description.ifBlank { stringResource(R.string.op_working) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
                     if (state.progress in 0f..1f) {
                         LinearProgressIndicator(
                             progress = { state.progress },
