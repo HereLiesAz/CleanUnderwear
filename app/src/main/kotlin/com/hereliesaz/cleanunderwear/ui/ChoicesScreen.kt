@@ -65,7 +65,9 @@ fun ChoicesScreen(viewModel: MainViewModel, onNavigateBack: () -> Unit) {
             return@Scaffold
         }
         // A new batch ("none of these" went on to the next) starts the screen afresh: nothing picked.
-        key(current.targetId, current.rounds) {
+        // Even within a round, restored choices may gain/lose candidates as lookups finish.
+        // A saved index belongs to its old list, never to an unrelated replacement person.
+        key(current.targetId, current.rounds, current.options.map { it.detailUrl to it.name }) {
             ChoiceFor(
                 choice = current,
                 remaining = ordered.size,
@@ -130,9 +132,9 @@ private fun ChoiceFor(
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                 AppAction(
                     picked?.let { stringResource(R.string.choices_thats, name) } ?: stringResource(R.string.choices_pick_one),
-                    { picked?.let { index -> choice.options.getOrNull(index)?.let { option -> viewModel.chooseLookup(choice.targetId, option) } } },
+                    { selectedLookupOption(choice.options, picked)?.let { option -> viewModel.chooseLookup(choice.targetId, option) } },
                     Modifier.fillMaxWidth(),
-                    enabled = picked != null && picked in choice.options.indices
+                    enabled = selectedLookupOption(choice.options, picked) != null
                 )
                 if (choice.hasMore) {
                     // None of these: the next run goes on to the next ones, from what the searches
@@ -152,6 +154,10 @@ private fun ChoiceFor(
         }
     }
 }
+
+/** A restored selection is valid only for the candidate list that currently exists. */
+internal fun selectedLookupOption(options: List<LookupOption>, picked: Int?): LookupOption? =
+    picked?.let(options::getOrNull)
 
 @Composable
 private fun OptionCard(option: LookupOption, selected: Boolean, onSelect: () -> Unit) {
