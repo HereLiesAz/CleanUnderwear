@@ -92,6 +92,13 @@ fun TargetDetailScreen(
     }
 
     chosenPhotoContact?.let { uri ->
+        val chosenName = remember(uri) {
+            try {
+                context.contentResolver.query(
+                    uri, arrayOf(ContactsContract.Contacts.DISPLAY_NAME_PRIMARY), null, null, null
+                )?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+            } catch (_: Exception) { null }
+        } ?: stringResource(R.string.facebook_photo_selected_contact)
         AppDialog(
             title = stringResource(R.string.facebook_photo_confirm_title),
             confirm = stringResource(R.string.facebook_photo_confirm),
@@ -101,7 +108,7 @@ fun TargetDetailScreen(
             },
             onDismiss = { chosenPhotoContact = null }
         ) {
-            Text(stringResource(R.string.facebook_photo_confirm_body, target.displayName))
+            Text(stringResource(R.string.facebook_photo_confirm_body, target.displayName, chosenName))
         }
     }
 
