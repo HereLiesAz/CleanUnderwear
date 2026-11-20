@@ -261,7 +261,16 @@ private val FACEBOOK_HARVEST_SCRIPT = """
         if (!slug || slug === 'profile.php?id=') continue;
         var name = span.textContent.trim();
         if (name.length < 3 || name.length > 120 || name.indexOf(' ') < 0) continue;
-        seen[slug] = { name: name, url: 'https://www.facebook.com/' + slug };
+        var photo = '';
+        var card = a.parentElement;
+        for (var depth = 0; depth < 3 && card; depth++, card = card.parentElement) {
+          var img = card.querySelector('img[src]');
+          if (img && img.src && /^https:\/\/[^/]+\.(fbcdn\.net|facebook\.com)\//i.test(img.src)) {
+            photo = img.src;
+            break;
+          }
+        }
+        seen[slug] = { name: name, url: 'https://www.facebook.com/' + slug, photo: photo };
       } catch (e) {}
     }
   }
@@ -278,6 +287,7 @@ private val FACEBOOK_HARVEST_SCRIPT = """
         var a = document.createElement('a');
         a.href = friend.url;
         a.textContent = friend.name;
+        if (friend.photo) a.setAttribute('data-cu-photo', friend.photo);
         output += a.outerHTML;
       });
       window.HTMLOUT.dump(output + '</div></body></html>');
