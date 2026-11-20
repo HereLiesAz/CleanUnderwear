@@ -3,6 +3,8 @@ package com.hereliesaz.cleanunderwear.ui
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
@@ -44,6 +46,9 @@ fun SettingsScreen(
     var confirmSignOut by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     val noteWriteBack by viewModel.noteWriteBack.collectAsState()
     val bottomBar = LocalBottomBarHeight.current
+    val facebookFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) viewModel.importFacebookFriendsFile(uri)
+    }
 
     // One source for "can the app alert / read contacts", read at once and again whenever the
     // screen comes back (e.g. from system settings): the Alerts section and the Permissions rows
@@ -99,6 +104,11 @@ fun SettingsScreen(
             AppSection(stringResource(R.string.settings_section_import))
             AppCaption(stringResource(R.string.settings_import_caption))
             ImportAction(stringResource(R.string.settings_import_facebook), stringResource(R.string.settings_import_facebook_caption), viewModel::harvestFacebook)
+            ImportAction(
+                stringResource(R.string.settings_facebook_file_import),
+                stringResource(R.string.settings_facebook_file_import_caption),
+                { facebookFile.launch(arrayOf("text/html", "text/plain", "application/octet-stream")) }
+            )
             ImportAction(stringResource(R.string.settings_import_whatsapp), stringResource(R.string.settings_import_whatsapp_caption), viewModel::harvestWhatsApp)
             ImportAction(stringResource(R.string.settings_import_instagram), stringResource(R.string.settings_import_instagram_caption), viewModel::harvestInstagram)
             ImportAction(stringResource(R.string.settings_import_google), stringResource(R.string.settings_import_google_caption), viewModel::harvestGoogleContacts)
