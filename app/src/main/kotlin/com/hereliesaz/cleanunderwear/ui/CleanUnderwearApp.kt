@@ -35,6 +35,7 @@ import com.hereliesaz.cleanunderwear.data.Target
 @Composable
 fun CleanUnderwearApp(viewModel: MainViewModel) {
     val navController = rememberNavController()
+    val facebookPhotoLinks by viewModel.facebookPhotoLinks.collectAsState()
     val isOnboardingCompleted by viewModel.isOnboardingCompleted.collectAsState()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
@@ -268,6 +269,10 @@ fun CleanUnderwearApp(viewModel: MainViewModel) {
                             onLookUp = { viewModel.resolveOne(it) },
                             onArchive = { viewModel.ignoreTarget(it) },
                             onRestore = { viewModel.restoreTarget(it) },
+                            photoLinked = state.target.id in facebookPhotoLinks,
+                            onLinkFacebookPhoto = { target, uri -> viewModel.linkFacebookPhoto(target, uri) },
+                            onRefreshFacebookPhoto = { viewModel.refreshFacebookPhoto(it) },
+                            onRestoreFacebookPhoto = { viewModel.restoreFacebookPhoto(it) },
                             onNavigateBack = { navController.popBackStack() }
                         )
                     }
