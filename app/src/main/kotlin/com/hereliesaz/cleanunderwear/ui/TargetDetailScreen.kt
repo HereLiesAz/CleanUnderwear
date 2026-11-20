@@ -62,6 +62,7 @@ fun TargetDetailScreen(
     onLinkFacebookPhoto: (Target, Uri) -> Unit,
     onRefreshFacebookPhoto: (Int) -> Unit,
     onRestoreFacebookPhoto: (Int) -> Unit,
+    onUnlinkFacebookPhoto: (Int) -> Unit,
     onNavigateBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -221,6 +222,7 @@ fun TargetDetailScreen(
                 if (photoLinked) {
                     AppAction(stringResource(R.string.facebook_photo_refresh), { onRefreshFacebookPhoto(target.id) })
                     AppTextAction(stringResource(R.string.facebook_photo_restore), { onRestoreFacebookPhoto(target.id) })
+                    AppTextAction(stringResource(R.string.facebook_photo_unlink), { onUnlinkFacebookPhoto(target.id) })
                 } else if (target.facebookPhotoUrl != null) {
                     AppAction(stringResource(R.string.facebook_photo_link), {
                         contactPicker.launch(Intent(Intent.ACTION_PICK, ContactsContract.Contacts.CONTENT_URI))
