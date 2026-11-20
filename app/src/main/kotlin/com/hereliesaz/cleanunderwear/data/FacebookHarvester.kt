@@ -32,7 +32,11 @@ class FacebookHarvester @Inject constructor() {
             )
             return emptyList()
         }
-        return parseFriendsDocument(doc)
+        // Modern Facebook renders friends as dynamically loaded profile links; the in-app
+        // collector supplies a compact HTML document with that shape. Keep mbasic parsing
+        // for older fixtures and site variants.
+        val modern = parseSavedFriendsHtml(html)
+        return if (modern.isNotEmpty()) modern else parseFriendsDocument(doc)
     }
 
     /**
