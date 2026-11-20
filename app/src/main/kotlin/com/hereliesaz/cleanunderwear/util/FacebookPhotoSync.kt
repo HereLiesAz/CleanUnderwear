@@ -91,6 +91,12 @@ class FacebookPhotoSync @Inject constructor(
                 } == true
             }) return@withContext Outcome.Failed("That phone contact already has a Facebook photo link")
 
+        if (prefs.all.values.any { raw ->
+                (raw as? String)?.let { value ->
+                    try { JSONObject(value).getString("profile") == profile } catch (_: Exception) { false }
+                } == true
+            }) return@withContext Outcome.Failed("That Facebook profile is already linked to a phone contact")
+
         val downloaded = download(url) ?: return@withContext Outcome.Failed("Facebook did not provide a usable photo")
         val row = findPhotoRow(picked.first)
         val original = row?.second
