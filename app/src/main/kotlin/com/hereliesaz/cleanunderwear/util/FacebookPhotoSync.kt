@@ -173,6 +173,14 @@ class FacebookPhotoSync @Inject constructor(
         }
     }
 
+    /** Stop future refreshes without overwriting a photo the user has edited manually. */
+    fun unlink(targetId: Int): Boolean {
+        if (linked(targetId) == null) return false
+        prefs.edit().remove("target_$targetId").apply()
+        java.io.File(photoDir, "target_${targetId}.backup").delete()
+        return true
+    }
+
     /** Called when the user explicitly deletes the app's entire private registry. */
     fun clearRecords() {
         prefs.edit().clear().apply()
