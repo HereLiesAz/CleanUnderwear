@@ -26,8 +26,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -361,6 +363,12 @@ fun BrowserScreen(
         awaitRenderedContent(webView)
         if (!paused && !batchComplete && pageReady) {
             if (mission.requiresSignIn) {
+                val rendered = describePage(webView)
+                if (rendered?.blank == true) {
+                    note("The import page has no readable content (${rendered.characters} characters); waiting for the site or your intervention", DiagnosticLogger.LogEntry.LogLevel.WARN)
+                    pauseFor(R.string.browser_paused_slow)
+                    return@LaunchedEffect
+                }
                 val page = probePage(webView)
                 if (page != null && mission.isSignInPage(page)) {
                     val seen = describePage(webView)
@@ -602,7 +610,9 @@ fun BrowserScreen(
             ) {
             // See the darkening filter below: the page blurs behind it (Android 12+).
             // Never over a sign-in page (needsSignIn): the user is signing in there.
-            val darkened = mission.autoExtract && !paused && !needsSignIn
+            // Imports need the visible page until its content is actually ready to extract.
+            val darkened = mission.autoExtract && !paused && !needsSignIn &&
+                (!mission.requiresSignIn || (pageReady && automationRan))
             AndroidView(
                 modifier = Modifier.fillMaxSize().then(if (darkened) Modifier.blur(16.dp) else Modifier),
                 factory = { viewContext ->
@@ -832,10 +842,10 @@ fun BrowserScreen(
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.spacedBy(Spacing.md)
                             ) {
-                                LoadingCaption(
+                                CircularProgressIndicator(modifier = Modifier.size(36.dp))
+                                Text(
                                     stringResource(
                                         when {
-                                            // Between searches (or waiting out a block): the page in front is the last one's.
                                             batchComplete -> R.string.browser_between
                                             !pageReady -> R.string.browser_loading
                                             mission.requiresSignIn && !automationRan -> R.string.browser_checking_signed_in
