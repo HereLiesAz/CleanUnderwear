@@ -312,6 +312,7 @@ object SuspectDetector {
         val samePhone = phoneA != null && phoneA == phoneB
         val sameEmail = emailA != null && emailA == emailB
         if (!samePhone && !sameEmail) return null
+        if (relation == NameRelation.DIFFERENT && !samePhone) return null
 
         val suspicion = mutableListOf<Evidence>()
         val defense = mutableListOf<Evidence>()
