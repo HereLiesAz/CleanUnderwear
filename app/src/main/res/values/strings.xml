@@ -195,7 +195,8 @@
     <string name="facebook_photo_delete_notice">%1$d original contact photos could not be restored; their current photos were left unchanged.</string>
     <string name="facebook_photo_confirm_title">Use Facebook photo?</string>
     <string name="facebook_photo_confirm">Use this photo</string>
-    <string name="facebook_photo_confirm_body">Apply the Facebook profile photo for %1$s to the phone contact you selected? Its current picture will be backed up. You can restore it later, and future updates will stop if you change it yourself.</string>
+    <string name="facebook_photo_selected_contact">Selected phone contact</string>
+    <string name="facebook_photo_confirm_body">Use %1$s\'s Facebook photo for phone contact %2$s? The current picture will be backed up. You can restore it later; updates stop if you change it yourself.</string>
     <string name="facebook_photo_updated">Photo updated for %1$s.</string>
     <string name="facebook_photo_unchanged">Photo for %1$s is already current.</string>
     <string name="facebook_photo_failed">Facebook photo sync: %1$s</string>
