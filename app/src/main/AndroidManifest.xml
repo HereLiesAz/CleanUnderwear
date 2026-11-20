@@ -12,6 +12,9 @@
          FOREGROUND_SERVICE to the merged one, so it is removed here; nothing in the app calls
          setForeground. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" tools:node="remove" />
+    <!-- Some transitive WorkManager integrations declare a typed data-sync foreground service.
+         This app never calls setForeground; do not ship that permission to Google Play. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" tools:node="remove" />
     <!-- READ_CALL_LOG / READ_SMS are not declared: Google Play restricts them to default dialer
          and SMS apps and rejects every release that asks. Review uses messaging-app registration
          (read from contacts) instead; DeviceCommsHistory switches back on if they're declared. -->
