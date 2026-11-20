@@ -87,7 +87,10 @@ fun OperationOverlay(
                             stringResource(it),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.md),
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis
                         )
                         AppTextAction(stringResource(R.string.op_keep_using), onKeepUsingApp)
                     }
