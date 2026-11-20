@@ -249,7 +249,9 @@ fun LoadingCaption(text: String?, modifier: Modifier = Modifier) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onBackground,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = Spacing.xl)
+                modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.xl),
+                maxLines = 3,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
             )
         }
     }
