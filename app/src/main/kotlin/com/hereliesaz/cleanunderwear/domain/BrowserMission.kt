@@ -214,7 +214,7 @@ sealed class BrowserMission {
     }
 
     object HarvestFacebookFriends : BrowserMission() {
-        override val initialUrl: String = "https://mbasic.facebook.com/me/friends"
+        override val initialUrl: String = "https://www.facebook.com/me/friends"
         override val label: String = "Import Facebook friends"
         override val extractionScript: String = FACEBOOK_HARVEST_SCRIPT
         // The script goes to the friends list itself if sign-in leaves the user somewhere else.
@@ -239,42 +239,54 @@ sealed class BrowserMission {
  * and anywhere else it goes to the friends list first, a few times at most.
  */
 private val FACEBOOK_HARVEST_SCRIPT = """
-(function(){
-  if (document.querySelector('input[name=pass], #login_form')) return;
-  if (window.location.href.indexOf('friends') < 0) {
-    var hops = 0;
-    try { hops = parseInt(window.sessionStorage.getItem('cuFriendsHops') || '0', 10); } catch (e) {}
-    if (hops < 3) {
-      try { window.sessionStorage.setItem('cuFriendsHops', String(hops + 1)); } catch (e) {}
-      window.location.href = '/me/friends';
-    }
+(function() {
+  if (document.querySelector('input[type=password], input[name=pass], #login_form')) return;
+  var path = location.pathname;
+  if (path.indexOf('/friends') < 0) {
+    location.href = '/me/friends';
     return;
   }
-  var collected = document.documentElement.outerHTML;
-  // Every page fetched once, and a hard page cap, so a "more" link that keeps pointing at a
-  // page already seen ends the walk instead of looping.
-  var visited = {};
-  visited[window.location.pathname + window.location.search] = true;
-  var pages = 0;
-  function nextBatch() {
-    var more = document.querySelector('a[href*="/friends"]:not([href*="profile"])');
-    var href = more ? more.getAttribute('href') : null;
-    if (!href || visited[href] || ++pages > 50) {
-      window.HTMLOUT.dump(collected);
+  var seen = {};
+  function collect() {
+    var anchors = document.querySelectorAll('a[href]');
+    for (var i = 0; i < anchors.length; i++) {
+      var a = anchors[i], span = a.querySelector('span');
+      if (!span || !span.textContent.trim()) continue;
+      try {
+        var url = new URL(a.href, location.href);
+        if (url.hostname !== 'www.facebook.com' && url.hostname !== 'facebook.com') continue;
+        var parts = url.pathname.split('/').filter(Boolean);
+        if (parts.length !== 1) continue;
+        var slug = parts[0] === 'profile.php' ? 'profile.php?id=' + (url.searchParams.get('id') || '') : parts[0];
+        if (!slug || slug === 'profile.php?id=') continue;
+        var name = span.textContent.trim();
+        if (name.length < 3 || name.length > 120 || name.indexOf(' ') < 0) continue;
+        seen[slug] = { name: name, url: 'https://www.facebook.com/' + slug };
+      } catch (e) {}
+    }
+  }
+  var unchanged = 0, lastCount = -1, rounds = 0;
+  function step() {
+    collect();
+    var count = Object.keys(seen).length;
+    unchanged = count === lastCount ? unchanged + 1 : 0;
+    lastCount = count;
+    if (unchanged >= 3 || rounds++ >= 100) {
+      var output = '<html><body><div data-pagelet="Friends">';
+      Object.keys(seen).forEach(function(key) {
+        var friend = seen[key];
+        var a = document.createElement('a');
+        a.href = friend.url;
+        a.textContent = friend.name;
+        output += a.outerHTML;
+      });
+      window.HTMLOUT.dump(output + '</div></body></html>');
       return;
     }
-    visited[href] = true;
-    fetch(href, { credentials: 'include' })
-      .then(function(r){ return r.text(); })
-      .then(function(html){
-        collected += '\n<!-- next-page -->\n' + html;
-        var doc = new DOMParser().parseFromString(html, 'text/html');
-        document.body.innerHTML = doc.body.innerHTML;
-        setTimeout(nextBatch, 800);
-      })
-      .catch(function(){ window.HTMLOUT.dump(collected); });
+    window.scrollTo(0, document.body.scrollHeight);
+    setTimeout(step, 1250);
   }
-  setTimeout(nextBatch, 500);
+  step();
 })();
 """.trimIndent()
 
