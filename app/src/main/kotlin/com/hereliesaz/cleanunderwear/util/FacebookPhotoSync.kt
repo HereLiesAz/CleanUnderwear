@@ -99,7 +99,9 @@ class FacebookPhotoSync @Inject constructor(
         if (original != null) backup.writeBytes(original) else backup.writeBytes(ByteArray(0))
         try {
             writePhoto(picked.first, row?.first, downloaded)
-            save(Link(target.id, profile, picked.second, picked.third, digest(downloaded)))
+            val written = findPhotoRow(picked.first)?.second
+                ?: throw IllegalStateException("Contacts did not retain the new image")
+            save(Link(target.id, profile, picked.second, picked.third, digest(written)))
             Outcome.Updated(picked.third)
         } catch (e: Exception) {
             // If no change occurred, the backup is safe to discard and link can be retried.
@@ -127,7 +129,9 @@ class FacebookPhotoSync @Inject constructor(
         if (hash == link.lastWrittenHash) return@withContext Outcome.Unchanged(link.contactName)
         try {
             writePhoto(contactId, row.first, downloaded)
-            save(link.copy(lastWrittenHash = hash))
+            val written = findPhotoRow(contactId)?.second
+                ?: throw IllegalStateException("Contacts did not retain the refreshed image")
+            save(link.copy(lastWrittenHash = digest(written)))
             Outcome.Updated(link.contactName)
         } catch (e: Exception) {
             Outcome.Failed("Could not update the phone photo: ${e.javaClass.simpleName}")
@@ -156,7 +160,7 @@ class FacebookPhotoSync @Inject constructor(
         try {
             val original = backup.readBytes()
             if (original.isEmpty()) {
-                val id = row.first ?: return@withContext Outcome.Failed("Photo row missing")
+                val id = row.first
                 context.contentResolver.delete(ContactsContract.Data.CONTENT_URI, "${ContactsContract.Data._ID} = ?", arrayOf(id.toString()))
             } else {
                 writePhoto(contactId, row.first, original)
