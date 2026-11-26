@@ -2,7 +2,10 @@ package com.hereliesaz.cleanunderwear.ui
 
 import android.os.Build
 import android.view.WindowManager
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -57,28 +60,42 @@ fun OperationOverlay(
     ) {
         BlurBehind()
         MaterialTheme(colorScheme = SurveillanceDarkColorScheme, typography = MaterialTheme.typography) {
-            Box(modifier = Modifier.fillMaxSize().systemBarsPadding().displayCutoutPadding()) {
-                Column(
-                    modifier = Modifier.align(Alignment.Center).fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(Spacing.md)
+            // A single vertical layout reserves the action area before measuring the loader.
+            // Independently aligned centre/bottom columns could overlap on narrow or tall screens.
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(SurveillanceDarkColorScheme.background.copy(alpha = 0.94f))
+                    .systemBarsPadding()
+                    .displayCutoutPadding(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    contentAlignment = Alignment.Center
                 ) {
-                    LoadingCaption(
-                        state.description.ifBlank { stringResource(R.string.op_working) },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    if (state.progress in 0f..1f) {
-                        LinearProgressIndicator(
-                            progress = { state.progress },
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.xl),
-                            color = MaterialTheme.colorScheme.onBackground,
-                            trackColor = MaterialTheme.colorScheme.outline
+                    Column(
+                        modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(Spacing.md)
+                    ) {
+                        LoadingCaption(
+                            state.description.ifBlank { stringResource(R.string.op_working) },
+                            modifier = Modifier.fillMaxWidth()
                         )
+                        if (state.progress in 0f..1f) {
+                            LinearProgressIndicator(
+                                progress = { state.progress },
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.xl),
+                                color = MaterialTheme.colorScheme.onBackground,
+                                trackColor = MaterialTheme.colorScheme.outline
+                            )
+                        }
+                        FindingsSoFar(state.findings)
                     }
-                    FindingsSoFar(state.findings)
                 }
                 Column(
-                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(Spacing.lg),
+                    modifier = Modifier.fillMaxWidth().padding(Spacing.lg),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(Spacing.sm)
                 ) {
