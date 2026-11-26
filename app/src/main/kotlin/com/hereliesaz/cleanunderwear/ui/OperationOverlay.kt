@@ -148,27 +148,33 @@ fun OperationBar(state: OperationState, onShow: () -> Unit, onCancel: () -> Unit
                     trackColor = MaterialTheme.colorScheme.outlineVariant
                 )
             }
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.md, vertical = Spacing.xs),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    state.description.ifBlank { stringResource(R.string.op_working) },
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                state.findings.firstOrNull()?.let {
                     Text(
-                        state.description.ifBlank { stringResource(R.string.op_working) },
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    state.findings.firstOrNull()?.let {
-                        Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                    AppCaption(
-                        stringResource(
-                            if (state.continues == Continues.ANYWHERE) R.string.op_running_anywhere else R.string.op_running_in_app
-                        )
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
+                AppCaption(
+                    stringResource(
+                        if (state.continues == Continues.ANYWHERE) R.string.op_running_anywhere else R.string.op_running_in_app
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
                 if (state.cancellable) AppTextAction(stringResource(R.string.cancel), onCancel)
             }
         }
